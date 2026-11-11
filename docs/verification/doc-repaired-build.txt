@@ -1,0 +1,27 @@
+
+> vite_react_shadcn_ts@0.0.0 build
+> vite build
+
+vite v5.4.19 building for production...
+transforming...
+Browserslist: browsers data (caniuse-lite) is 17 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+✓ 2257 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                              3.42 kB │ gzip:   1.23 kB
+dist/assets/clinora-clinic-7Ypcbm5O.jpg    103.74 kB
+dist/assets/pdf.worker.min-CIqJB0yW.mjs  1,271.92 kB
+dist/assets/index-CBFDru2l.css              79.13 kB │ gzip:  14.62 kB
+dist/assets/purify.es-dhnUglUx.js           24.29 kB │ gzip:   9.17 kB
+dist/assets/index.es-CeuNIE3U.js           150.84 kB │ gzip:  51.64 kB
+dist/assets/html2canvas.esm-CBrSDip1.js    201.42 kB │ gzip:  48.03 kB
+dist/assets/jspdf.es.min-D298ySqu.js       415.99 kB │ gzip: 136.36 kB
+dist/assets/index-A66ugcEg.js            1,419.58 kB │ gzip: 427.56 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 58.13s

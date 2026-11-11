@@ -1,0 +1,5 @@
+
+> react-example@0.0.0 lint
+> tsc --noEmit
+
+scripts/local-doctor-review.ts(9,14): error TS2307: Cannot find module './verify-ui-server' or its corresponding type declarations.

@@ -1,0 +1,113 @@
+
+> clinora@0.1.0 check
+> npm run typecheck && npm test && npm run build && npm run test:built
+
+
+> clinora@0.1.0 typecheck
+> tsc --noEmit
+
+
+> clinora@0.1.0 test
+> node --import tsx --test tests/*.test.ts
+
+TAP version 13
+# Subtest: registration rejects self-granted doctor, clinic, verification and Telegram claims
+ok 1 - registration rejects self-granted doctor, clinic, verification and Telegram claims
+  ---
+  duration_ms: 22.1253
+  type: 'test'
+  ...
+# Subtest: only an active server-authorized clinician can access the permitted clinic
+ok 2 - only an active server-authorized clinician can access the permitted clinic
+  ---
+  duration_ms: 18.0586
+  type: 'test'
+  ...
+# Subtest: patient restrictions and revocation take effect on the next policy invocation
+ok 3 - patient restrictions and revocation take effect on the next policy invocation
+  ---
+  duration_ms: 3.4411
+  type: 'test'
+  ...
+# Subtest: a valid Telegram identity link cannot substitute for a clinical membership
+ok 4 - a valid Telegram identity link cannot substitute for a clinical membership
+  ---
+  duration_ms: 2.8179
+  type: 'test'
+  ...
+# Subtest: approval requires the current reviewed version and explicit eligible actor
+ok 5 - approval requires the current reviewed version and explicit eligible actor
+  ---
+  duration_ms: 15.5365
+  type: 'test'
+  ...
+# Subtest: export rejects mismatched approvals, stale content and revoked access
+ok 6 - export rejects mismatched approvals, stale content and revoked access
+  ---
+  duration_ms: 3.0972
+  type: 'test'
+  ...
+# Subtest: uncertain writes cannot be blindly dispatched again and success needs acknowledgement
+ok 7 - uncertain writes cannot be blindly dispatched again and success needs acknowledgement
+  ---
+  duration_ms: 17.1824
+  type: 'test'
+  ...
+# Subtest: retrospective and date-only occurrence survive independently of entry time
+ok 8 - retrospective and date-only occurrence survive independently of entry time
+  ---
+  duration_ms: 109.2378
+  type: 'test'
+  ...
+# Subtest: missing clinical values remain unknown and AI proposals need revisioned evidence
+ok 9 - missing clinical values remain unknown and AI proposals need revisioned evidence
+  ---
+  duration_ms: 3.3275
+  type: 'test'
+  ...
+# Subtest: transcript coordinates cannot reverse and amendments require provenance
+ok 10 - transcript coordinates cannot reverse and amendments require provenance
+  ---
+  duration_ms: 3.452
+  type: 'test'
+  ...
+# Subtest: patient account linking requires explicit proof, not a name or telephone
+ok 11 - patient account linking requires explicit proof, not a name or telephone
+  ---
+  duration_ms: 1.1998
+  type: 'test'
+  ...
+# Subtest: real HTTP health works; claimed roles and bearer tokens cannot open clinical endpoints
+ok 12 - real HTTP health works; claimed roles and bearer tokens cannot open clinical endpoints
+  ---
+  duration_ms: 157.4929
+  type: 'test'
+  ...
+1..12
+# tests 12
+# suites 0
+# pass 12
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1575.611
+
+> clinora@0.1.0 build
+> tsc -p tsconfig.server.json && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 14 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/web/index.html                   0.37 kB │ gzip:  0.27 kB
+dist/web/assets/index-CXCxYpdw.css    0.91 kB │ gzip:  0.48 kB
+dist/web/assets/index-C2Zo_CMl.js   142.20 kB │ gzip: 46.35 kB
+
+✓ built in 244ms
+
+> clinora@0.1.0 test:built
+> node scripts/smoke.mjs
+
+Built server, HTML, JS/CSS assets, health, source isolation and clinical denial: PASS

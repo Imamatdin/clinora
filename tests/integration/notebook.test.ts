@@ -36,6 +36,10 @@ test('fresh migration repeat, explicit ownership, invitation scope/expiry/single
 
 test('HTTP session hashes, CSRF, unsupported bearer, logout/expiry, blocked and revoked access',async t=>{
   const f=await httpFixture();t.after(()=>f.close());const c=f.client();await c.login();const base=`/api/clinics/${f.owner.clinicId}/patients`;
+  const cookieResponse=await c.request('/api/auth/login',{email:'owner@example.test',password:f.password});
+  assert.match(cookieResponse.headers.get('set-cookie')!,/HttpOnly; Path=\/; SameSite=Strict/);
+  f.config.secureCookies=true;const secure=await c.request('/api/auth/login',{email:'owner@example.test',password:f.password});assert.match(secure.headers.get('set-cookie')!,/; Secure/);f.config.secureCookies=false;
+  await c.login();
   const token=c.cookie.split('=')[1]!;
   assert.equal((await f.pool.query('SELECT count(*) FROM sessions WHERE token_hash=$1',[token])).rows[0].count,'0');
   assert.equal((await f.pool.query('SELECT count(*) FROM sessions WHERE token_hash=$1',[digest(token)])).rows[0].count,'1');
@@ -121,6 +125,15 @@ test('transaction failure rolls back draft, current version, idempotency result 
   assert.equal((await f.pool.query('SELECT count(*) FROM idempotency_records WHERE key=$1',[k])).rows[0].count,'0');
   const broken=makePool('postgresql://synthetic:unused@127.0.0.1:1/clinora_test');const server=await createApp(undefined,{pool:broken,origin:'http://127.0.0.1',secureCookies:false});
   server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');
-  try {for(const route of ['/api/health','/api/auth/login']){const r=await fetch(`http://127.0.0.1:${address.port}`+route,route.endsWith('login')?{method:'POST',headers:{Origin:'http://127.0.0.1','Content-Type':'application/json'},body:JSON.stringify({email:'synthetic@example.test',password:'synthetic-password'})}:{});assert.equal(r.status,503);assert.equal((await r.json()).error.code,'SERVICE_UNAVAILABLE');}}
+  try {
+    for(const route of ['/api/health','/api/auth/login']) {
+      const response: Response = await fetch(`http://127.0.0.1:${address.port}`+route, route.endsWith('login') ? {
+        method:'POST', headers:{Origin:'http://127.0.0.1','Content-Type':'application/json'},
+        body:JSON.stringify({email:'synthetic@example.test',password:'synthetic-password'})
+      } : {});
+      assert.equal(response.status,503);
+      assert.equal((await response.json()).error.code,'SERVICE_UNAVAILABLE');
+    }
+  }
   finally{await new Promise<void>(resolve=>server.close(()=>resolve()));await broken.end();}
 });

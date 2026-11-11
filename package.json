@@ -19,6 +19,7 @@
     "test": "npm run test:unit && npm run test:integration",
     "db:migrate": "node --import tsx scripts/database.mjs migrate",
     "db:bootstrap": "node --import tsx scripts/database.mjs bootstrap",
+    "db:demo": "node --import tsx scripts/demo.mjs",
     "start": "node dist/server/server/main.js",
     "test:built": "node scripts/smoke.mjs",
     "check": "npm run typecheck && npm test && npm run build && npm run test:built && npm run test:browser"

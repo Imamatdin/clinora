@@ -49,7 +49,7 @@ function App() {
   async function refreshMe(){const user=await request<Me>('/api/auth/me');setMe(user);setClinicId(old=>user.clinics.some(c=>c.id===old)?old:user.clinics[0]?.id??'');}
   useEffect(()=>{history.replaceState(null,'',location.pathname);refreshMe().catch(e=>{if(!(e instanceof ApiFailure&&e.code==='UNAUTHENTICATED'))setError(messages.SERVICE_UNAVAILABLE!);}).finally(()=>setLoading(false));},[]);
   useEffect(()=>{const handler=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',handler);return()=>window.removeEventListener('beforeunload',handler);},[dirty]);
-  useEffect(()=>{setPatients([]);setPatient(null);setVisit(null);setVisits([]);setSearch('');if(!clinicId||!clinic?.clinicalAccess)return;
+  useEffect(()=>{setPatients([]);setPatient(null);setVisit(null);setVisits([]);setSearch('');setInviteLink('');if(!clinicId||!clinic?.clinicalAccess)return;
     let active=true;request<PatientView[]>(base).then(rows=>{if(active)setPatients(rows);}).catch(()=>{if(active)setError(messages.SERVICE_UNAVAILABLE!);});return()=>{active=false;};},[clinicId]);
   async function openPatient(p:PatientView){if(!discard())return;await run(async()=>{const d=await request<{patient:PatientView;visits:VisitView[]}>(`${base}/${p.id}`);setPatient(d.patient);setVisits(d.visits);setVisit(null);setDirty(false);setNewPatient(false);setNewVisit(false);setConflict(false);setLatest(null);});}
   function openVisit(v:VisitView){if(!discard())return;setVisit(v);setNote(noteFrom(v));setTemplate(v.version?.templateId??'general-note-v1');setDirty(false);setConflict(false);setLatest(null);setNewVisit(false);setNotice('');setError('');}

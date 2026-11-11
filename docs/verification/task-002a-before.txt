@@ -1,0 +1,94 @@
+TAP version 13
+# Subtest: cached and fresh draft saves reject mismatched patient/encounter while both assignments remain active
+not ok 1 - cached and fresh draft saves reject mismatched patient/encounter while both assignments remain active
+  ---
+  duration_ms: 418.613493
+  type: 'test'
+  location: '/home/runner/work/clinora/clinora/tests/integration/replay-authorization.test.ts:6:803'
+  failureType: 'testCodeFailure'
+  error: |-
+    a cached result must not bypass current resource authorization
+
+    200 !== 404
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 404
+  actual: 200
+  operator: 'strictEqual'
+  stack: |-
+    deniedWithoutDisclosure (/home/runner/work/clinora/clinora/tests/integration/replay-authorization.test.ts:36:10)
+    TestContext.<anonymous> (/home/runner/work/clinora/clinora/tests/integration/replay-authorization.test.ts:50:9)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: cached draft cannot be replayed through another permitted patient after original assignment revocation
+not ok 2 - cached draft cannot be replayed through another permitted patient after original assignment revocation
+  ---
+  duration_ms: 284.082348
+  type: 'test'
+  location: '/home/runner/work/clinora/clinora/tests/integration/replay-authorization.test.ts:6:1435'
+  failureType: 'testCodeFailure'
+  error: |-
+    a cached result must not bypass current resource authorization
+
+    200 !== 404
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 404
+  actual: 200
+  operator: 'strictEqual'
+  stack: |-
+    deniedWithoutDisclosure (/home/runner/work/clinora/clinora/tests/integration/replay-authorization.test.ts:36:10)
+    TestContext.<anonymous> (/home/runner/work/clinora/clinora/tests/integration/replay-authorization.test.ts:60:9)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: patient-create replay reauthorizes stored patient and never recreates a chart or restores revoked assignment
+not ok 3 - patient-create replay reauthorizes stored patient and never recreates a chart or restores revoked assignment
+  ---
+  duration_ms: 277.021503
+  type: 'test'
+  location: '/home/runner/work/clinora/clinora/tests/integration/replay-authorization.test.ts:6:2234'
+  failureType: 'testCodeFailure'
+  error: |-
+    a cached result must not bypass current resource authorization
+
+    201 !== 404
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 404
+  actual: 201
+  operator: 'strictEqual'
+  stack: |-
+    deniedWithoutDisclosure (/home/runner/work/clinora/clinora/tests/integration/replay-authorization.test.ts:36:10)
+    TestContext.<anonymous> (/home/runner/work/clinora/clinora/tests/integration/replay-authorization.test.ts:72:9)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: authorized stale-version replays stay exact; cached routes still deny revoked membership and session
+ok 4 - authorized stale-version replays stay exact; cached routes still deny revoked membership and session
+  ---
+  duration_ms: 280.599877
+  type: 'test'
+  ...
+# Subtest: simultaneous assigned-clinician patient-create retries return the same newly authorized patient
+ok 5 - simultaneous assigned-clinician patient-create retries return the same newly authorized patient
+  ---
+  duration_ms: 289.299517
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 2
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1984.526199

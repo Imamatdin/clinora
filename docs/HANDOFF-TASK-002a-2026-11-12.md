@@ -7,6 +7,7 @@ Branch: `task-002-patient-notebook`; existing PR: https://github.com/Imamatdin/c
 Reviewed application: `b348991c87363eda79d30f983b7d46478dda9105`.
 Test-only checkpoint: `7a282252c932adccf139a191d4815ec434619032`.
 Initial correction: `e98660820eebfb1d7bd2e51afc749628a91ed262`.
+Verified final application: `6ab065f5864a1a0a31c9c9c232c516b827c35a13`.
 Exact final delivery commit is recorded in the output receipt / PR head.
 
 ## Delivered behavior
@@ -34,10 +35,12 @@ identifies a result; it is not a permission grant.
   newer revision exists. Expected-current-revision checking remains in the cache-miss
   write callback. Changed-payload conflicts remain for authorized resources.
 
-**UNVERIFIED at delivery checkpoint:** runtime before/after reproduction and final
-Linux/Windows acceptance. GitHub is holding the new runs as queued with zero jobs;
-no new pass or observed failing HTTP response is claimed. This is a source correction
-awaiting required remote evidence, not completed acceptance of task 002a.
+**Verified remotely on the final application commit:** the reviewed module produced
+the three exact unauthorized cached successes (200, 200, 201 instead of 404), then
+all five new regression scenarios passed against the restored corrected source.
+The full Linux aggregate and Windows compatibility passed. GitHub's initial
+scheduling block was resolved; results below supersede the pending checkpoint.
+Planner acceptance is a separate review decision; no PR merge or deployment occurred.
 
 ## Decisions and changes
 
@@ -61,9 +64,11 @@ awaiting required remote evidence, not completed acceptance of task 002a.
 The intended failure-first workflow could not execute before authoring the local
 candidate: the test-only checkpoint was pushed first, but GitHub allocated no jobs.
 The candidate was subsequently saved/pushed while that immutable checkpoint remained
-available. This deviation is explicit. The CI proof stage must still capture the
-reviewed module's failures before running the corrected aggregate; no failure-first
-result has been invented or inferred from a test name.
+available. This deviation is explicit. Once scheduling resumed, the final CI proof
+stage actually captured the reviewed module's failures before executing the
+corrected aggregate. The original test-only queued run was not used as a claimed
+failure result. The archived proof contains actual HTTP status mismatches and TAP
+results, not results inferred from source or test names.
 
 ## Verification evidence
 
@@ -72,13 +77,19 @@ result has been invented or inferred from a test name.
 | `git status --short`, `git log`, `git ls-remote origin refs/heads/task-002-patient-notebook` before edits | Clean checkout; local/remote matched reviewed `b348991` | Existing source confirmed and preserved |
 | Source trace of `idempotent()` and its three callers | Confirmed the two authorization bypasses described by planner | Code finding; not independent pre-fix HTTP reproduction |
 | `git diff --check` | Passed | Patch formatting only; not type/runtime validation |
-| Test-only remote runs `43097432827` (push), `43097437345` (PR) | **Queued, zero jobs** when checked repeatedly | Before-fix regressions have not executed |
-| Initial corrected remote runs `43099341380` (push), `43099348669` (PR) | **Queued, zero jobs** at checkpoint | No corrected Linux/Windows result claimed |
+| Test-only remote runs `43097432827` (push), `43097437345` (PR) | Queued with zero jobs during the initial checkpoint | Not used as claimed failure evidence; final workflow independently executes the reviewed module |
+| Initial corrected remote runs `43099341380` (push), `43099348669` (PR) | Queued with zero jobs during the initial checkpoint | Superseded by actual verified final application run |
 | `gh api .../actions/runs/.../jobs` | `total_count: 0` for queued proof runs | Scheduling block confirmed; no local fallback started |
 | Cancellation attempt against stalled test-only run | API 409: run has not been queued yet; GET still reports queued | GitHub scheduling inconsistency; no repo settings changed |
-| Final CI: reviewed module + `node scripts/check-replay-before.mjs` | **UNVERIFIED / pending execution** | Must observe the three exact wrong-success statuses and two compatibility passes; restore-source assertion must pass |
-| Final CI: `npm run check` | **UNVERIFIED / pending execution** | Requires all 13 foundation/policy tests, 13 PostgreSQL/HTTP tests and 3 browser scenarios, typecheck/build/compiled smoke; no PG skips allowed |
-| Final Windows compatibility and production dependency audit | **UNVERIFIED / pending execution** | Prior task-002 results are historical, not fresh correction evidence |
+| Final CI: reviewed module + `node scripts/check-replay-before.mjs` | **Passed**: reviewed behavior has 3 failing authorization cases, 2 passing compatibility cases; exact 404-versus-200/200/201 mismatches asserted; candidate restore assertion passed | Real PostgreSQL/HTTP before-fix proof; expected failures isolated from corrected aggregate |
+| Final Linux CI: `npm run check` | **Passed**: 13 foundation/policy tests, 13 PostgreSQL/HTTP tests (all 5 new cases passed), 3 browser scenarios, typecheck/build/compiled smoke; zero skipped PG checks | Full existing aggregate plus correction regressions on `6ab065f`; synthetic tests, not clinical validation |
+| Final Windows `npm run typecheck`, `npm run test:unit`, `npm run build`, `npm run test:built` | **All passed**, 13 foundation/policy tests | Windows compatibility; real DB/browser coverage belongs to Linux job |
+| Final Linux `npm audit --omit=dev --audit-level=high` and `node --import tsx scripts/check-provision.mjs` | **Passed**: zero known production dependency vulnerabilities; synthetic setup/repeat migration passed | Advisory snapshot and retained setup behavior, not a full security audit |
+
+Passing application PR run: https://github.com/Imamatdin/clinora/actions/runs/43099855143
+Push run with successful Linux/Windows jobs: https://github.com/Imamatdin/clinora/actions/runs/43099847851
+Raw proof: `docs/verification/task-002a-before.txt`.
+Redacted Linux output: `docs/verification/task-002a-linux.txt`.
 
 Regression scenarios:
 
@@ -94,22 +105,25 @@ browser installation or application build were run on the user's limited-RAM mac
 
 ## Remaining issues
 
-GitHub scheduling is the current acceptance blocker. Observe actual red proof and
-complete green Linux/Windows checks before approving task 002a or declaring task 002
-accepted. If a test fails, inspect its actual output and correct the source; do not
-weaken the assertions or count queued runs as passes. The final run IDs/commit are
-in the output receipt and PR checks. No user credentials or production access needed.
+No correction acceptance checks remain blocked or skipped in the verified final
+application run. The initial scheduling delay is historical. Planner review and
+the task-002 production/clinical limitations still apply. The historical red-proof
+step is limited to this review branch; future branches retain the full regression
+suite without repeatedly substituting an old application module. No schema was
+changed and no replay record was cleared. No user credentials or production access
+were needed. Node/dependency tooling emits an existing `url.parse()` deprecation
+warning; it did not fail the checks and was not changed in this bounded patch.
 
 ## Delivery state
 
 - Implemented: source correction and five real HTTP/PostgreSQL regressions.
-- Tested: source/diff inspection only for the correction; runtime acceptance **UNVERIFIED**.
+- Tested: actual reviewed-module failures, corrected PostgreSQL/HTTP regressions,
+  complete Linux aggregate and Windows compatibility on final application `6ab065f`, all passed.
 - Committed/pushed: existing task-002 branch and PR; exact delivered head in receipt.
 - Merged: no. Deployed: no. Production systems or real patient data affected: none.
 - Task 003: not started; original voice/Telegram and subsequent task scope retained.
 
 ## Next step
 
-Finish the queued before/after remote proof and final aggregate, then return actual
-results for planner review. Only after correction acceptance should the planner
+Return the verified before/after evidence and source for planner review. Only after correction acceptance should the planner
 assign task 003. This handoff supersedes earlier broad replay-authorization claims.

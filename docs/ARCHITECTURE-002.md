@@ -46,7 +46,8 @@ the stored patient's current assignment after the replay-key wait. Draft/encount
 retries validate the actual clinic/patient/encounter/document relationship; a draft
 also validates its immutable historical snapshot without comparing the current
 revision. Replay-key locks precede document locks on both hit and miss paths.
-See the task-002a handoff for pending runtime verification. Request input
+The task-002a handoff records actual reviewed-module failures and the passing
+corrected PostgreSQL/HTTP regressions. Request input
 object key order is normalized by the strict shared schemas.
 
 ## Identity and privilege

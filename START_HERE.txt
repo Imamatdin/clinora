@@ -1,5 +1,7 @@
-You are the implementation agent for Clinora. The attached pack contains the planner's product context, engineering instructions, evidence, and first assignment.
+Clinora task 002 is implemented and verified on remote GitHub-hosted runners.
 
-Read README.md, AGENTS.md, docs/PRODUCT.md, docs/STATE-2026-11-11.md, and tasks/001-baseline-and-foundation.md. Complete task 001 within its stated boundary. Use the supplied source archives selectively; do not assume the planner's local paths exist in your environment. Preserve unrelated repository work and never copy secrets or patient data.
+Read README.md, AGENTS.md, docs/HANDOFF-TASK-002-2026-11-11.md and docs/RUN-NOTEBOOK.md first. The original task-001 entry is preserved in docs/TASK-001-START-HERE.txt; do not restart the scaffold or rerun old assignments without a new instruction.
 
-The planning assistant owns product and architecture coordination. Make justified routine implementation choices, report material unknowns, and return the dated HANDOFF_TEMPLATE.md with exact verification results. Do not claim work is committed, pushed, deployed, or clinically validated unless it actually is. Do not independently build later increments or change the agreed product scope.
+Respect the user's RAM constraint: do not start local Docker, PostgreSQL, heavy builds or browser tests. Use confirmed remote CI/compute. The repository is https://github.com/Imamatdin/clinora; notebook work is on task-002-patient-notebook for planner review.
+
+Stop at the completed notebook boundary. Task 003 has not been assigned for execution. Preserve access/persistence contracts for its future live browser capture and native Telegram dictation; do not implement them speculatively.

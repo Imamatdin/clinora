@@ -48,6 +48,7 @@ Development proxy and HTTPS cookie settings are documented in the run guide.
 - docs/THREAT-MODEL.md — controls, remaining threats and implementation gaps
 - docs/NEXT-INCREMENT.md — proposed patient/timeline increment for planner review
 - docs/HANDOFF-2026-11-11.md — exact outcomes and delivery status
+- docs/HANDOFF-TASK-002-2026-11-11.md — notebook source, remote acceptance results and boundaries
 
 One npm lockfile is authoritative. CI runs Linux PostgreSQL/Chromium acceptance
 and separate Windows compatibility checks without production secrets. `src/contracts` is shared, `src/modules`
@@ -70,5 +71,5 @@ upstream clinical code, databases or migration chains were copied into the core.
 
 ## Next step
 
-Finish task 002 acceptance and return the dated handoff and exact committed source
-for planner review. Stop before task 003; its Telegram/audio work has not started.
+Task 002 acceptance passed remotely. Review its dated handoff and committed source
+before assigning task 003. Telegram/audio work has not started.

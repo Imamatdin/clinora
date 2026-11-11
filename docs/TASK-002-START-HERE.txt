@@ -1,0 +1,7 @@
+Continue the existing Clinora repository. Do not restart task 001 or create another application.
+
+Read the existing AGENTS.md and project records, then docs/PLANNER-REVIEW-001.md, docs/DELIVERY-PLAN-002.md, and tasks/002-patient-notebook.md in this supplement. Reconcile the supplement with current files without overwriting unrelated work. Implement task 002 through its acceptance checks and return the existing handoff format.
+
+The planner reviewed the task 001 handoff, not the repository source or raw logs. Confirm the actual baseline before editing. Include a clean source archive or accessible repository link and exact commit with the next handoff so the planner can inspect the implementation.
+
+Task 002 delivers authenticated clinic-scoped patient records, dated encounters, versioned draft saving, and the first usable doctor workspace with real PostgreSQL persistence. Native Telegram voice-to-text is explicitly required in task 003; keep its identity/source contracts compatible, but do not add the bot or AI during task 002.

@@ -16,7 +16,7 @@ type Access = { actor: Actor; member: Membership; owner: boolean };
 export type ApiConfig = { pool: pg.Pool; origin: string; secureCookies: boolean };
 export type ApiResult = { status?: number; body: unknown; cookie?: string };
 const jsonBody = async (req: IncomingMessage): Promise<unknown> => {
-  if (!req.headers['content-type']?.startsWith('application/json')) return fail('INVALID_INPUT');
+  if (req.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') return fail('INVALID_INPUT');
   let size = 0; const chunks: Buffer[] = [];
   for await (const chunk of req) { size += chunk.length; if (size > 100000) return fail('INVALID_INPUT'); chunks.push(chunk); }
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return fail('INVALID_INPUT'); }
@@ -67,7 +67,7 @@ async function visits(tx: Tx, clinic: string, patient: string): Promise<VisitVie
     WHERE e.clinic_id=$1 AND e.patient_id=$2 ORDER BY e.created_at,e.id`, [clinic, patient])).rows;
   const result: VisitView[] = rows.map(r => ({ encounter: r.data, clinicianName: r.display_name, documentId: r.document_id, revision: r.current_revision, version: r.version }));
   // Known dates descending, date-only explicitly preserved; undated visits last, newest entry first.
-  const date = (v: VisitView) => v.encounter.occurrence.precision === 'instant' ? v.encounter.occurrence.at : v.encounter.occurrence.precision === 'date' ? v.encounter.occurrence.date : '';
+  const date = (v: VisitView) => v.encounter.occurrence.precision === 'instant' ? new Date(v.encounter.occurrence.at).toISOString() : v.encounter.occurrence.precision === 'date' ? v.encounter.occurrence.date : '';
   return result.sort((a,b) => date(b).localeCompare(date(a)) || b.encounter.createdAt.localeCompare(a.encounter.createdAt) || a.encounter.id.localeCompare(b.encounter.id));
 }
 async function idempotent(tx: Tx, access: Access, operation: string, key: unknown, payload: unknown, work: () => Promise<unknown>) {

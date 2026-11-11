@@ -7,6 +7,7 @@ import { AcceptInviteInput, DraftInput, EncounterInput, InviteInput, LoginInput,
 import { DomainError, requireClinicalAccess } from '../modules/identity/access.js';
 import { transaction, type Tx } from './database.js';
 import { digest, dummyHash, passwordHash, passwordMatches, same, token } from './security.js';
+import { sortVisits } from '../contracts/timeline.js';
 
 const fail = (code: ConstructorParameters<typeof DomainError>[0]): never => { throw new DomainError(code); };
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => { const result = schema.safeParse(value); return result.success ? result.data : fail('INVALID_INPUT'); };
@@ -67,8 +68,7 @@ async function visits(tx: Tx, clinic: string, patient: string): Promise<VisitVie
     WHERE e.clinic_id=$1 AND e.patient_id=$2 ORDER BY e.created_at,e.id`, [clinic, patient])).rows;
   const result: VisitView[] = rows.map(r => ({ encounter: r.data, clinicianName: r.display_name, documentId: r.document_id, revision: r.current_revision, version: r.version }));
   // Known dates descending, date-only explicitly preserved; undated visits last, newest entry first.
-  const date = (v: VisitView) => v.encounter.occurrence.precision === 'instant' ? new Date(v.encounter.occurrence.at).toISOString() : v.encounter.occurrence.precision === 'date' ? v.encounter.occurrence.date : '';
-  return result.sort((a,b) => date(b).localeCompare(date(a)) || b.encounter.createdAt.localeCompare(a.encounter.createdAt) || a.encounter.id.localeCompare(b.encounter.id));
+  return sortVisits(result);
 }
 async function idempotent(tx: Tx, access: Access, operation: string, key: unknown, payload: unknown, work: () => Promise<unknown>) {
   if (typeof key !== 'string' || !/^[a-zA-Z0-9_-]{16,100}$/.test(key)) return fail('INVALID_INPUT');

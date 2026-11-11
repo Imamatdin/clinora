@@ -6,6 +6,11 @@ Clinora is a doctor-facing clinical assistant centered on a persistent patient r
 
 ## Current status
 
+Task 002a review corrections are implemented on the existing review branch, but
+runtime verification is **UNVERIFIED** while GitHub leaves runs queued without jobs.
+Read `docs/HANDOFF-TASK-002a-2026-11-12.md`; earlier green checks did not cover the
+cached-result authorization findings. Do not treat task 002a as accepted yet.
+
 Task 002 adds an authenticated, clinic-scoped notebook: permitted-patient search
 and creation, dated encounter history, structured unapproved drafts, PostgreSQL
 persistence, scoped invitations, revision conflicts and safe retries. The original
@@ -49,6 +54,7 @@ Development proxy and HTTPS cookie settings are documented in the run guide.
 - docs/NEXT-INCREMENT.md — proposed patient/timeline increment for planner review
 - docs/HANDOFF-2026-11-11.md — exact outcomes and delivery status
 - docs/HANDOFF-TASK-002-2026-11-11.md — notebook source, remote acceptance results and boundaries
+- docs/HANDOFF-TASK-002a-2026-11-12.md — replay authorization correction and current verification blocker
 
 One npm lockfile is authoritative. CI runs Linux PostgreSQL/Chromium acceptance
 and separate Windows compatibility checks without production secrets. `src/contracts` is shared, `src/modules`

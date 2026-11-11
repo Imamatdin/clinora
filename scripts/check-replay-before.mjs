@@ -29,6 +29,9 @@ assert.deepEqual(failures.sort(),[
   'cached draft cannot be replayed through another permitted patient after original assignment revocation',
   'patient-create replay reauthorizes stored patient and never recreates a chart or restores revoked assignment'
 ].sort(),'only the three reviewed authorization failures are expected');
+assert.deepEqual([...output.matchAll(/^\s+expected: (\d+)$/gm)].map(match=>Number(match[1])).sort(),[404,404,404]);
+assert.deepEqual([...output.matchAll(/^\s+actual: (\d+)$/gm)].map(match=>Number(match[1])).sort(),[200,200,201],
+  'the reviewed code must disclose successful cached responses where the regressions require 404');
 assert.match(output,/# pass 2\b/,'stale authorized retries and concurrent creates must still work on the reviewed code');
 await run('git',['diff','--exit-code','--',file]);
 console.log('Reviewed behavior reproduced: 3 authorization regressions fail; 2 compatibility cases pass. Candidate source restored unchanged.');

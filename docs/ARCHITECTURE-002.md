@@ -40,7 +40,13 @@ failure maps to a generic 503; clinical text and SQL diagnostics are not logged.
 Idempotency uses `(clinic, actor, operation, key)` with a canonical validated-payload
 hash. A PostgreSQL transaction advisory lock serializes simultaneous identical
 requests before checking/creating the persisted result. A mismatching payload is
-409. Replays recheck access before consulting the saved result. Request input
+409. Task 002a requires each replay caller to recheck the stored result's actual
+resource authorization before returning it. Patient-create retries refresh and pin
+the stored patient's current assignment after the replay-key wait. Draft/encounter
+retries validate the actual clinic/patient/encounter/document relationship; a draft
+also validates its immutable historical snapshot without comparing the current
+revision. Replay-key locks precede document locks on both hit and miss paths.
+See the task-002a handoff for pending runtime verification. Request input
 object key order is normalized by the strict shared schemas.
 
 ## Identity and privilege

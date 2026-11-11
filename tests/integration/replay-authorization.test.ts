@@ -88,3 +88,14 @@ test('authorized stale-version replays stay exact; cached routes still deny revo
   await deniedWithoutDisclosure(await f.c.request(f.draftPath(f.a.id),noteInput,{'Idempotency-Key':f.saveKey}),401,sensitive(f));
   assert.deepEqual(await counts(f),before);
 });
+
+test('simultaneous assigned-clinician patient-create retries return the same newly authorized patient',async t=>{
+  const f=await assignedFixture();t.after(()=>f.close());const before=await counts(f), k=key();
+  const input={...patientInput,displayName:'Fictional Concurrent Replay Patient'};
+  const responses=await Promise.all(Array.from({length:4},()=>f.c.request(f.base,input,{'Idempotency-Key':k})));
+  assert.ok(responses.every(r=>r.status===201),'waiters must observe the creator assignment committed by the first request');
+  const results=await Promise.all(responses.map(r=>r.json()));
+  assert.ok(results.every(result=>result.id===results[0].id));
+  assert.equal((await f.c.request(`${f.base}/${results[0].id}`)).status,200);
+  assert.deepEqual(await counts(f),{...before,patients:before.patients+1,assignments:before.assignments+1,audit:before.audit+1,replays:before.replays+1});
+});

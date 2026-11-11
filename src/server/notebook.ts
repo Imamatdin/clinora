@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import type pg from 'pg';
-import { DocumentVersion, Encounter, Id, type Membership, type Principal } from '../contracts/index.js';
+import { DocumentVersion, Encounter, Id, Revision, type Membership, type Principal } from '../contracts/index.js';
 import { AcceptInviteInput, DraftInput, EncounterInput, InviteInput, LoginInput, PatientInput, SignupInput, type PatientView, type VisitView } from '../contracts/notebook.js';
 import { DomainError, requireClinicalAccess } from '../modules/identity/access.js';
 import { transaction, type Tx } from './database.js';
@@ -70,13 +70,29 @@ async function visits(tx: Tx, clinic: string, patient: string): Promise<VisitVie
   // Known dates descending, date-only explicitly preserved; undated visits last, newest entry first.
   return sortVisits(result);
 }
-async function idempotent(tx: Tx, access: Access, operation: string, key: unknown, payload: unknown, work: () => Promise<unknown>) {
+async function allowedReplayDocument(tx: Tx, clinic: string, patient: string, encounter: string, document: string,
+  version?: { id: string; revision: number }): Promise<void> {
+  // Composite foreign keys bind this document to its real clinic/patient/encounter.
+  // Acquire this lock only AFTER the replay-key lock, just like the write path.
+  const row = (await tx.query(`SELECT d.id FROM documents d
+    WHERE d.clinic_id=$1 AND d.patient_id=$2 AND d.encounter_id=$3 AND d.id=$4
+      AND ($5::uuid IS NULL OR EXISTS(SELECT 1 FROM document_versions v
+        WHERE v.id=$5 AND v.document_id=d.id AND v.clinic_id=d.clinic_id AND v.patient_id=d.patient_id AND v.revision=$6))
+    FOR KEY SHARE OF d`, [clinic, patient, encounter, document, version?.id ?? null, version?.revision ?? null])).rows[0];
+  if (!row) return fail('NOT_FOUND');
+}
+async function idempotent(tx: Tx, access: Access, operation: string, key: unknown, payload: unknown,
+  work: () => Promise<unknown>, authorizeReplay: (cached: unknown) => Promise<void>) {
   if (typeof key !== 'string' || !/^[a-zA-Z0-9_-]{16,100}$/.test(key)) return fail('INVALID_INPUT');
   const scope = [access.member.clinicId, access.actor.userId, operation, key];
   await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [scope.join(':')]);
   const hash = digest(JSON.stringify(payload));
   const old = (await tx.query('SELECT payload_hash,response FROM idempotency_records WHERE clinic_id=$1 AND actor_id=$2 AND operation=$3 AND key=$4', scope)).rows[0];
-  if (old) return old.payload_hash === hash ? old.response : fail('IDEMPOTENCY_CONFLICT');
+  if (old) {
+    // A key identifies a result; it never grants access to that result's resource.
+    await authorizeReplay(old.response);
+    return old.payload_hash === hash ? old.response : fail('IDEMPOTENCY_CONFLICT');
+  }
   const result = await work();
   await tx.query('INSERT INTO idempotency_records(clinic_id,actor_id,operation,key,payload_hash,response) VALUES($1,$2,$3,$4,$5,$6)', [...scope, hash, JSON.stringify(result)]);
   return result;
@@ -171,6 +187,18 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
         await tx.query('INSERT INTO patient_assignments(clinic_id,patient_id,user_id) VALUES($1,$2,$3)', [clinic, id, actor.userId]);
         await audit(tx, actor.userId, clinic, 'patient.created', id);
         return patientView(row);
+      }, async cached => {
+        const stored = parse(z.object({ id: Id, clinicId: Id }), cached);
+        if (stored.clinicId !== clinic) return fail('NOT_FOUND');
+        // A simultaneous creator may commit this assignment while this request
+        // waits for the same replay key. Read and pin that specific current grant.
+        let replayAccess = access;
+        if (access.member.patientScope.kind === 'assigned') {
+          const rows = (await tx.query('SELECT patient_id FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3 FOR SHARE',
+            [clinic, stored.id, actor.userId])).rows;
+          replayAccess = { ...access, member: { ...access.member, patientScope: { kind: 'assigned', patientIds: rows.map(r => r.patient_id) } } };
+        }
+        await allowedPatient(tx, replayAccess, stored.id);
       });
       return { status: 201, body };
     }
@@ -188,6 +216,10 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
         await tx.query('INSERT INTO documents(id,clinic_id,patient_id,encounter_id) VALUES($1,$2,$3,$4)', [documentId, clinic, patientId, id]);
         await audit(tx, actor.userId, clinic, 'encounter.created', id);
         return { encounter, documentId, revision: 0, version: null, clinicianName: actor.name };
+      }, async cached => {
+        const stored = parse(z.object({ encounter: Encounter, documentId: Id }), cached);
+        if (stored.encounter.clinicId !== clinic || stored.encounter.patientId !== patientId) return fail('NOT_FOUND');
+        await allowedReplayDocument(tx, clinic, patientId!, stored.encounter.id, stored.documentId);
       });
       return { status: 201, body };
     }
@@ -208,6 +240,14 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
         await tx.query('UPDATE documents SET current_revision=$1,current_version_id=$2 WHERE id=$3', [version.revision, version.id, doc.id]);
         await audit(tx, actor.userId, clinic, 'draft.saved', version.id);
         return { revision: version.revision, version };
+      }, async cached => {
+        const stored = parse(z.object({ revision: Revision, version: DocumentVersion }), cached);
+        if (stored.version.clinicId !== clinic || stored.version.patientId !== patientId ||
+          stored.version.encounterId !== encounterId || stored.revision !== stored.version.revision) return fail('NOT_FOUND');
+        await allowedReplayDocument(tx, clinic, patientId!, encounterId!, stored.version.documentId,
+          { id: stored.version.id, revision: stored.revision });
+        // Do not compare the document's CURRENT revision here: a legitimate retry
+        // must recover its original snapshot even after newer versions are saved.
       });
       return { body };
     }

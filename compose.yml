@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17.9
+    environment:
+      POSTGRES_USER: clinora
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Supply a local-only database password}
+      POSTGRES_DB: clinora_local
+    ports:
+      - "127.0.0.1:54328:5432"
+    volumes:
+      - clinora_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clinora -d clinora_local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 256m
+volumes:
+  clinora_pg:

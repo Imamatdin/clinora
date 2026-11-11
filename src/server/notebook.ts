@@ -1,0 +1,216 @@
+import { randomUUID } from 'node:crypto';
+import type { IncomingMessage } from 'node:http';
+import { z } from 'zod';
+import type pg from 'pg';
+import { DocumentVersion, Encounter, Id, type Membership, type Principal } from '../contracts/index.js';
+import { AcceptInviteInput, DraftInput, EncounterInput, InviteInput, LoginInput, PatientInput, SignupInput, type PatientView, type VisitView } from '../contracts/notebook.js';
+import { DomainError, requireClinicalAccess } from '../modules/identity/access.js';
+import { transaction, type Tx } from './database.js';
+import { digest, dummyHash, passwordHash, passwordMatches, same, token } from './security.js';
+
+const fail = (code: ConstructorParameters<typeof DomainError>[0]): never => { throw new DomainError(code); };
+const parse = <T>(schema: z.ZodType<T>, value: unknown): T => { const result = schema.safeParse(value); return result.success ? result.data : fail('INVALID_INPUT'); };
+const iso = (value: Date) => value.toISOString();
+type Actor = { userId: string; sessionId: string; email: string; name: string; csrf: string; verification: unknown; principal: Principal };
+type Access = { actor: Actor; member: Membership; owner: boolean };
+export type ApiConfig = { pool: pg.Pool; origin: string; secureCookies: boolean };
+export type ApiResult = { status?: number; body: unknown; cookie?: string };
+const jsonBody = async (req: IncomingMessage): Promise<unknown> => {
+  if (!req.headers['content-type']?.startsWith('application/json')) return fail('INVALID_INPUT');
+  let size = 0; const chunks: Buffer[] = [];
+  for await (const chunk of req) { size += chunk.length; if (size > 100000) return fail('INVALID_INPUT'); chunks.push(chunk); }
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return fail('INVALID_INPUT'); }
+};
+const audit = (tx: Tx, actor: string, clinic: string | null, action: string, resource: string) =>
+  tx.query('INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,$4,$5)', [randomUUID(), actor, clinic, action, resource]);
+
+async function actorFor(tx: Tx, req: IncomingMessage): Promise<Actor> {
+  // No bearer fallback: an explicit unsupported bearer cannot override browser identity.
+  if (req.headers.authorization) return fail('UNAUTHENTICATED');
+  const cookies = (req.headers.cookie ?? '').split(';').map(v => v.trim()).filter(v => v.startsWith('clinora_session='));
+  const raw = cookies.length === 1 ? cookies[0]!.slice('clinora_session='.length) : '';
+  if (!/^[a-f0-9]{64}$/.test(raw)) return fail('UNAUTHENTICATED');
+  const row = (await tx.query(`SELECT s.id,s.user_id,s.expires_at,a.email,a.display_name,a.professional_verification
+    FROM sessions s JOIN accounts a ON a.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND a.status='active' FOR SHARE OF s,a`, [digest(raw)])).rows[0];
+  if (!row) return fail('UNAUTHENTICATED');
+  return { userId: row.user_id, sessionId: row.id, email: row.email, name: row.display_name, csrf: digest('csrf:' + raw), verification: row.professional_verification,
+    principal: { userId: row.user_id, sessionId: row.id, expiresAt: iso(row.expires_at), accountStatus: 'active' } };
+}
+async function accessFor(tx: Tx, actor: Actor, clinic: string): Promise<Access> {
+  const row = (await tx.query('SELECT * FROM memberships WHERE clinic_id=$1 AND user_id=$2 AND status=\'active\' FOR SHARE', [clinic, actor.userId])).rows[0];
+  if (!row) return fail('FORBIDDEN');
+  // An owner/admin role does not itself grant clinical access.
+  const member: Membership = { id: row.id, userId: actor.userId, clinicId: clinic,
+    role: row.clinical_access ? 'clinician' : 'administrator', status: 'active', revision: row.revision,
+    grant: { by: row.granted_by, at: iso(row.granted_at) }, patientScope: row.patient_scope === 'clinic' ? { kind: 'clinic' } : {
+      kind: 'assigned', patientIds: (await tx.query('SELECT patient_id FROM patient_assignments WHERE clinic_id=$1 AND user_id=$2 FOR SHARE', [clinic, actor.userId])).rows.map(r => r.patient_id)
+    } };
+  return { actor, member, owner: row.is_owner };
+}
+function clinical(access: Access, patient: string) {
+  requireClinicalAccess(access.actor.principal, access.member, { clinicId: access.member.clinicId, patientId: patient }, new Date());
+}
+async function allowedPatient(tx: Tx, access: Access, id: string): Promise<PatientView> {
+  // Uniform not-found for missing/out-of-scope records; no existence-based response changes.
+  try { clinical(access, id); } catch { return fail('NOT_FOUND'); }
+  const row = (await tx.query('SELECT * FROM patients WHERE clinic_id=$1 AND id=$2', [access.member.clinicId, id])).rows[0];
+  if (!row) return fail('NOT_FOUND');
+  return patientView(row);
+}
+function patientView(row: pg.QueryResultRow): PatientView {
+  return { id: row.id, clinicId: row.clinic_id, displayName: row.display_name, mrn: row.mrn, dateOfBirth: row.date_of_birth,
+    createdAt: iso(row.created_at), updatedAt: iso(row.updated_at), revision: row.revision, provenance: row.provenance };
+}
+async function visits(tx: Tx, clinic: string, patient: string): Promise<VisitView[]> {
+  const rows = (await tx.query(`SELECT e.data,a.display_name,d.id document_id,d.current_revision,v.data version FROM encounters e
+    JOIN accounts a ON a.id=e.clinician_id JOIN documents d ON d.encounter_id=e.id LEFT JOIN document_versions v ON v.id=d.current_version_id
+    WHERE e.clinic_id=$1 AND e.patient_id=$2 ORDER BY e.created_at,e.id`, [clinic, patient])).rows;
+  const result: VisitView[] = rows.map(r => ({ encounter: r.data, clinicianName: r.display_name, documentId: r.document_id, revision: r.current_revision, version: r.version }));
+  // Known dates descending, date-only explicitly preserved; undated visits last, newest entry first.
+  const date = (v: VisitView) => v.encounter.occurrence.precision === 'instant' ? v.encounter.occurrence.at : v.encounter.occurrence.precision === 'date' ? v.encounter.occurrence.date : '';
+  return result.sort((a,b) => date(b).localeCompare(date(a)) || b.encounter.createdAt.localeCompare(a.encounter.createdAt) || a.encounter.id.localeCompare(b.encounter.id));
+}
+async function idempotent(tx: Tx, access: Access, operation: string, key: unknown, payload: unknown, work: () => Promise<unknown>) {
+  if (typeof key !== 'string' || !/^[a-zA-Z0-9_-]{16,100}$/.test(key)) return fail('INVALID_INPUT');
+  const scope = [access.member.clinicId, access.actor.userId, operation, key];
+  await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [scope.join(':')]);
+  const hash = digest(JSON.stringify(payload));
+  const old = (await tx.query('SELECT payload_hash,response FROM idempotency_records WHERE clinic_id=$1 AND actor_id=$2 AND operation=$3 AND key=$4', scope)).rows[0];
+  if (old) return old.payload_hash === hash ? old.response : fail('IDEMPOTENCY_CONFLICT');
+  const result = await work();
+  await tx.query('INSERT INTO idempotency_records(clinic_id,actor_id,operation,key,payload_hash,response) VALUES($1,$2,$3,$4,$5,$6)', [...scope, hash, JSON.stringify(result)]);
+  return result;
+}
+async function throttle(pool: pg.Pool, email: string, ip: string) {
+  // Server socket address only; no trust in client X-Forwarded-For headers.
+  await transaction(pool, async tx => {
+    for (const [key, limit] of [[digest('ip:' + ip), 40], [digest('email:' + email), 8]] as const) {
+      const row = (await tx.query(`INSERT INTO login_limits(key,attempts,reset_at) VALUES($1,1,now()+interval '15 minutes')
+        ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN login_limits.reset_at<now() THEN 1 ELSE login_limits.attempts+1 END,
+        reset_at=CASE WHEN login_limits.reset_at<now() THEN now()+interval '15 minutes' ELSE login_limits.reset_at END RETURNING attempts`, [key])).rows[0];
+      if (row.attempts > limit) { // Commit the limit update even when rate-limited.
+        return false;
+      }
+    }
+    return true;
+  }).then(ok => { if (!ok) fail('RATE_LIMITED'); });
+}
+
+export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiResult> {
+  const url = new URL(req.url ?? '/', config.origin), path = url.pathname, method = req.method ?? 'GET';
+  const mutation = !['GET','HEAD'].includes(method);
+  if (mutation && req.headers.origin !== config.origin) return fail('FORBIDDEN');
+  if (path === '/api/auth/register' && method === 'POST') {
+    const input = parse(SignupInput, await jsonBody(req));
+    await throttle(config.pool, input.email.toLowerCase(), req.socket.remoteAddress ?? 'unknown');
+    const hash = await passwordHash(input.password);
+    await config.pool.query('INSERT INTO accounts(id,email,display_name,password_hash) VALUES($1,$2,$3,$4) ON CONFLICT(email) DO NOTHING', [randomUUID(), input.email.toLowerCase(), input.displayName, hash]);
+    return { status: 202, body: { message: 'If this address is available, an unprivileged account has been created. Sign in to continue.' } };
+  }
+  if (path === '/api/auth/login' && method === 'POST') {
+    const input = parse(LoginInput, await jsonBody(req)), email = input.email.toLowerCase();
+    await throttle(config.pool, email, req.socket.remoteAddress ?? 'unknown');
+    const account = (await config.pool.query('SELECT * FROM accounts WHERE email=$1', [email])).rows[0];
+    const matches = await passwordMatches(input.password, account?.password_hash ?? dummyHash);
+    if (!matches || !account || account.status !== 'active') return fail('UNAUTHENTICATED');
+    const raw = token();
+    await config.pool.query('INSERT INTO sessions(id,token_hash,user_id,expires_at) VALUES($1,$2,$3,now()+interval \'8 hours\')', [randomUUID(), digest(raw), account.id]);
+    return { body: { ok: true }, cookie: `clinora_session=${raw}; HttpOnly; Path=/; SameSite=Strict; Max-Age=28800${config.secureCookies ? '; Secure' : ''}` };
+  }
+  return transaction(config.pool, async tx => {
+    const actor = await actorFor(tx, req);
+    if (mutation && !same(String(req.headers['x-csrf-token'] ?? ''), actor.csrf)) return fail('FORBIDDEN');
+    if (path === '/api/auth/me' && method === 'GET') {
+      const memberships = (await tx.query(`SELECT m.clinic_id id,c.name,m.role,m.is_owner "isOwner",m.clinical_access "clinicalAccess",m.patient_scope "patientScope"
+        FROM memberships m JOIN clinics c ON c.id=m.clinic_id WHERE m.user_id=$1 AND m.status='active' ORDER BY c.name`, [actor.userId])).rows;
+      return { body: { id: actor.userId, name: actor.name, email: actor.email, csrf: actor.csrf, professionalVerification: actor.verification, clinics: memberships } };
+    }
+    if (path === '/api/auth/logout' && method === 'POST') {
+      await tx.query('DELETE FROM sessions WHERE id=$1', [actor.sessionId]);
+      return { body: { ok: true }, cookie: `clinora_session=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0${config.secureCookies ? '; Secure' : ''}` };
+    }
+    if (path === '/api/invitations/accept' && method === 'POST') {
+      const input = parse(AcceptInviteInput, await jsonBody(req));
+      const invite = (await tx.query('SELECT * FROM invitations WHERE token_hash=$1 AND email=$2 AND expires_at>now() AND consumed_at IS NULL AND revoked_at IS NULL FOR UPDATE', [digest(input.token), actor.email])).rows[0];
+      if (!invite) return fail('FORBIDDEN');
+      // A revoked invitation issuer cannot activate pending invitations.
+      const issuer = (await tx.query("SELECT id FROM memberships WHERE clinic_id=$1 AND user_id=$2 AND status='active' AND is_owner=true FOR SHARE", [invite.clinic_id, invite.created_by])).rows[0];
+      if (!issuer) return fail('FORBIDDEN');
+      const prior = (await tx.query('SELECT id FROM memberships WHERE clinic_id=$1 AND user_id=$2', [invite.clinic_id, actor.userId])).rows[0];
+      if (prior) return fail('FORBIDDEN'); // Reinstatement of a revoked clinician requires a separate owner workflow.
+      await tx.query("INSERT INTO memberships(id,clinic_id,user_id,role,clinical_access,status,granted_by) VALUES($1,$2,$3,'clinician',true,'active',$4)", [randomUUID(), invite.clinic_id, actor.userId, invite.created_by]);
+      await tx.query('UPDATE invitations SET consumed_at=now() WHERE id=$1', [invite.id]);
+      await audit(tx, actor.userId, invite.clinic_id, 'membership.accepted', invite.id);
+      return { body: { ok: true } };
+    }
+    const parts = path.split('/').filter(Boolean);
+    if (parts[0] !== 'api' || parts[1] !== 'clinics' || !Id.safeParse(parts[2]).success) return fail('NOT_FOUND');
+    const clinic = parts[2]!, access = await accessFor(tx, actor, clinic);
+    if (parts[3] === 'invitations' && parts.length === 4 && method === 'POST') {
+      if (!access.owner) return fail('FORBIDDEN');
+      const input = parse(InviteInput, await jsonBody(req)), raw = token();
+      await tx.query('INSERT INTO invitations(id,clinic_id,email,token_hash,created_by,expires_at) VALUES($1,$2,$3,$4,$5,now()+interval \'48 hours\')', [randomUUID(), clinic, input.email.toLowerCase(), digest(raw), actor.userId]);
+      return { status: 201, body: { link: `${config.origin}/#invite=${raw}`, expiresInHours: 48 } };
+    }
+    if (parts[3] !== 'patients') return fail('NOT_FOUND');
+    if (parts.length === 4 && method === 'GET') {
+      if (access.member.role !== 'clinician') return fail('FORBIDDEN');
+      const q = url.searchParams.get('q') ?? ''; if (q.length>200) return fail('INVALID_INPUT');
+      const rows = (await tx.query(`SELECT p.* FROM patients p WHERE p.clinic_id=$1 AND ($2 OR EXISTS(
+        SELECT 1 FROM patient_assignments a WHERE a.clinic_id=p.clinic_id AND a.patient_id=p.id AND a.user_id=$3))
+        AND (position(lower($4) in lower(p.display_name))>0 OR position(lower($4) in lower(coalesce(p.mrn,'')))>0)
+        ORDER BY p.created_at DESC,p.id LIMIT 100`, [clinic, access.member.patientScope.kind === 'clinic', actor.userId, q])).rows;
+      return { body: rows.map(patientView) };
+    }
+    if (parts.length === 4 && method === 'POST') {
+      if (access.member.role !== 'clinician') return fail('FORBIDDEN');
+      const input = parse(PatientInput, await jsonBody(req));
+      const body = await idempotent(tx, access, 'patient.create', req.headers['idempotency-key'], input, async () => {
+        const id = randomUUID();
+        const row = (await tx.query('INSERT INTO patients(id,clinic_id,display_name,mrn,date_of_birth,provenance) VALUES($1,$2,$3,$4,$5,$6) RETURNING *', [id, clinic, input.displayName, input.mrn, input.dateOfBirth, { source: 'manual', externalReference: null }])).rows[0];
+        await tx.query('INSERT INTO patient_assignments(clinic_id,patient_id,user_id) VALUES($1,$2,$3)', [clinic, id, actor.userId]);
+        await audit(tx, actor.userId, clinic, 'patient.created', id);
+        return patientView(row);
+      });
+      return { status: 201, body };
+    }
+    const patientId = parts[4]; if (!Id.safeParse(patientId).success) return fail('NOT_FOUND');
+    const patient = await allowedPatient(tx, access, patientId!);
+    if (parts.length === 5 && method === 'GET') return { body: { patient, visits: await visits(tx, clinic, patientId!) } };
+    if (parts[5] !== 'encounters') return fail('NOT_FOUND');
+    if (parts.length === 6 && method === 'POST') {
+      const input = parse(EncounterInput, await jsonBody(req));
+      const body = await idempotent(tx, access, `encounter.create:${patientId}`, req.headers['idempotency-key'], input, async () => {
+        const id = randomUUID(), documentId = randomUUID(), stamp = new Date().toISOString();
+        const encounter = Encounter.parse({ id, patientId, clinicId: clinic, clinicianId: actor.userId, location: { id: null, label: input.location }, specialty: input.specialty,
+          occurrence: input.occurrence, status: 'draft', createdAt: stamp, updatedAt: stamp, revision: 1, provenance: { source: 'manual', externalReference: null } });
+        await tx.query('INSERT INTO encounters(id,clinic_id,patient_id,clinician_id,data) VALUES($1,$2,$3,$4,$5)', [id, clinic, patientId, actor.userId, encounter]);
+        await tx.query('INSERT INTO documents(id,clinic_id,patient_id,encounter_id) VALUES($1,$2,$3,$4)', [documentId, clinic, patientId, id]);
+        await audit(tx, actor.userId, clinic, 'encounter.created', id);
+        return { encounter, documentId, revision: 0, version: null, clinicianName: actor.name };
+      });
+      return { status: 201, body };
+    }
+    const encounterId = parts[6]; if (!Id.safeParse(encounterId).success) return fail('NOT_FOUND');
+    if (parts.length === 8 && parts[7] === 'draft' && method === 'POST') {
+      const input = parse(DraftInput, await jsonBody(req));
+      const body = await idempotent(tx, access, `draft.save:${encounterId}`, req.headers['idempotency-key'], input, async () => {
+        const doc = (await tx.query('SELECT * FROM documents WHERE clinic_id=$1 AND patient_id=$2 AND encounter_id=$3 FOR UPDATE', [clinic, patientId, encounterId])).rows[0];
+        if (!doc) return fail('NOT_FOUND');
+        if (doc.current_revision !== input.expectedRevision) return fail('STALE_VERSION');
+        const version = DocumentVersion.parse({ id: randomUUID(), documentId: doc.id, encounterId, clinicId: clinic, patientId,
+          revision: doc.current_revision+1, parentVersionId: doc.current_version_id, kind: 'clinician_edit',
+          templateId: input.templateId, fields: Object.entries(input.note).map(([key,value]) => ({ key, value: value.trim() || null,
+            category: ({reported:'reported',observed:'observed',assessment:'assessment',plan:'clinician_instruction'} as const)[key as keyof typeof input.note],
+            status: 'proposed', origin: 'clinician', revision: doc.current_revision+1, evidence: [], editedBy: actor.userId, unresolvedConflict: null })),
+          createdBy: actor.userId, createdAt: new Date().toISOString(), amendsApprovalId: null, amendmentReason: null });
+        await tx.query('INSERT INTO document_versions(id,document_id,clinic_id,patient_id,revision,created_by,data) VALUES($1,$2,$3,$4,$5,$6,$7)', [version.id, doc.id, clinic, patientId, version.revision, actor.userId, version]);
+        await tx.query('UPDATE documents SET current_revision=$1,current_version_id=$2 WHERE id=$3', [version.revision, version.id, doc.id]);
+        await audit(tx, actor.userId, clinic, 'draft.saved', version.id);
+        return { revision: version.revision, version };
+      });
+      return { body };
+    }
+    return fail('NOT_FOUND');
+  });
+}

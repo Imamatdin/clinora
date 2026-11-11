@@ -88,6 +88,7 @@ export const DocumentVersion = z.object({
   revision: Revision, parentVersionId: Id.nullable(),
   kind: z.enum(['ai_draft', 'clinician_edit', 'amendment']),
   fields: z.array(ClinicalField).max(512), createdBy: Id, createdAt: Instant,
+  templateId: z.string().min(1).max(100).optional(),
   amendsApprovalId: Id.nullable(), amendmentReason: z.string().min(1).nullable()
 }).strict().refine(d => d.kind !== 'amendment' || !!(d.amendsApprovalId && d.amendmentReason && d.parentVersionId), 'Amendment requires approved predecessor and reason')
   .refine(d => d.kind === 'amendment' || (d.amendsApprovalId === null && d.amendmentReason === null), 'Only amendments reference previous approvals');
@@ -105,7 +106,7 @@ export const IntegrationJob = z.object({
 export const ERROR_STATUS = {
   UNAUTHENTICATED: 401, FORBIDDEN: 403, NOT_FOUND: 404, STALE_VERSION: 409,
   IDEMPOTENCY_CONFLICT: 409, INVALID_TRANSITION: 409, INVALID_INPUT: 422,
-  INTEGRATION_UNAVAILABLE: 503, NOT_IMPLEMENTED: 501
+  INTEGRATION_UNAVAILABLE: 503, NOT_IMPLEMENTED: 501, SERVICE_UNAVAILABLE: 503, RATE_LIMITED: 429
 } as const;
 export type ErrorCode = keyof typeof ERROR_STATUS;
 export const ApiError = z.object({ error: z.object({ code: z.enum(Object.keys(ERROR_STATUS) as [ErrorCode, ...ErrorCode[]]), message: z.string(), requestId: Id }).strict() }).strict();

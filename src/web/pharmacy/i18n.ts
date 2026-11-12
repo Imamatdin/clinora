@@ -1,0 +1,10 @@
+import { pharmacy } from '../i18n/pharmacy.uz-Cyrl.js';
+import { pharmacyUzLatn } from '../i18n/pharmacy.uz-Latn.js';
+import { pharmacyRu } from '../i18n/pharmacy.ru.js';
+import { surgery } from '../i18n/surgery.uz-Cyrl.js';
+import { surgeryUzLatn } from '../i18n/surgery.uz-Latn.js';
+import { surgeryRu } from '../i18n/surgery.ru.js';
+export type Locale = 'uz-Cyrl'|'uz-Latn'|'ru';
+export const languages: { id:Locale; label:string }[] = [{ id:'uz-Cyrl',label:'Ўзб' },{ id:'uz-Latn',label:'Oʻzb' },{ id:'ru',label:'Рус' }];
+const dictionaries = { 'uz-Cyrl':{...pharmacy,...surgery}, 'uz-Latn':{...pharmacyUzLatn,...surgeryUzLatn}, ru:{...pharmacyRu,...surgeryRu} };
+export const translator = (locale:Locale) => (key:keyof typeof dictionaries['uz-Cyrl']) => dictionaries[locale][key];

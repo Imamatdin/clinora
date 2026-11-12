@@ -3,6 +3,7 @@ import type { StaffView } from '../contracts/clinic.js';
 import { ROLES, type Role } from '../modules/identity/roles.js';
 import { ApiFailure, type Request } from './api.js';
 import { errorText, t, type UiKey } from './i18n/index.js';
+import { AccessActions } from './access/staff-access.js';
 
 const roleLabel = (role: Role) => t(`role.${role}` as UiKey);
 
@@ -75,6 +76,7 @@ export function Staff({ clinicId, request, myId, myRoles }: { clinicId: string; 
             ? <button disabled={busy} onClick={() => { if (confirm(t('staff.resetConfirm', { name: s.fullName }))) void run(async () => { const r = await request<{ temporaryPassword: string }>(`${base}/${s.userId}/password-reset`, {}); setSecret({ name: s.fullName, login: s.login, password: r.temporaryPassword }); await load(); }); }}>{t('staff.reset')}</button>
             : <p className="fine">{t('staff.notManaged')}</p>}
         </div>
+        <AccessActions clinicId={clinicId} userId={s.userId} name={s.fullName} request={request} canManage={s.managed && !touchesCeo(s)} />
       </div>}
     </li>)}</ul>}
   </section>;

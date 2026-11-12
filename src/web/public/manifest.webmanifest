@@ -1,0 +1,16 @@
+{
+  "name": "Clinora · Клиника тизими",
+  "short_name": "Clinora",
+  "description": "Клиника тизими",
+  "lang": "uz-Cyrl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f6f5",
+  "theme_color": "#16685f",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

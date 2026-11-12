@@ -33,8 +33,12 @@ try {
   for (const asset of assets) assert.equal((await fetch(base + asset)).status, 200);
   assert.equal((await (await fetch(base + '/api/health')).json()).increment, 0);
   assert.equal((await fetch(base + '/.env')).status, 404);
+  for (const file of ['/sw.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']) assert.equal((await fetch(base + file)).status, 200, file);
+  assert.match(response.headers.get('content-security-policy'), /frame-ancestors https:\/\/web\.telegram\.org/);
+  assert.equal((await fetch(base + '/telegram-web-app.js')).status, 404);
+  assert.equal((await fetch(base + '/api/telegram/webhook', { method: 'POST' })).status, 401);
   assert.equal((await fetch(base + '/api/documents/export')).status, 401);
-  console.log('Built server, HTML, JS/CSS assets, health, source isolation and clinical denial: PASS');
+  console.log('Built server, HTML, JS/CSS assets, PWA files, CSP, health, source isolation and clinical denial: PASS');
 } finally {
   child.kill();
   if (child.exitCode === null) await once(child, 'exit');

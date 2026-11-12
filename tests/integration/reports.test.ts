@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { unzipSync,strFromU8 } from 'fflate';
 import { httpFixture } from './fixture.js';
+import { dispatchReports } from '../../src/modules/reports/notify.js';
 import { seedCashier } from './cashier-fixture.js';
 
 test('C8: day close reconciles ledger, rejects open shifts, snapshots and sends only financial totals',async()=>{
@@ -30,6 +31,7 @@ test('C8: day close reconciles ledger, rejects open shifts, snapshots and sends 
     const saved=await call(`/reports/days/${g.day}`);assert.equal(saved.snapshot,true);assert.deepEqual(saved.totals,report.totals);
     assert.equal(saved.cashShifts[0].expected,'340000');assert.equal(saved.cashShifts[0].counted,'340000');assert.equal(saved.cashShifts[0].difference,'0');
     await call(`/business-days/${g.day}/close`,{},409);
+    await dispatchReports(f.config,f.owner.clinicId);
     const messages=f.telegramApi.calls.filter(c=>c.method==='sendMessage');assert.equal(messages.length,1);
     const text=JSON.stringify(messages[0]);assert.match(text,/500000/);assert.doesNotMatch(text,/Synthetic Aliyev|patient|diagnosis|phone/i);
     assert.match(text,new RegExp(g.day));

@@ -4,6 +4,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { ERROR_STATUS, type ErrorCode } from '../contracts/index.js';
 import { api, type ApiConfig } from './notebook.js';
+import { PayrollRulesMissing } from '../modules/payroll/actions.js';
 import { LoginLimited } from '../modules/login/actions.js';
 import { DomainError } from '../modules/identity/access.js';
 import { migrationsCurrent } from './database.js';
@@ -17,7 +18,7 @@ export const routeShape = (path: string) => path.slice(0, 200)
   .replace(/\/[0-9]+(?=\/|$)/g, '/:n')
   .replace(/[^a-zA-Z0-9/_.:-]/g, '?');
 import { handleAssistant, startAssistantHousekeeping } from './assistant.js';
-import { dispatchReports } from '../modules/reports/notify.js';
+import { startReportWorker } from '../modules/reports/notify.js';
 
 const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
@@ -84,8 +85,6 @@ export async function createApp(webDirectory?: string, config?: ApiConfig, optio
       if (await handleAssistant(req, res, config, requestId)) return; // Task 003C doctor assistant routes.
       try {
         const result = await api(req, config);
-        const close = /^\/api\/clinics\/([0-9a-f-]{36})\/business-days\/[0-9a-f-]{36}\/close$/.exec(path);
-        if (close && req.method === 'POST') await dispatchReports(config,close[1]!).catch(()=>{});
         if (result.cookie) res.setHeader('Set-Cookie', result.cookie);
         if (result.html !== undefined) { // Server-rendered print pages (queue tickets); same CSP as everything else.
           res.writeHead(result.status ?? 200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -99,6 +98,8 @@ export async function createApp(webDirectory?: string, config?: ApiConfig, optio
         if (error instanceof LoginLimited) {
           res.setHeader('Retry-After', String(Math.max(1, Math.ceil((Date.parse(error.unlockAt) - Date.now()) / 1000))));
           json(429, { error: { code: error.code, message: error.code, requestId, unlockAt: error.unlockAt } });
+        } else if (error instanceof PayrollRulesMissing) {
+          json(409,{error:{code:error.code,message:'PAYROLL_RULES_MISSING',doctors:error.doctors,requestId}});
         } else if (error instanceof DomainError) fail(error.code);
         else if (error && typeof error === 'object' && 'code' in error && error.code === '23505') fail('INVALID_INPUT');
         else fail('SERVICE_UNAVAILABLE'); // Never expose SQL or clinical values.
@@ -109,6 +110,7 @@ export async function createApp(webDirectory?: string, config?: ApiConfig, optio
       res.end(req.method === 'HEAD' ? undefined : file.body);
     } else fail('NOT_FOUND');
   });
+  if(config){const stop=startReportWorker(config);server.once('close',stop);}
   server.requestTimeout = 15000;
   server.headersTimeout = 10000;
   return server;

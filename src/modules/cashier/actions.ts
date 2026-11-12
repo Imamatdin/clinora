@@ -312,19 +312,25 @@ export async function approve(
       [input.approverId],
     )
   ).rows[0];
-  if (!p || p.locked_at)
+  if (!p)
     return { status: 403, body: { error: { code: "FORBIDDEN" } } };
+  // Device comes from the authenticated session, never the request body or IP.
+  const deviceKey=c.approvalDeviceKey??`account:${c.actorId}`;
+  await c.tx.query(`INSERT INTO cashier_approval_attempts(clinic_id,approver_id,device_key) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,[c.clinicId,input.approverId,deviceKey]);
+  const attempts=(await c.tx.query(`SELECT *,locked_until>now() locked FROM cashier_approval_attempts WHERE clinic_id=$1 AND approver_id=$2 AND device_key=$3 FOR UPDATE`,[c.clinicId,input.approverId,deviceKey])).rows[0];
+  if(attempts.locked)return {status:403,body:{error:{code:'FORBIDDEN'}}};
   if (!(await passwordMatches(input.pin, p.pin_hash))) {
     await c.tx.query(
-      "UPDATE account_pins SET failed_attempts=failed_attempts+1,locked_at=CASE WHEN failed_attempts+1>=5 THEN now() ELSE NULL END WHERE account_id=$1",
-      [input.approverId],
+      `UPDATE cashier_approval_attempts SET failed_attempts=CASE WHEN locked_until<=now() THEN 1 ELSE least(failed_attempts+1,5) END,
+       locked_until=CASE WHEN locked_until<=now() THEN NULL WHEN failed_attempts+1>=5 THEN now()+interval '15 minutes' ELSE NULL END WHERE clinic_id=$1 AND approver_id=$2 AND device_key=$3`,
+      [c.clinicId,input.approverId,deviceKey],
     );
     await audited(c, "approval_failed", input.approverId);
     return { status: 403, body: { error: { code: "FORBIDDEN" } } };
   }
   await c.tx.query(
-    "UPDATE account_pins SET failed_attempts=0 WHERE account_id=$1",
-    [input.approverId],
+    "UPDATE cashier_approval_attempts SET failed_attempts=0,locked_until=NULL WHERE clinic_id=$1 AND approver_id=$2 AND device_key=$3",
+    [c.clinicId,input.approverId,deviceKey],
   );
   const approvalId = randomUUID();
   await c.tx.query(
@@ -428,11 +434,11 @@ export async function voidDiscount(
 ) {
   await guard(c);
   await visit(c, visitId);
-  await authorization(c, "void", visitId, input, approvalId);
+  const approver = await authorization(c, "void", visitId, input, approvalId);
   const row = (
     await c.tx.query(
       "UPDATE discounts SET voided_by=$4,voided_at=now(),void_reason=$5 WHERE clinic_id=$1 AND visit_id=$2 AND id=$3 AND voided_at IS NULL RETURNING id",
-      [c.clinicId, visitId, input.discountId, c.actorId, input.reason],
+      [c.clinicId, visitId, input.discountId, approver, input.reason],
     )
   ).rows[0];
   if (!row) return fail("NOT_FOUND");

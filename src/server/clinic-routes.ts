@@ -11,13 +11,14 @@ export const CLINIC_ROUTES = registeredRoutes();
 
 /** Returns null when the path is not a clinic route, so the notebook router can handle it. */
 export async function clinicRoute(tx: Tx, actorId: string, clinicId: string, rest: string, method: string, req: IncomingMessage,
-  readBody: (req: IncomingMessage) => Promise<unknown>, deviceId: string | null = null): Promise<RouteResult | null> {
+  readBody: (req: IncomingMessage) => Promise<unknown>, deviceId: string | null = null, approvalDeviceKey?: string): Promise<RouteResult | null> {
   const candidates = CLINIC_ROUTES.filter(route => route.pattern.test(rest));
   if (!candidates.length) return null;
   const route = candidates.find(r => r.method === method);
   if (!route) throw new DomainError('NOT_FOUND');
   const params = route.pattern.exec(rest)!.slice(1);
   if (params.some(p => !Id.safeParse(p).success)) throw new DomainError('NOT_FOUND');
-  const ctx = { ...await requireRole(tx, actorId, clinicId, route.roles), deviceId };
+  const ctx: Awaited<ReturnType<typeof requireRole>> & { deviceId: string | null; approvalDeviceKey?: string } = { ...await requireRole(tx, actorId, clinicId, route.roles), deviceId };
+  if (approvalDeviceKey) ctx.approvalDeviceKey = approvalDeviceKey;
   return route.handle(ctx, params, () => readBody(req));
 }

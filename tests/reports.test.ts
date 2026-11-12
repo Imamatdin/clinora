@@ -39,3 +39,23 @@ test('report interface ships matching Uzbek Cyrillic, Uzbek Latin and Russian di
   for(const dictionary of [ceoUzLatn,ceoRu]){assert.deepEqual(Object.keys(dictionary).sort(),Object.keys(ceo).sort());for(const v of Object.values(dictionary))assert.ok(v.length>0);}
   for(const v of Object.values(ceoUzLatn))assert.doesNotMatch(v,/\p{Script=Cyrillic}/u);
 });
+test('021: three-day stay service dates reconcile daily and range; outstanding includes earlier visits',()=>{
+  const d=data(); d.payments=[];d.allocations=[];
+  d.charges=[0,1,2].map(i=>({...d.charges[0],id:`bed-${i}`,kind:'bed',service_date:`2026-11-${10+i}`,created_at:'2026-11-12T08:00:00Z',unit_price_uzs:'100'}));
+  const reports=[10,11,12].map(day=>computeReport(d,{from:`2026-11-${day}`,to:`2026-11-${day}`}));
+  assert.deepEqual(reports.map(r=>r.totals.value),['100','100','100']);
+  assert.equal(reports.reduce((n,r)=>n+BigInt(r.totals.value!),0n).toString(),computeReport(d,{from:'2026-11-10',to:'2026-11-12'}).totals.value);
+  assert.equal(reports[2]!.totals.outstanding,'300');
+});
+test('021: an unbalanced visit is flagged and skipped without losing valid visits',()=>{
+  const d=data();d.allocations[0]!.amount_uzs='2000000';
+  d.visits.push({...d.visits[0],id:'good',patient_id:'other'});d.charges.push({...d.charges[0],id:'good-line',visit_id:'good'});
+  const r=computeReport(d,{from:'2026-11-10',to:'2026-11-10'});
+  assert.equal(r.totals.value,'1000000');assert.equal(r.doctors[0]!.amount,'0');assert.equal(r.needsReview?.[0]?.id,'v');
+});
+test('021: payroll lists missing rules and preserves other doctors earnings',()=>{
+  const d=data();d.charges.push({...d.charges[0],id:'missing',performer_user_id:'missing-doctor'});
+  const lines=computePayroll(d,{from:'2026-11-10',to:'2026-11-10'});
+  assert.equal(lines.find(l=>l.user_id==='doctor')!.entitlement_uzs,250000n);
+  assert.equal(lines.find(l=>l.user_id==='missing-doctor')!.status,'rule_missing');
+});

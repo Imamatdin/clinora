@@ -57,3 +57,32 @@ test('C8: dashboard shows recoverable server errors and a true empty state',asyn
     await page.unroute('**/reports/dashboard');await page.getByRole('button',{name:C('ceo.retry'),exact:true}).click();await expect(page.locator('.ceo-kpi-0 strong')).toHaveText('0');
   }finally{await f.close();}
 });
+
+test('021: missing-rule payroll names the doctor and refuses confirmation clearly',async({page})=>{
+  const f=await processFixture();try{
+    const g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
+    await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
+    await page.setViewportSize({width:390,height:1000});await page.goto(f.origin);
+    await page.getByLabel(T('auth.identifier'),{exact:true}).fill('owner@example.test');await page.getByLabel(T('auth.password'),{exact:true}).fill(f.password);await page.getByRole('button',{name:T('auth.signIn'),exact:true}).click();
+    await page.getByRole('button',{name:T('module.payroll'),exact:true}).click();await expect(page.getByRole('heading',{name:C('ceo.payrollTitle'),exact:true})).toBeVisible();
+    await page.getByRole('button',{name:C('ceo.show'),exact:true}).click();await expect(page.locator('.ceo-pay-doctor summary')).toContainText(C('ceo.ruleMissing'));
+    await page.getByRole('button',{name:C('ceo.finalize'),exact:true}).click();await page.getByRole('button',{name:C('ceo.confirm'),exact:true}).click();
+    await expect(page.getByRole('alert')).toContainText(C('ceo.ruleMissing'));await expect(page.getByRole('alert')).toContainText('Synthetic Owner');
+    expect((await f.pool.query('SELECT count(*)::int n FROM payroll_periods WHERE clinic_id=$1',[f.owner.clinicId])).rows[0].n).toBe(0);
+  }finally{await f.close();}
+});
+test('021: cashier can read and print own shift without clinic revenue drilldowns',async({page})=>{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  const f=await processFixture();try{
+    const g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
+    await transaction(f.pool,async tx=>{
+      const c=await requireRole(tx,f.owner.userId,f.owner.clinicId,['ceo']);const s=await cash.open(c,{deskId:g.desk,opening:'100'});
+      await cash.pay(c,g.visit,{shiftId:s.id,amount:'123',method:'cash',key:crypto.randomUUID()});await cash.close(c,s.id,{counted:'223'});
+    });
+    await f.pool.query('DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2',[f.owner.clinicId,f.owner.userId]);await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'cashier',$2)",[f.owner.clinicId,f.owner.userId]);
+    await page.goto(f.origin);await page.getByLabel(T('auth.identifier'),{exact:true}).fill('owner@example.test');await page.getByLabel(T('auth.password'),{exact:true}).fill(f.password);await page.getByRole('button',{name:T('auth.signIn'),exact:true}).click();
+    await page.getByRole('button',{name:T('module.reports'),exact:true}).click();await expect(page.getByRole('heading',{name:C('ceo.cashTitle'),exact:true})).toBeVisible();
+    await expect(page.locator('.ceo-report')).toContainText('223');await expect(page.locator('.ceo-kpis,.ceo-groups')).toHaveCount(0);await expect(page.locator('.ceo-report')).not.toContainText('Synthetic Aliyev');
+    const download=page.waitForEvent('download');await page.getByRole('button',{name:C('ceo.a4'),exact:true}).click();expect((await download).suggestedFilename()).toBe('clinora-report.pdf');expect(errors).toEqual([]);
+  }finally{await f.close();}
+});

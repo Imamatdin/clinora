@@ -19,8 +19,11 @@ export function ReportView({report}:{report:Report}) {
   useEffect(()=>setSelection(null),[report]);
   const back=useRef<HTMLDivElement>(null);
   if(selection)return <Ledger {...selection} onBack={()=>{setSelection(null);requestAnimationFrame(()=>back.current?.focus());}} />;
+  if(!('patients' in report.totals))return <section className="ceo-report"><p>{metric('collected')}: <strong>{money(report.totals.collected!)} {t('ceo.uzs')}</strong></p>
+    {(report.cashShifts??[]).map(s=><section key={s.id}><h3>{s.cashier} · {s.date}</h3><p>{t('ceo.opening')}: {money(s.opening)}</p><p>{t('ceo.expected')}: {money(s.expected)}</p><p>{t('ceo.counted')}: {s.counted===null?'—':money(s.counted)}</p><p>{t('ceo.difference')}: {s.difference===null?'—':money(s.difference)}</p></section>)}</section>;
   return <div ref={back} tabIndex={-1} className="ceo-report">
     <div className="ceo-status"><span className="ceo-live">{report.snapshot?t('ceo.snapshot'):t('ceo.live')}</span><span>{report.from} — {report.to}</span></div>
+    {!!report.needsReview?.length&&<p role="alert">{t('ceo.needsReview')}: {report.needsReview.map(v=>v.label).join(', ')}</p>}
     <div className="ceo-kpis">{['collected','patients','outstanding','discounts'].map((k,i)=><button key={k} className={`ceo-kpi ceo-kpi-${i}`} onClick={()=>open(metric(k),report.details[k]!)}><span>{metric(k)}</span><strong>{money(report.totals[k]!)}</strong><small>{k==='patients'?t('ceo.people'):t('ceo.uzs')} <span aria-hidden="true">↗</span></small></button>)}</div>
     <div className="ceo-middle"><section className="ceo-breakdown ceo-methods"><h3>{t('ceo.methods')}</h3>{['cash','card','transfer'].map(k=><button key={k} onClick={()=>open(metric(k),report.details[k]!)}><span>{metric(k)}</span><b>{money(report.totals[k]!)}</b><meter aria-label={metric(k)} min={0} max={100} value={BigInt(report.totals.collected!)>0n?Number(BigInt(report.totals[k]!)*100n/BigInt(report.totals.collected!)):0} /></button>)}</section>
       <div className="ceo-secondary">{['net','value','refunds','cashOuts','new','returning','outpatient','inpatient','lab','ward'].map(k=><button key={k} onClick={()=>open(metric(k),report.details[k]!)}><span>{metric(k)}</span><b>{money(report.totals[k]!)}</b></button>)}</div></div>

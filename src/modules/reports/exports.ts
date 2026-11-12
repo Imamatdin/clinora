@@ -54,6 +54,7 @@ export const LABELS:Record<string,string>={patients:'Беморлар',new:'Ян
 export async function reportExport(c:ClinicContext,report:Report,format:'pdf'|'xlsx'|'thermal',cashPrint=false) {
   await requireRole(c.tx,c.actorId,c.clinicId,cashPrint?['ceo','administrator','cashier']:['ceo']);
   const rows:unknown[][]=[[report.clinic,report.from,report.to],...Object.entries(report.totals).map(([k,v])=>[LABELS[k],v]),[],['Шифокор','Тушум, сўм'],...report.doctors.map(d=>[d.name,d.amount]),[],['Бўлим','Тушум, сўм'],...report.departments.map(d=>[d.name,d.amount])];
+  if(report.needsReview?.length)rows.push([],['Текшириш керак'],...report.needsReview.map(v=>[v.id,v.label]));
   for(const s of report.cashShifts??[])rows.push([],['Кассир',s.cashier,s.date],['Смена',s.id],['Бошланғич нақд',s.opening],['Кутилаётган нақд',s.expected],['Саналган нақд',s.counted??'Қайд этилмаган'],['Фарқ',s.difference??'Қайд этилмаган']);
   if(format!=='thermal')for(const [key,lines]of Object.entries(report.details))rows.push([],[LABELS[key],'Сана','Манба','Миқдор'],...lines.map(l=>[l.id,l.date,l.label,l.amount]));
   await recordAudit(c.tx,c.actorId,c.clinicId,'reports.exported',c.clinicId,{format,from:report.from,to:report.to});

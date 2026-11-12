@@ -185,7 +185,7 @@ test("cashier approval PIN failure persists, approval binds payload, revoked app
     assert.equal(
       (
         await f.pool.query(
-          "SELECT failed_attempts FROM account_pins WHERE account_id=$1",
+          "SELECT failed_attempts FROM cashier_approval_attempts WHERE approver_id=$1",
           [f.other.userId],
         )
       ).rows[0].failed_attempts,

@@ -38,7 +38,7 @@ export async function records(c: ClinicContext): Promise<Records> {
     coalesce((SELECT jsonb_agg(to_jsonb(x)||jsonb_build_object('delta_uzs',x.delta_uzs::text)) FROM cashier_allocation_adjustments x WHERE clinic_id=$1),'[]') adjustments,
     coalesce((SELECT jsonb_agg(to_jsonb(x)||jsonb_build_object('amount_uzs',x.amount_uzs::text)) FROM (SELECT o.*,d.business_date::text date FROM cash_outs o JOIN business_days d ON d.id=o.business_day_id AND d.clinic_id=o.clinic_id WHERE o.clinic_id=$1) x),'[]') "cashOuts",
     coalesce((SELECT jsonb_agg(x ORDER BY effective_from DESC) FROM doctor_split_rules x WHERE clinic_id=$1),'[]') rules,
-    coalesce((SELECT jsonb_agg(x) FROM cash_shifts x WHERE clinic_id=$1),'[]') shifts`, [c.clinicId]);
+    coalesce((SELECT jsonb_agg(to_jsonb(x)||jsonb_build_object('opening_cash_uzs',x.opening_cash_uzs::text,'counted_cash_uzs',x.counted_cash_uzs::text)) FROM (SELECT s.*,a.display_name cashier,d.business_date::text date FROM cash_shifts s JOIN accounts a ON a.id=s.cashier_user_id JOIN business_days d ON d.id=s.business_day_id AND d.clinic_id=s.clinic_id WHERE s.clinic_id=$1) x),'[]') shifts`, [c.clinicId]);
   return r.rows[0] as Records;
 }
 export const inRange = (date: string, p: Period) => date >= p.from && date <= p.to;

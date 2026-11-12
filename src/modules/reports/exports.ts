@@ -34,6 +34,7 @@ export const LABELS:Record<string,string>={patients:'Беморлар',new:'Ян
 export async function reportExport(c:ClinicContext,report:Report,format:'pdf'|'xlsx'|'thermal',cashPrint=false) {
   await requireRole(c.tx,c.actorId,c.clinicId,cashPrint?['ceo','administrator','cashier']:['ceo']);
   const rows:unknown[][]=[[report.clinic,report.from,report.to],...Object.entries(report.totals).map(([k,v])=>[LABELS[k],v]),[],['Шифокор','Тушум, сўм'],...report.doctors.map(d=>[d.name,d.amount]),[],['Бўлим','Тушум, сўм'],...report.departments.map(d=>[d.name,d.amount])];
+  for(const s of report.cashShifts??[])rows.push([],['Кассир',s.cashier,s.date],['Смена',s.id],['Бошланғич нақд',s.opening],['Кутилаётган нақд',s.expected],['Саналган нақд',s.counted??'Қайд этилмаган'],['Фарқ',s.difference??'Қайд этилмаган']);
   if(format!=='thermal')for(const [key,lines]of Object.entries(report.details))rows.push([],[LABELS[key],'Сана','Манба','Миқдор'],...lines.map(l=>[l.id,l.date,l.label,l.amount]));
   await recordAudit(c.tx,c.actorId,c.clinicId,'reports.exported',c.clinicId,{format,from:report.from,to:report.to});
   return format==='xlsx'?download('clinora-report.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',xlsx(rows)):download('clinora-report.pdf','application/pdf',await pdf('Касса ва клиника ҳисоботи',rows,format==='thermal'));

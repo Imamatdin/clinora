@@ -33,7 +33,10 @@ jobs:
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run typecheck
       - run: npx playwright install --with-deps chromium
-      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:built
+      - run: npm run test:browser
       - run: node --import tsx scripts/check-provision.mjs
       - uses: actions/upload-artifact@v4
         if: always()

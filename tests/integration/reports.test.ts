@@ -28,6 +28,7 @@ test('C8: day close reconciles ledger, rejects open shifts, snapshots and sends 
     await call(`/cashier/shifts/${shift.id}/close`,{counted:'340000'});
     await call(`/business-days/${g.day}/close`,{});
     const saved=await call(`/reports/days/${g.day}`);assert.equal(saved.snapshot,true);assert.deepEqual(saved.totals,report.totals);
+    assert.equal(saved.cashShifts[0].expected,'340000');assert.equal(saved.cashShifts[0].counted,'340000');assert.equal(saved.cashShifts[0].difference,'0');
     await call(`/business-days/${g.day}/close`,{},409);
     const messages=f.telegramApi.calls.filter(c=>c.method==='sendMessage');assert.equal(messages.length,1);
     const text=JSON.stringify(messages[0]);assert.match(text,/500000/);assert.doesNotMatch(text,/Synthetic Aliyev|patient|diagnosis|phone/i);

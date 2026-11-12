@@ -4,7 +4,7 @@ import { records, invoiceAt, inRange, localDate, sum, indexRecords, type Period,
 
 export type Detail = { id: string; date: string; label: string; amount: string; patientId?:string; doctorId?: string; doctor?: string; departmentId?: string; department?: string; kind?: string; source?: string };
 export type Report = { from: string; to: string; clinic: string; generatedAt: string; snapshot?: boolean; totals: Record<string,string>;
-  details: Record<string,Detail[]>; doctors: Group[]; departments: Group[]; sources: Group[] };
+  details: Record<string,Detail[]>; doctors: Group[]; departments: Group[]; sources: Group[];cashShifts?:{id:string;cashier:string;date:string;opening:string;expected:string;counted:string|null;difference:string|null}[] };
 export type Group = { id: string; name: string; amount: string; lines: Detail[]; patientLines?:Detail[];valueLines?:Detail[];discountLines?:Detail[];outstandingLines?:Detail[] };
 const group = (lines: Detail[], key: 'doctor'|'department'|'source'): Group[] => {
   const map = new Map<string,Group>();
@@ -70,7 +70,11 @@ export function computeReport(data: Records, p: Period): Report {
   };
   return { ...p,clinic:data.clinic.name,generatedAt:new Date().toISOString(),details,
     totals:Object.fromEntries(Object.entries(details).map(([k,v])=>[k,sum(v,'amount').toString()])),
-    doctors:performance('doctor'),departments:performance('department'),sources:group(details.patients!,'source') };
+    doctors:performance('doctor'),departments:performance('department'),sources:group(details.patients!,'source'),cashShifts:data.shifts.filter(s=>inRange(s.date,p)).map(s=>{
+      const cash=data.payments.filter(r=>r.cash_shift_id===s.id&&r.method==='cash'),outs=data.cashOuts.filter(r=>r.cash_shift_id===s.id);
+      const expected=BigInt(s.opening_cash_uzs)+cash.reduce((n,r)=>n+BigInt(r.amount_uzs)*(r.kind==='payment'?1n:-1n),0n)-sum(outs,'amount_uzs');
+      return {id:s.id,cashier:s.cashier,date:s.date,opening:s.opening_cash_uzs,expected:expected.toString(),counted:s.counted_cash_uzs,difference:s.counted_cash_uzs===null?null:(BigInt(s.counted_cash_uzs)-expected).toString()};
+    }) };
 }
 export async function dashboard(c: ClinicContext,p: Period) {
   await requireRole(c.tx,c.actorId,c.clinicId,['ceo']);

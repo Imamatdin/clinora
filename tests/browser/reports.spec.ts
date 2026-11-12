@@ -37,6 +37,8 @@ for(const width of [1440,390])test(`C8: real dashboard, drilldown, PDF download 
     await page.getByRole('button',{name:C('ceo.show'),exact:true}).click();await expect(page.locator('.ceo-pay-doctor')).toContainText('500');
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
     await page.screenshot({path:`work/browser-evidence/ceo-payroll-${width}.png`,fullPage:true});
+    await page.locator('.ceo-rules .ceo-more>summary').first().click();await page.getByLabel(C('ceo.share'),{exact:true}).fill('80');await page.locator('.ceo-rules form').getByRole('button',{name:C('ceo.saveRule'),exact:true}).click();
+    await expect(page.getByRole('status').filter({hasText:C('ceo.ruleSaved')})).toBeVisible();await page.getByRole('button',{name:C('ceo.show'),exact:true}).click();await expect(page.locator('.ceo-pay-doctor')).toContainText('500');
     // Closing the day creates a persisted report; the report opens after reload.
     page.on('dialog',d=>d.accept());await page.locator('.ceo-day-control>summary').click();await page.getByRole('button',{name:T('day.closeButton'),exact:true}).click();await expect(page.getByRole('status').filter({hasText:T('day.closedNotice')})).toBeVisible();
     await page.getByRole('button',{name:T('module.reports'),exact:true}).click();await expect(page.locator('.ceo-live')).toHaveText(C('ceo.snapshot'));

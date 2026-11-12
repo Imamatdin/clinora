@@ -20,7 +20,14 @@ export function computeReport(data: Records, p: Period): Report {
   const details: Record<string,Detail[]> = Object.fromEntries(['patients','new','returning','outpatient','inpatient','value','discounts','outstanding','collected','cash','card','transfer','refunds','cashOuts','net','lab','ward'].map(k=>[k,[]]));
   const add = (k: string, d: Detail) => details[k]!.push(d);
   const needsReview: {id:string;label:string}[]=[];
-  const visits = data.visits.filter(v => inRange(v.date,p) && v.status !== 'cancelled');
+  const invalid=new Set<string>(),invoices=new Map<string,ReturnType<typeof invoiceAt>>();
+  for(const v of data.visits.filter(v=>v.status!=='cancelled')){
+    try{invoices.set(v.id,invoiceAt(data,v,p.to));}catch(error){
+      if(!(error instanceof DomainError || error instanceof RangeError || error instanceof TypeError))throw error;
+      invalid.add(v.id);needsReview.push({id:v.id,label:`${v.patient_no} · ${v.full_name}`});
+    }
+  }
+  const visits = data.visits.filter(v => inRange(v.date,p) && v.status !== 'cancelled' && !invalid.has(v.id));
   const seen = new Set<string>();
   for (const v of visits) {
     // Unique patients in the period; outpatient/inpatient cohorts may overlap.
@@ -29,12 +36,8 @@ export function computeReport(data: Records, p: Period): Report {
       const identity = `${k}:${v.patient_id}`; if (!seen.has(identity)) { add(k,l); seen.add(identity); }
     }
   }
-  for (const v of data.visits.filter(v=>v.status!=='cancelled')) {
-    let lines;
-    try { lines=invoiceAt(data,v,p.to); } catch(error) {
-      if(!(error instanceof DomainError || error instanceof RangeError || error instanceof TypeError))throw error;
-      needsReview.push({id:v.id,label:`${v.patient_no} · ${v.full_name}`});continue;
-    }
+  for (const v of data.visits.filter(v=>invoices.has(v.id))) {
+    const lines=invoices.get(v.id)!;
     for (const line of lines) {
       const raw = index.charges.get(line.id)!;
       const d: Detail = { id: line.id,date: serviceDate(raw,data),label: `${v.patient_no} · ${raw.service}`,amount: line.value.toString(),patientId:v.patient_id,
@@ -58,20 +61,22 @@ export function computeReport(data: Records, p: Period): Report {
   for (const a of data.allocations) {
     const payment = selectedById.get(a.payment_id); if (!payment) continue;
     const l = index.charges.get(a.charge_line_id)!;
+    if(invalid.has(l.visit_id))continue;
     revenue.push({id:`${payment.id}:${l.id}`,date:payment.date,label:l.service,amount:(BigInt(a.amount_uzs)*(payment.kind==='payment'?1n:-1n)).toString(),doctorId:l.performer_user_id,doctor:l.doctor,departmentId:l.department_id,department:l.department,kind:l.kind});
   }
   for (const a of data.adjustments) {
     const payment=allPayments.get(a.payment_id), date=localDate(a.created_at,data.clinic.timezone);
     if (!payment || !inRange(date,p)) continue;
     const l=index.charges.get(a.charge_line_id)!;
+    if(invalid.has(l.visit_id))continue;
     revenue.push({id:a.id,date,label:l.service,amount:a.delta_uzs,doctorId:l.performer_user_id,doctor:l.doctor,departmentId:l.department_id,department:l.department,kind:l.kind});
   }
   details.lab = revenue.filter(l=>l.kind==='lab'); details.ward = revenue.filter(l=>['bed','caretaker'].includes(l.kind!));
   const performance=(key:'doctor'|'department')=>{
     const revenueGroups=new Map(group(revenue,key).map(g=>[g.id,g])),values=new Map(group(details.value!,key).map(g=>[g.id,g]));
     const discounts=new Map(group(details.discounts!,key).map(g=>[g.id,g])),outstanding=new Map(group(details.outstanding!,key).map(g=>[g.id,g]));
-    return [...new Set([...values.keys(),...revenueGroups.keys()])].map(id=>{
-      const r=revenueGroups.get(id)??{id,name:values.get(id)!.name,amount:'0',lines:[]};
+    return [...new Set([...values.keys(),...revenueGroups.keys(),...outstanding.keys()])].map(id=>{
+      const r=revenueGroups.get(id)??{id,name:(values.get(id)??outstanding.get(id))!.name,amount:'0',lines:[]};
       const patients=new Map<string,Detail>();
       for(const l of values.get(id)?.lines??[])if(index.charges.get(l.id)?.status!=='cancelled' && l.patientId){const v=index.visits.get(index.charges.get(l.id)!.visit_id)!;patients.set(l.patientId,{...l,id:v.id,label:`${v.patient_no} · ${v.full_name}`,amount:'1'});}
       return {...r,patientLines:[...patients.values()],valueLines:values.get(id)?.lines??[],discountLines:discounts.get(id)?.lines??[],outstandingLines:outstanding.get(id)?.lines??[]};

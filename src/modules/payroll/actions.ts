@@ -45,11 +45,11 @@ function at(data:Records,until:string,doctor?:string,affected?:Set<string>) {
     const date=serviceDate(indexRecords(data).charges.get(l.id)!,data);
     const rule=data.rules.find(r=>r.user_id===l.doctorId && r.effective_from<=date);
     if(!rule && l.status!=='cancelled') {
-      out.set(l.id,{charge_line_id:l.id,user_id:l.doctorId,rule_id:null,status:'rule_missing',value_uzs:l.value,entitlement_uzs:0n,from_receipts_uzs:0n,clinic_funded_uzs:0n});continue;
+      out.set(l.id,{charge_line_id:l.id,user_id:l.doctorId,doctor:indexRecords(data).charges.get(l.id)!.doctor,rule_id:null,status:'rule_missing',value_uzs:l.value,entitlement_uzs:0n,from_receipts_uzs:0n,clinic_funded_uzs:0n});continue;
     }
     if(!rule)continue;
     const share=calculateDoctorShares([l],l.doctorId,{doctorShareBp:rule.doctor_share_bp,basis:rule.basis,discountBearer:rule.discount_bearer,categories:rule.categories})[0];
-    if(share)out.set(l.id,{charge_line_id:l.id,user_id:l.doctorId,rule_id:rule.id,entitlement_uzs:share.doctorEntitlement,from_receipts_uzs:share.doctorFromReceipts,clinic_funded_uzs:share.clinicFundedShare});
+    if(share)out.set(l.id,{charge_line_id:l.id,user_id:l.doctorId,doctor:indexRecords(data).charges.get(l.id)!.doctor,rule_id:rule.id,entitlement_uzs:share.doctorEntitlement,from_receipts_uzs:share.doctorFromReceipts,clinic_funded_uzs:share.clinicFundedShare});
   }
   return out;
 }
@@ -103,7 +103,7 @@ export async function finalize(c:ClinicContext,p:Period) {
   const data=await records(c,p), lines=computePayroll(data,p), id=randomUUID();
   const missing=[...new Set(lines.filter(l=>l.status==='rule_missing').map(l=>l.user_id))];
   if(missing.length) {
-    const names=(await rules(c)).doctors.filter(d=>missing.includes(d.id)).map(d=>d.display_name);
+    const names=[...new Set(lines.filter(l=>missing.includes(l.user_id)).map(l=>l.doctor??l.user_id))];
     throw new PayrollRulesMissing(names);
   }
   await c.tx.query('INSERT INTO payroll_periods(id,clinic_id,from_date,to_date) VALUES($1,$2,$3,$4)',[id,c.clinicId,p.from,p.to]);

@@ -51,7 +51,7 @@ test('021: an unbalanced visit is flagged and skipped without losing valid visit
   const d=data();d.allocations[0]!.amount_uzs='2000000';
   d.visits.push({...d.visits[0],id:'good',patient_id:'other'});d.charges.push({...d.charges[0],id:'good-line',visit_id:'good'});
   const r=computeReport(d,{from:'2026-11-10',to:'2026-11-10'});
-  assert.equal(r.totals.value,'1000000');assert.equal(r.needsReview?.[0]?.id,'v');
+  assert.equal(r.totals.value,'1000000');assert.equal(r.doctors[0]!.amount,'0');assert.equal(r.needsReview?.[0]?.id,'v');
 });
 test('021: payroll lists missing rules and preserves other doctors earnings',()=>{
   const d=data();d.charges.push({...d.charges[0],id:'missing',performer_user_id:'missing-doctor'});

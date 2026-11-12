@@ -74,24 +74,30 @@ test('C8: dated split, private doctor earnings, concurrent finalization, immutab
     const call=async(path:string,input?:unknown,status=200)=>{const r=await client.request(base+path,input),v=await r.json();assert.equal(r.status,status,JSON.stringify(v));return v;};
     const rule={userId:f.owner.userId,shareBp:5000,basis:'billed',discountBearer:'proportional',categories:['consultation'],effectiveFrom:date};
     await call('/payroll/rules',rule,201);
-    const period={from:date,to:date},before=await call('/payroll/earnings',period);assert.equal(before.lines[0].entitlement_uzs,'500000');
+    await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,granted_by) VALUES($1,$2,$3,$4)",[randomUUID(),f.owner.clinicId,f.other.userId,f.owner.userId]);
+    await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'doctor',$3)",[f.owner.clinicId,f.other.userId,f.owner.userId]);
+    await call('/payroll/rules',{...rule,userId:f.other.userId,shareBp:4000},201);
+    await f.pool.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,performer_user_id,quantity,unit_price_uzs,source,created_by) VALUES($1,$2,$3,$4,$5,1,200000,'registration',$6)`,[randomUUID(),f.owner.clinicId,g.visit,g.service,f.other.userId,f.owner.userId]);
+    const period={from:date,to:date},before=await call('/payroll/earnings',period);assert.equal(before.lines.find((l:any)=>l.user_id===f.owner.userId).entitlement_uzs,'500000');
     const tomorrow=new Date(Date.parse(date)+86400000).toISOString().slice(0,10);
     await call('/payroll/rules',{...rule,shareBp:8000,effectiveFrom:tomorrow},201);
-    assert.equal((await call('/payroll/earnings',period)).lines[0].entitlement_uzs,'500000');
+    assert.equal((await call('/payroll/earnings',period)).lines.find((l:any)=>l.user_id===f.owner.userId).entitlement_uzs,'500000');
     await call('/payroll/finalize',period,409); // Still open.
     await call(`/business-days/${g.day}/close`,{});
     const results=await Promise.all([call('/payroll/finalize',period),call('/payroll/finalize',period)]);
-    assert.equal(results[0].period.id,results[1].period.id);assert.equal(results[0].lines.length,1);
-    assert.equal((await f.pool.query('SELECT count(*) FROM payroll_lines WHERE clinic_id=$1',[f.owner.clinicId])).rows[0].count,'1');
+    assert.equal(results[0].period.id,results[1].period.id);assert.equal(results[0].lines.length,2);
+    assert.equal((await f.pool.query('SELECT count(*) FROM payroll_lines WHERE clinic_id=$1',[f.owner.clinicId])).rows[0].count,'2');
     const finalId=results[0].period.id;
     await assert.rejects(f.pool.query('UPDATE payroll_lines SET entitlement_uzs=0 WHERE period_id=$1',[finalId]),/append.only/i);
     await assert.rejects(f.pool.query('UPDATE payroll_periods SET daily_snapshot=\'[]\' WHERE id=$1',[finalId]),/immutable/);
     // An arbitrary date range includes frozen daily accruals, without recalculating final pay.
     const range={from:new Date(Date.parse(date)-86400000).toISOString().slice(0,10),to:tomorrow};
-    assert.equal((await call('/payroll/earnings',range)).lines[0].entitlement_uzs,'500000');
+    assert.equal((await call('/payroll/earnings',range)).lines.find((l:any)=>l.user_id===f.owner.userId).entitlement_uzs,'500000');
     await f.pool.query('DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2 AND role<>\'doctor\'',[f.owner.clinicId,f.owner.userId]);
     const ownRules=await call('/payroll/rules');assert.ok(ownRules.history.every((r:any)=>r.user_id===f.owner.userId));assert.ok(!('daily_snapshot' in (await call('/payroll/earnings',period)).period));
-    const own=await call('/payroll/earnings',period);assert.ok(own.lines.every((l:any)=>l.user_id===f.owner.userId));
+    const own=await call('/payroll/earnings',period);assert.equal(own.lines.length,1);assert.ok(own.lines.every((l:any)=>l.user_id===f.owner.userId));
+    const ownRange=await call('/payroll/earnings',range);assert.equal(ownRange.lines.length,1);assert.ok(ownRange.lines.every((l:any)=>l.user_id===f.owner.userId));
+    await call('/payroll/earnings',{...period,userId:f.other.userId},422);
     await call('/payroll/rules',rule,403);await call('/payroll/finalize',period,403);
     await f.pool.query("UPDATE memberships SET status='blocked' WHERE clinic_id=$1 AND user_id=$2",[f.owner.clinicId,f.owner.userId]);await call('/payroll/earnings',period,404);
   }finally{await f.close();}

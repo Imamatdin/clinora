@@ -10,6 +10,7 @@ import { ceo } from '../../src/web/i18n/ceo.uz-Cyrl.js';
 const C=(key:keyof typeof ceo)=>ceo[key];
 
 for(const width of [1440,390])test(`C8: real dashboard, drilldown, PDF download and payroll at ${width}px`,async({page})=>{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
   const f=await processFixture();try{
     const g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
     await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
@@ -29,7 +30,7 @@ for(const width of [1440,390])test(`C8: real dashboard, drilldown, PDF download 
     await mkdir('work/browser-evidence',{recursive:true});await page.screenshot({path:`work/browser-evidence/ceo-dashboard-${width}.png`,fullPage:true});
     await card.focus();await page.keyboard.press('Enter');await expect(page.locator('.ceo-ledger h2')).toBeFocused();await expect(page.locator('.ceo-ledger')).toContainText('Synthetic Aliyev');
     await page.getByRole('button',{name:C('ceo.back'),exact:true}).click();
-    await page.getByText(C('ceo.more'),{exact:true}).click();const download=page.waitForEvent('download');await page.getByRole('button',{name:C('ceo.pdf'),exact:true}).click();expect((await download).suggestedFilename()).toBe('clinora-report.pdf');
+    await page.getByText(C('ceo.more'),{exact:true}).click();const download=page.waitForEvent('download',{timeout:10000});await page.getByRole('button',{name:C('ceo.pdf'),exact:true}).click();const pdf=await download.catch(e=>{throw new Error(`${e.message}; browser errors: ${errors.join('; ')}`);});expect(pdf.suggestedFilename()).toBe('clinora-report.pdf');await pdf.saveAs(`work/browser-evidence/ceo-report-${width}.pdf`);
     await page.getByLabel(C('ceo.language'),{exact:true}).selectOption('uz-Latn');await expect(page.getByRole('heading',{name:'Klinika koʻrsatkichlari'})).toBeVisible();
     await page.getByLabel('Hisobot tili',{exact:true}).selectOption('uz-Cyrl');
     await page.getByRole('button',{name:T('module.payroll'),exact:true}).click();await expect(page.getByRole('heading',{name:C('ceo.payrollTitle'),exact:true})).toBeVisible();
@@ -40,7 +41,7 @@ for(const width of [1440,390])test(`C8: real dashboard, drilldown, PDF download 
     page.on('dialog',d=>d.accept());await page.getByRole('button',{name:T('day.closeButton'),exact:true}).click();await expect(page.getByRole('status').filter({hasText:T('day.closedNotice')})).toBeVisible();
     await page.getByRole('button',{name:T('module.reports'),exact:true}).click();await expect(page.locator('.ceo-live')).toHaveText(C('ceo.snapshot'));
     await page.getByRole('button',{name:C('ceo.thermal'),exact:true}).click();
-    await page.reload();await page.getByRole('button',{name:T('module.reports'),exact:true}).click();await expect(page.locator('.ceo-live')).toHaveText(C('ceo.snapshot'));
+    await page.goto(`${f.origin}/?report=${g.day}`);await expect(page.locator('.ceo-live')).toHaveText(C('ceo.snapshot'));
     await page.screenshot({path:`work/browser-evidence/ceo-closed-day-${width}.png`,fullPage:true});
   }finally{await f.close();}
 });

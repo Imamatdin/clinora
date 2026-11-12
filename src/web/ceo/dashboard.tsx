@@ -11,7 +11,7 @@ function Ledger({title,lines,onBack}:{title:string;lines:Detail[];onBack:()=>voi
   </section>;
 }
 function Breakdown({title,rows,onSelect}:{title:string;rows:Group[];onSelect:(title:string,lines:Detail[])=>void}) {
-  return <section className="ceo-breakdown"><h3>{title}</h3>{!rows.length?<p className="ceo-empty">{t('ceo.empty')}</p>:rows.map(row=><button key={row.id} onClick={()=>onSelect(row.name,row.lines)}><span>{row.name}</span><b>{money(row.amount)}</b><span aria-hidden="true">↗</span></button>)}</section>;
+  return <section className="ceo-breakdown"><h3>{title}</h3>{!rows.length?<p className="ceo-empty">{t('ceo.empty')}</p>:rows.map(row=><div className="ceo-performance" key={row.id}><button onClick={()=>onSelect(row.name,row.lines)}><span>{row.name}</span><b>{money(row.amount)}</b><span aria-hidden="true">↗</span></button>{row.patientLines&&<div className="ceo-performance-facts">{[[t('ceo.patients'),row.patientLines],[t('ceo.value'),row.valueLines!],[t('ceo.discounts'),row.discountLines!],[t('ceo.outstanding'),row.outstandingLines!]].map(([label,lines])=><button key={String(label)} onClick={()=>onSelect(`${row.name} · ${label}`,lines as Detail[])}><span>{String(label)}</span><b>{money((lines as Detail[]).reduce((n,l)=>n+BigInt(l.amount),0n))}</b></button>)}</div>}</div>)}</section>;
 }
 export function ReportView({report}:{report:Report}) {
   const [selection,setSelection]=useState<{title:string;lines:Detail[]}|null>(null);

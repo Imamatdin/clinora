@@ -15,7 +15,7 @@ export const metric=(key:string)=>t(`ceo.${key}` as Key);
 export function saveFile(file:Download) {
   const raw=atob(file.base64),bytes=Uint8Array.from(raw,c=>c.charCodeAt(0));
   const url=URL.createObjectURL(new Blob([bytes],{type:file.mime})),a=document.createElement('a');
-  a.href=url;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  a.href=url;a.download=file.name;a.hidden=true;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 export function Dates({from,to,onChange,onSubmit,busy}:{from:string;to:string;onChange:(from:string,to:string)=>void;onSubmit:()=>void;busy:boolean}) {
   return <form className="ceo-dates" onSubmit={e=>{e.preventDefault();onSubmit();}}>

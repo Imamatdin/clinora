@@ -18,5 +18,8 @@ export const inpatientUzLatn:Record<InpatientKey,string>={
   'inpatient.rule':'Oʻrin kuni qoidasi (oʻzgarish ertadan)', 'inpatient.admissionDay':'Kelgan kun hisoblanadi',
   'inpatient.dischargeDay':'Chiqqan kun hisoblanadi', 'inpatient.minimum':'Eng kam kun', 'inpatient.saveRule':'Qoidani saqlash',
   'inpatient.admitted':'Yotqizilgan', 'inpatient.discharged':'Chiqarilgan', 'inpatient.allPatients':'Barcha bemorlar', 'inpatient.myPatients':'Mening bemorlarim',
-  'inpatient.language':'Til', 'inpatient.ruleNotice':'Yangi qoida ertadan amal qiladi', 'inpatient.printHelp':'PDF ochildi. Chop etishni PDF koʻruvchisidan tanlang.'
+  'inpatient.language':'Til', 'inpatient.ruleNotice':'Yangi qoida ertadan amal qiladi', 'inpatient.printHelp':'PDF ochildi. Chop etishni PDF koʻruvchisidan tanlang.',
+  'inpatient.linesAsOf':'Xizmatlar qaysi vaqt holatiga', 'inpatient.paymentsAsOf':'Toʻlovlar qaysi vaqt holatiga',
+  'inpatient.override':'Dori omborda yetishmasa: rahbar ruxsati', 'inpatient.overrideHelp':'Faqat klinika kompyuterida ishlaydi. Bosh shifokor yoki administrator PIN kodini shu yerda oʻzi kiritadi.',
+  'inpatient.overrideReason':'Yetishmaslik sababi', 'inpatient.approver':'Ruxsat beruvchi', 'inpatient.approverPin':'Ruxsat beruvchining PIN kodi'
 };

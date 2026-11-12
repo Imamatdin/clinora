@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { DomainError } from '../identity/access.js';
 import { calculateInvoice, countBedDays, uzs, type BedDayRule, type Discount } from '../billing/index.js';
 import { requireRole, recordAudit, type ClinicContext } from '../../server/roles.js';
+import { passwordMatches } from '../../server/security.js';
 import { priceAt } from '../../server/repo/prices.js';
 import { dispense } from '../pharmacy/actions.js';
 import { AdmitInput, TransferInput, ServiceInput, CaretakerInput, DailyInput, KeyInput, ChangeRuleInput, RuleInput, type InvoiceView, type WardView } from './contracts.js';
@@ -60,12 +61,41 @@ async function ruleAt(ctx:ClinicContext,date:string):Promise<BedDayRule> {
   const row=(await ctx.tx.query('SELECT rule FROM inpatient_rule_history WHERE clinic_id=$1 AND effective_date<=$2 ORDER BY effective_date DESC,sequence DESC LIMIT 1',[ctx.clinicId,date])).rows[0];
   return parse(RuleInput,row?.rule);
 }
-async function line(ctx:ClinicContext,visit:string,service:string,quantity:number,at:Date,source:string) {
-  const price=await priceAt(ctx.tx,ctx.clinicId,service,at);if(!price)return fail('INVALID_INPUT');
-  const id=randomUUID();
+/** `pricedAt` picks the price (a bed day uses its own date's price). created_at/completed_at are
+ * always the real posting time; the billed date of a bed or caretaker day lives in its charge_date. */
+async function line(ctx:ClinicContext,visit:string,service:string,quantity:number,pricedAt:Date,source:string) {
+  const price=await priceAt(ctx.tx,ctx.clinicId,service,pricedAt);if(!price)return fail('INVALID_INPUT');
+  const id=randomUUID(),postedAt=(await clock(ctx)).instant;
   await ctx.tx.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,status,source,created_by,created_at,completed_by,completed_at)
-    VALUES($1,$2,$3,$4,$5,$6,'completed',$7,$8,$9,$8,$9)`,[id,ctx.clinicId,visit,service,quantity,price.priceUzs.toString(),source,ctx.actorId,at]);
+    VALUES($1,$2,$3,$4,$5,$6,'completed',$7,$8,$9,$8,$9)`,[id,ctx.clinicId,visit,service,quantity,price.priceUzs.toString(),source,ctx.actorId,postedAt]);
   return id;
+}
+const OVERRIDE_MAX_ATTEMPTS=5;
+/**
+ * A CEO/administrator approves an out-of-stock ward dispense by typing their PIN on the same
+ * shared PC. Failures are counted per approver and device in their own table, never on the
+ * sign-in PIN counter, and lock that pair for 15 minutes after five tries. The caller must
+ * commit before reporting a refusal so the counter is never rolled back.
+ */
+async function approveOverride(ctx:ClinicContext,o:{approverId:string;pin:string}):Promise<string|null> {
+  if(!ctx.deviceId||!(await ctx.tx.query('SELECT 1 FROM devices WHERE id=$1 AND clinic_id=$2 AND revoked_at IS NULL',[ctx.deviceId,ctx.clinicId])).rowCount)return null;
+  const approver=(await ctx.tx.query(`SELECT p.pin_hash FROM account_pins p JOIN accounts a ON a.id=p.account_id AND a.status='active' AND NOT a.must_change_password
+    JOIN memberships m ON m.user_id=a.id AND m.clinic_id=$2 AND m.status='active'
+    WHERE p.account_id=$1 AND EXISTS(SELECT 1 FROM membership_roles r WHERE r.clinic_id=m.clinic_id AND r.user_id=m.user_id AND r.role IN ('ceo','administrator'))`,[o.approverId,ctx.clinicId])).rows[0];
+  if(!approver){await passwordMatches(o.pin,'00000000000000000000000000000000:'+'00'.repeat(64));return null;}
+  await ctx.tx.query('INSERT INTO ward_override_attempts(approver_id,device_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[o.approverId,ctx.deviceId]);
+  const attempts=(await ctx.tx.query(`SELECT failed_attempts,locked_at>now()-interval '15 minutes' locked FROM ward_override_attempts WHERE approver_id=$1 AND device_id=$2 FOR UPDATE`,[o.approverId,ctx.deviceId])).rows[0];
+  if(attempts.locked)return null;
+  if(await passwordMatches(o.pin,approver.pin_hash)){
+    await ctx.tx.query('UPDATE ward_override_attempts SET failed_attempts=0,locked_at=NULL WHERE approver_id=$1 AND device_id=$2',[o.approverId,ctx.deviceId]);
+    return o.approverId;
+  }
+  // An expired lock starts a fresh count.
+  const failed=(attempts.locked===false?0:attempts.failed_attempts)+1;
+  await ctx.tx.query('UPDATE ward_override_attempts SET failed_attempts=$3,locked_at=CASE WHEN $3>=$4::int THEN now() ELSE NULL END WHERE approver_id=$1 AND device_id=$2',
+    [o.approverId,ctx.deviceId,Math.min(failed,OVERRIDE_MAX_ATTEMPTS),OVERRIDE_MAX_ATTEMPTS]);
+  await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.override_failed',o.approverId,{deviceId:ctx.deviceId});
+  return null;
 }
 
 export async function ward(ctx:ClinicContext):Promise<WardView> {
@@ -95,7 +125,12 @@ export async function ward(ctx:ClinicContext):Promise<WardView> {
       ORDER BY a.status,r.name,b.label,a.admitted_at DESC`,[ctx.clinicId,doctorOnly,ctx.actorId]),
     ctx.tx.query('SELECT bed_day_rule FROM clinic_settings WHERE clinic_id=$1',[ctx.clinicId])
   ]);
-  return JSON.parse(json({today:c.today,rule:settings.rows[0].bed_day_rule,effectiveRule:await ruleAt(ctx,c.today),beds:beds.rows,visits:visits.rows,departments:departments.rows,doctors:doctors.rows,services:services.rows,admissions:admissions.rows}));
+  // Who can approve an out-of-stock ward dispense by PIN (names only, ward staff only).
+  const approvers=ctx.roles.some(r=>(WARD as readonly string[]).includes(r))?(await ctx.tx.query(`SELECT a.id,a.display_name name FROM memberships m
+    JOIN accounts a ON a.id=m.user_id AND a.status='active' JOIN account_pins p ON p.account_id=a.id
+    WHERE m.clinic_id=$1 AND m.status='active' AND EXISTS(SELECT 1 FROM membership_roles r WHERE r.clinic_id=m.clinic_id AND r.user_id=m.user_id AND r.role IN ('ceo','administrator'))
+    ORDER BY a.display_name,a.id`,[ctx.clinicId])).rows:[];
+  return JSON.parse(json({today:c.today,rule:settings.rows[0].bed_day_rule,effectiveRule:await ruleAt(ctx,c.today),beds:beds.rows,visits:visits.rows,departments:departments.rows,doctors:doctors.rows,services:services.rows,admissions:admissions.rows,approvers}));
 }
 export async function admit(ctx:ClinicContext,raw:unknown) {
   const i=parse(AdmitInput,raw);await guard(ctx);
@@ -128,14 +163,20 @@ export async function transfer(ctx:ClinicContext,id:string,raw:unknown) {
     await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.transferred',id);return {id};
   });
 }
-export async function addService(ctx:ClinicContext,id:string,raw:unknown) {
+/** Returns `{refused}` (mapped to 403 after commit) when an override approval PIN is not accepted. */
+export async function addService(ctx:ClinicContext,id:string,raw:unknown):Promise<{id:string}|{refused:true}> {
   const i=parse(ServiceInput,raw);await guard(ctx);
-  return retry(ctx,i.key,{action:'service',id,...i},async()=>{
+  const approverId=i.override?await approveOverride(ctx,i.override):undefined;
+  if(approverId===null)return {refused:true};
+  // The PIN is never stored: the replay payload keeps only the reason and the approver.
+  const override=i.override&&{reason:i.override.reason,approverId:i.override.approverId};
+  return retry(ctx,i.key,{action:'service',id,...i,override},async()=>{
     const a=await stay(ctx,id);await openBusinessDay(ctx);
     const s=(await ctx.tx.query("SELECT kind,track_stock FROM services WHERE clinic_id=$1 AND id=$2 AND is_active AND kind NOT IN ('bed','caretaker')",[ctx.clinicId,i.serviceId])).rows[0];
     if(!s)return fail('INVALID_INPUT');
     const stockDispensed=s.kind==='medicine'||(s.kind==='good'&&s.track_stock);
-    const chargeId=stockDispensed?(await dispense(ctx,{visitId:a.visit_id,serviceId:i.serviceId,qty:i.quantity,idempotencyKey:`inpatient:${i.key}`,source:'inpatient'})).chargeLineId
+    const chargeId=stockDispensed?(await dispense(ctx,{visitId:a.visit_id,serviceId:i.serviceId,qty:i.quantity,idempotencyKey:`inpatient:${i.key}`,source:'inpatient',
+        ...override?{overrideReason:override.reason}:{}},approverId?{approverId}:{})).chargeLineId
       :await line(ctx,a.visit_id,i.serviceId,i.quantity,(await clock(ctx)).instant,'inpatient');
     await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.service_added',id,{chargeId,stockDispensed});return {id:chargeId};
   });
@@ -220,22 +261,38 @@ export async function invoice(ctx:ClinicContext,id:string):Promise<InvoiceView> 
   if(ctx.roles.includes('doctor')&&!ctx.roles.some(r=>(WARD as readonly string[]).includes(r)||r==='cashier')) {
     if(a.attending_user_id!==ctx.actorId||!(await ctx.tx.query('SELECT 1 FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3',[ctx.clinicId,a.patient_id,ctx.actorId])).rowCount)return fail('FORBIDDEN');
   }
+  const now=(await clock(ctx)).instant.toISOString();
   const saved=(await ctx.tx.query('SELECT snapshot FROM inpatient_discharge_invoices WHERE clinic_id=$1 AND admission_id=$2',[ctx.clinicId,id])).rows[0];
-  if(saved)return saved.snapshot;
+  if(saved) {
+    // Lines stay frozen as of discharge; payments and discounts after discharge are live, so the
+    // cashier collecting the balance is reflected here and on the printed invoice.
+    const snapshot=saved.snapshot as InvoiceView,linesAsOf=snapshot.linesAsOf??snapshot.issuedAt;
+    const kinds=new Map((await ctx.tx.query('SELECT l.id,s.kind FROM charge_lines l JOIN services s ON s.id=l.service_id WHERE l.clinic_id=$1 AND l.id=ANY($2::uuid[])',
+      [ctx.clinicId,snapshot.lines.map(l=>l.id)])).rows.map(r=>[r.id as string,r.kind as string]));
+    const frozen=snapshot.lines.map(l=>({id:l.id,unitPrice:uzs(l.price),quantity:l.quantity,status:(l.value==='0'&&l.price!=='0'?'cancelled':'completed') as 'cancelled'|'completed',category:kinds.get(l.id)??'service'}));
+    const totals=await settle(ctx,a.visit_id,frozen);
+    return {...snapshot,linesAsOf,paymentsAsOf:now,...totals};
+  }
   const lines=(await ctx.tx.query(`SELECT l.*,s.name_uz_cyrl name,s.kind FROM charge_lines l JOIN services s ON s.id=l.service_id WHERE l.clinic_id=$1 AND l.visit_id=$2 ORDER BY l.created_at,l.id`,[ctx.clinicId,a.visit_id])).rows;
-  const discounts=(await ctx.tx.query('SELECT * FROM discounts WHERE clinic_id=$1 AND visit_id=$2 AND voided_at IS NULL ORDER BY created_at,id',[ctx.clinicId,a.visit_id])).rows;
-  const payments=(await ctx.tx.query('SELECT * FROM payments WHERE clinic_id=$1 AND visit_id=$2 ORDER BY created_at,id',[ctx.clinicId,a.visit_id])).rows;
+  const totals=await settle(ctx,a.visit_id,lines.map(l=>({id:l.id,unitPrice:uzs(l.unit_price_uzs),quantity:l.quantity,status:l.status,category:l.kind})));
+  const names=(await ctx.tx.query('SELECT c.name clinic,p.full_name patient,p.patient_no FROM clinics c JOIN patients p ON p.clinic_id=c.id WHERE c.id=$1 AND p.id=$2',[ctx.clinicId,a.patient_id])).rows[0];
+  return {...names,patientNo:names.patient_no,admissionId:id,visitId:a.visit_id,issuedAt:now,linesAsOf:now,paymentsAsOf:now,
+    lines:lines.map(l=>({id:l.id,name:l.name,quantity:l.quantity,price:l.unit_price_uzs,value:(l.status==='cancelled'?0n:BigInt(l.unit_price_uzs)*BigInt(l.quantity)).toString(),source:l.source})),
+    ...totals};
+}
+/** Value, discount, payable, paid and due for these lines against the visit's current discounts and net receipts. */
+async function settle(ctx:ClinicContext,visitId:string,lines:Parameters<typeof calculateInvoice>[0]) {
+  const ids=new Set(lines.map(l=>l.id));
+  const discounts=(await ctx.tx.query('SELECT * FROM discounts WHERE clinic_id=$1 AND visit_id=$2 AND voided_at IS NULL ORDER BY created_at,id',[ctx.clinicId,visitId])).rows
+    .filter(d=>!d.charge_line_id||ids.has(d.charge_line_id));
+  const payments=(await ctx.tx.query('SELECT * FROM payments WHERE clinic_id=$1 AND visit_id=$2 ORDER BY created_at,id',[ctx.clinicId,visitId])).rows;
   const ds:Discount[]=discounts.map(d=>({...d.charge_line_id?{lineId:d.charge_line_id}:{},reason:d.reason,approverId:d.approved_by,...d.kind==='percent'?{kind:'percent' as const,basisPoints:d.percent_bp}:{kind:'fixed' as const,amount:uzs(d.amount_uzs)}}));
   // Current discounts may have reallocated/refunded old payments. Like the cashier,
   // calculate the current payable against net receipts, not a historic gross-payment peak.
   const net=payments.reduce((sum,p)=>sum+(p.kind==='payment'?1n:-1n)*BigInt(p.amount_uzs),0n);
   let totals:ReturnType<typeof calculateInvoice>;
-  try {totals=calculateInvoice(lines.map(l=>({id:l.id,unitPrice:uzs(l.unit_price_uzs),quantity:l.quantity,status:l.status,category:l.kind})),ds,
-    net>0n?[{id:'net',kind:'payment',amount:uzs(net)}]:[]);}catch{return fail('INVALID_TRANSITION');}
-  const names=(await ctx.tx.query('SELECT c.name clinic,p.full_name patient,p.patient_no FROM clinics c JOIN patients p ON p.clinic_id=c.id WHERE c.id=$1 AND p.id=$2',[ctx.clinicId,a.patient_id])).rows[0];
-  return {...names,patientNo:names.patient_no,admissionId:id,visitId:a.visit_id,issuedAt:(await clock(ctx)).instant.toISOString(),
-    lines:lines.map(l=>({id:l.id,name:l.name,quantity:l.quantity,price:l.unit_price_uzs,value:(l.status==='cancelled'?0n:BigInt(l.unit_price_uzs)*BigInt(l.quantity)).toString(),source:l.source})),
-    value:totals.value.toString(),discount:totals.discount.toString(),payable:totals.payable.toString(),paid:totals.paid.toString(),due:totals.due.toString()};
+  try {totals=calculateInvoice(lines,ds,net>0n?[{id:'net',kind:'payment',amount:uzs(net)}]:[]);}catch{return fail('INVALID_TRANSITION');}
+  return {value:totals.value.toString(),discount:totals.discount.toString(),payable:totals.payable.toString(),paid:totals.paid.toString(),due:totals.due.toString()};
 }
 export async function discharge(ctx:ClinicContext,id:string,raw:unknown) {
   const i=parse(KeyInput,raw);await guard(ctx);

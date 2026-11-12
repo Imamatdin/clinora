@@ -9,7 +9,8 @@ export function renderInvoice(invoice:InvoiceView):Promise<Buffer> {
   const chunks:Buffer[]=[];
   const result=new Promise<Buffer>((resolve,reject)=>{doc.on('data',c=>chunks.push(c));doc.on('end',()=>resolve(Buffer.concat(chunks)));doc.on('error',reject);});
   doc.font(join(process.cwd(),'assets/fonts/DejaVuSans.ttf')).fontSize(16).text(invoice.clinic).text(labels['inpatient.invoice']);
-  doc.moveDown().fontSize(11).text(`${invoice.patient} · № ${invoice.patientNo}`).text(invoice.issuedAt).text(invoice.admissionId).moveDown();
+  doc.moveDown().fontSize(11).text(`${invoice.patient} · № ${invoice.patientNo}`).text(invoice.admissionId)
+    .text(`${labels['inpatient.linesAsOf']}: ${invoice.linesAsOf}`).text(`${labels['inpatient.paymentsAsOf']}: ${invoice.paymentsAsOf}`).moveDown();
   for(const l of invoice.lines) {
     if(doc.y>730)doc.addPage();
     doc.text(`${l.name} · ${l.quantity} × ${amount(l.price)} = ${amount(l.value)} ${labels['inpatient.uzs']}`,{paragraphGap:6});

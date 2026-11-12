@@ -5,7 +5,7 @@ export const registrationUzLatn: Record<keyof typeof registration, string> = {
   "registration.offline.pending": "Sinxronlash kutilmoqda: {count}",
   "registration.offline.sync": "Hozir sinxronlash",
   "registration.offline.help": "Oflayn ishlash qoʻllanmasi",
-  "registration.offline.cheat": "Internet bor paytda roʻyxatga olishni oching. Uzilsa, bemorni saqlang, yoʻnaltiring va vaqtinchalik talonni chop eting. Qayta ulanganda vaqtinchalik kod yonida haqiqiy navbat raqami chiqadi. Bemorni ikkala raqam bilan chaqiring. «Eʼtibor kerak»ni hal qiling. Faqat roʻyxatga olish oflayn; toʻlovlar va boshqa modullar internet talab qiladi. Foydalanuvchini almashtirish yoki qurilmani bekor qilish kutilgan maʼlumotlarni oʻchiradi.",
+  "registration.offline.cheat": "Internet bor paytda roʻyxatga olishni oching. Uzilsa, bemorni saqlang, yoʻnaltiring va vaqtinchalik talonni chop eting. Qayta ulanganda vaqtinchalik kod yonida haqiqiy navbat raqami chiqadi. Bemorni ikkala raqam bilan chaqiring. «Eʼtibor kerak»ni hal qiling. Faqat roʻyxatga olish oflayn; toʻlovlar va boshqa modullar internet talab qiladi. Foydalanuvchi almashsa, kutilayotgan roʻyxatlar saqlanadi va ularni yaratgan xodim qayta kirganda yuboriladi. Faqat kompyuter ruxsatini bekor qilish ularni oʻchiradi.",
   "registration.offline.provisional": "Vaqtinchalik kod. Internet tiklangach haqiqiy navbat raqami beriladi. Bemorni ikkala raqam bilan chaqiring.",
   "registration.offline.saved": "Qurilmada saqlandi",
   "registration.offline.attention": "Eʼtibor kerak",
@@ -16,6 +16,9 @@ export const registrationUzLatn: Record<keyof typeof registration, string> = {
   "registration.offline.moveDay": "Ochiq kunga oʻtkazish",
   "registration.offline.reroute": "Yoʻnalishni qayta tanlash",
   "registration.offline.retry": "Ulanishni va ochiq ish kunini tekshiring, qayta urining.",
+  "registration.offline.waiting": "{count} ta oflayn roʻyxat {name} tizimga kirishini kutmoqda. U kirganda yuboriladi.",
+  "registration.offline.blocked": "{name} yaratgan {count} ta oflayn roʻyxat yuborilmadi: uning roʻyxatga olish ruxsati yoʻq. Ruxsatni qaytaring yoki oʻchirish uchun bu kompyuter ruxsatini bekor qiling.",
+  "registration.offline.someone": "boshqa xodim",
 
   'registration.title': 'Roʻyxatga olish',
   'registration.language': 'Til',

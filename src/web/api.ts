@@ -1,4 +1,4 @@
-import { clearOutbox, checkOutboxUser, lockOutbox } from './registration/outbox.js';
+import { checkOutboxUser, lockOutbox, wipeOutbox } from './registration/outbox.js';
 export class ApiFailure extends Error { constructor(public code: string, public unlockAt?: string) { super(code); } }
 
 export type Request = <T>(path: string, body?: unknown, idempotent?: boolean) => Promise<T>;
@@ -27,16 +27,16 @@ export function createRequest(csrf: () => string): Request {
     const value = await response.json().catch(() => null);
     if (response.status === 401) {
       // A long outage expires the server session even while the registrar is actively typing.
-      // Only a confirmed missing/revoked enrollment destroys queued work; PIN login can recover it.
+      // Only a confirmed missing/revoked enrollment destroys queued work; the owner's PIN login recovers it.
       try {
         const deviceResponse = await fetch('/api/device', { signal: AbortSignal.timeout(15000) });
         const device = deviceResponse.ok ? await deviceResponse.json() : null;
-        if (device?.enrolled === false) await clearOutbox(true); else lockOutbox();
+        if (device?.enrolled === false) await wipeOutbox(true); else lockOutbox();
       } catch { lockOutbox(); }
     }
     if (!response.ok) throw new ApiFailure(value?.error?.code ?? 'SERVICE_UNAVAILABLE', value?.error?.unlockAt);
     if (path === '/api/auth/me') await checkOutboxUser(value);
-    if (path === '/api/device' && value?.enrolled === false) await clearOutbox();
+    if (path === '/api/device' && value?.enrolled === false) await wipeOutbox();
     if (idempotent) retry = null;
     return value as T;
   };

@@ -17,6 +17,9 @@ export const inpatient = {
   'inpatient.rule':'Ўрин куни қоидаси (ўзгариш эртадан)', 'inpatient.admissionDay':'Келган кун ҳисобланади',
   'inpatient.dischargeDay':'Чиққан кун ҳисобланади', 'inpatient.minimum':'Энг кам кун', 'inpatient.saveRule':'Қоидани сақлаш',
   'inpatient.admitted':'Ётқизилган', 'inpatient.discharged':'Чиқарилган', 'inpatient.allPatients':'Барча беморлар', 'inpatient.myPatients':'Менинг беморларим',
-  'inpatient.language':'Тил', 'inpatient.ruleNotice':'Янги қоида эртадан амал қилади', 'inpatient.printHelp':'PDF очилди. Чоп этишни PDF кўрувчисидан танланг.'
+  'inpatient.language':'Тил', 'inpatient.ruleNotice':'Янги қоида эртадан амал қилади', 'inpatient.printHelp':'PDF очилди. Чоп этишни PDF кўрувчисидан танланг.',
+  'inpatient.linesAsOf':'Хизматлар қайси вақт ҳолатига', 'inpatient.paymentsAsOf':'Тўловлар қайси вақт ҳолатига',
+  'inpatient.override':'Дори омборда етишмаса: раҳбар рухсати', 'inpatient.overrideHelp':'Фақат клиника компьютерида ишлайди. Бош шифокор ёки администратор PIN кодини шу ерда ўзи киритади.',
+  'inpatient.overrideReason':'Етишмаслик сабаби', 'inpatient.approver':'Рухсат берувчи', 'inpatient.approverPin':'Рухсат берувчининг PIN коди'
 } as const;
 export type InpatientKey=keyof typeof inpatient;

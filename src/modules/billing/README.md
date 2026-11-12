@@ -42,9 +42,12 @@ Clarification approved by Imamatdin, 12 November 2026:
 
 - `doctorFromReceipts + clinicShare = amountReceived` on every line.
 - `doctorEntitlement = doctorFromReceipts + clinicFundedShare`.
-- Only the clinic discount bearer may have clinic-funded entitlement. For other
-  bearers distributable entitlement is capped at receipts, including billed basis;
-  the uncapped accrual remains available as `billedBasisAmount`.
+- Billed basis (correction 003B1, 12 November 2026): entitlement is the full
+  billed-basis amount whether or not the patient has paid; `doctorFromReceipts` is
+  capped at receipts and the clinic advances the rest as `clinicFundedShare`, for
+  every discount bearer.
+- Paid basis: entitlement scales with receipts; only the clinic discount bearer may
+  have clinic-funded entitlement.
 - A zero-payable line on paid basis has full billed entitlement when the clinic
   bears the discount; otherwise entitlement is zero. Never divide by zero.
 

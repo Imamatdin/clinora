@@ -38,13 +38,19 @@ test('full discount and clinic subsidy never create revenue or a negative clinic
   assert.equal(share.clinicFundedShare, 40n);
 });
 
-test('billed accrual is distinct from distribution; non-clinic bearers cannot receive clinic funding', () => {
+test('billed basis: full entitlement regardless of payment; the clinic advances the uncollected part', () => {
+  // value 100, discount 20, payable 80, share 50%: billed formula per bearer
+  const billed = { clinic: 50n, doctor: 30n, proportional: 40n } as const;
   for (const discountBearer of ['clinic', 'doctor', 'proportional'] as const) {
-    const share = calculateDoctorShares(makeInvoice(100n, 0n, 10n).lines, 'doctor', { ...baseRule, basis: 'billed', discountBearer })[0]!;
-    assert.equal(share.billedBasisAmount, 50n);
-    assert.equal(share.doctorFromReceipts, 10n);
-    assert.equal(share.doctorEntitlement, discountBearer === 'clinic' ? 50n : 10n);
-    assert.equal(share.clinicFundedShare, discountBearer === 'clinic' ? 40n : 0n);
+    const rule = { ...baseRule, basis: 'billed' as const, discountBearer };
+    for (const [paid, label] of [[0n, 'unpaid'], [40n, 'half paid'], [80n, 'fully paid']] as const) {
+      const share = calculateDoctorShares(makeInvoice(100n, 20n, paid).lines, 'doctor', rule)[0]!;
+      const fromReceipts = billed[discountBearer] < paid ? billed[discountBearer] : paid;
+      assert.equal(share.doctorEntitlement, billed[discountBearer], `${discountBearer} ${label}`);
+      assert.equal(share.doctorFromReceipts, fromReceipts, `${discountBearer} ${label}`);
+      assert.equal(share.clinicFundedShare, billed[discountBearer] - fromReceipts, `${discountBearer} ${label}`);
+      assert.equal(share.doctorFromReceipts + share.clinicShare, paid);
+    }
   }
 });
 
@@ -63,7 +69,7 @@ test('scope excludes other doctors, categories, unassigned and cancelled lines; 
   assert.throws(() => calculateDoctorShares(invoice.lines.map(line => ({ ...line, payable: uzs(99n) })), 'doctor', baseRule));
 });
 
-test('property: receipt conservation, entitlement identity, funding restrictions and exact scaling', () => {
+test('property: receipt conservation, entitlement identity, billed accrual, paid-basis funding restriction', () => {
   fc.assert(fc.property(fc.bigInt({ min: 0n, max: 10n ** 24n }), fc.nat(), fc.nat(),
     fc.integer({ min: 0, max: 10000 }), (value, discountSeed, paidSeed, bp) => {
       const discount = value * BigInt(discountSeed % 10001) / 10000n;
@@ -81,9 +87,10 @@ test('property: receipt conservation, entitlement identity, funding restrictions
         assert.equal(share.billedBasisAmount, billed);
         assert.equal(share.doctorFromReceipts + share.clinicShare, paid);
         assert.equal(share.doctorEntitlement, share.doctorFromReceipts + share.clinicFundedShare);
-        assert.equal(share.doctorEntitlement, discountBearer === 'clinic' ? entitlement : entitlement < paid ? entitlement : paid);
+        assert.equal(share.doctorEntitlement, basis === 'billed' || discountBearer === 'clinic' ? entitlement : entitlement < paid ? entitlement : paid);
         assert.ok(share.clinicShare >= 0n && share.doctorFromReceipts >= 0n);
-        if (discountBearer !== 'clinic') assert.equal(share.clinicFundedShare, 0n);
+        if (basis === 'paid' && discountBearer !== 'clinic') assert.equal(share.clinicFundedShare, 0n);
+        assert.ok(share.clinicFundedShare >= 0n);
         const full = calculateDoctorShares(makeInvoice(value, discount, payable).lines, 'doctor', rule)[0]!;
         assert.equal(full.doctorEntitlement, billed);
       }

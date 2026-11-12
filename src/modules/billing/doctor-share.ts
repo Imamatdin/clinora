@@ -20,8 +20,10 @@ export interface DoctorLineShare {
 
 /** Use invoice-calculated lines. Only this doctor's active lines in eligible categories count.
  * Clinic-funded entitlement is separate from receipts, never fictitious revenue.
- * For non-clinic bearers, distributable billed entitlement is capped at receipts:
- * unpaid accrual remains visible in billedBasisAmount, not clinicFundedShare.
+ * Billed basis: the doctor is entitled to the full billed-basis amount whether or not the
+ * patient has paid; the clinic advances any uncollected part as clinicFundedShare.
+ * Paid basis: entitlement scales with money received; only a clinic discount bearer
+ * can create clinic-funded entitlement there.
  */
 export function calculateDoctorShares(
   lines: readonly LineTotal[], doctorId: string, rule: DoctorShareRule,
@@ -49,7 +51,7 @@ export function calculateDoctorShares(
     const scaled = rule.basis === 'billed' ? billed : payable > 0n ? billed * received / payable
       : rule.discountBearer === 'clinic' ? billed : 0n;
     const fromReceipts = min(scaled, received);
-    const funded = rule.discountBearer === 'clinic' ? scaled - fromReceipts : 0n;
+    const funded = rule.basis === 'billed' || rule.discountBearer === 'clinic' ? scaled - fromReceipts : 0n;
     return [{
       lineId: line.id, amountReceived: received, billedBasisAmount: uzs(billed),
       doctorEntitlement: uzs(fromReceipts + funded), doctorFromReceipts: uzs(fromReceipts),

@@ -1,5 +1,5 @@
 import { test,expect } from '@playwright/test';
-import { mkdir } from 'node:fs/promises';
+import { mkdir,writeFile } from 'node:fs/promises';
 import { processFixture,T } from './process-fixture.js';
 import { inpatientGraph } from '../helpers/inpatient.js';
 import { inpatient as words } from '../../src/web/i18n/inpatient.uz-Cyrl.js';
@@ -60,7 +60,8 @@ for(const width of [1280,360])test(`inpatient admission, three days, transfer, d
     await page.getByRole('button',{name:I('inpatient.print'),exact:true}).click();
     const response=await pdf;expect(response.status()).toBe(200);
     const bytes=Buffer.from((await response.json()).base64,'base64');expect(bytes.subarray(0,5).toString()).toBe('%PDF-');
+    expect(bytes.toString('latin1')).toContain('/MediaBox [0 0 595.28 841.89]');
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
-    await mkdir('work/browser-evidence',{recursive:true});await page.screenshot({path:`work/browser-evidence/inpatient-${width}.png`,fullPage:true});
+    await mkdir('work/browser-evidence',{recursive:true});await writeFile(`work/browser-evidence/inpatient-${width}.pdf`,bytes);await page.screenshot({path:`work/browser-evidence/inpatient-${width}.png`,fullPage:true});
   }finally{await f.close();}
 });

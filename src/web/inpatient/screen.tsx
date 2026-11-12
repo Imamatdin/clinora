@@ -13,6 +13,7 @@ function Screen({clinic,request,myId,setDirty}:ModuleProps) {
   const [locale,setLocale]=useState<'uz-Cyrl'|'uz-Latn'|'ru'>(()=>{const saved=localStorage.getItem(`inpatient-locale-${myId}`);return saved==='ru'||saved==='uz-Latn'?saved:'uz-Cyrl';});
   const dict={'uz-Cyrl':inpatient,'uz-Latn':inpatientUzLatn,ru:inpatientRu}[locale];
   const t=(key:InpatientKey)=>dict[key];
+  const amount=(value:string)=>BigInt(value).toLocaleString('ru-RU');
   const [data,setData]=useState<WardView|null>(null),[selected,setSelected]=useState(''),[bill,setBill]=useState<InvoiceView|null>(null);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[confirm,setConfirm]=useState(false),[mine,setMine]=useState(false);
   const pending=useRef<{payload:string;key:string}|null>(null),pdf=useRef('');
@@ -26,7 +27,7 @@ function Screen({clinic,request,myId,setDirty}:ModuleProps) {
     const payload=JSON.stringify({path,value});if(pending.current?.payload!==payload)pending.current={payload,key:crypto.randomUUID()};
     const result=await request(`${base}${path}`,{...value,key:pending.current.key});pending.current=null;setDirty(false);return result;
   }
-  function submit(e:FormEvent<HTMLFormElement>,path:string,build:(f:FormData)=>Record<string,unknown>){e.preventDefault();const form=e.currentTarget,value=build(new FormData(form));void run(async()=>{await mutate(path,value);form.reset();await refresh();if(selected)setBill(await request(`${base}/${selected}/invoice`));setNotice(t('inpatient.saved'));});}
+  function submit(e:FormEvent<HTMLFormElement>,path:string,build:(f:FormData)=>Record<string,unknown>){e.preventDefault();const form=e.currentTarget,value=build(new FormData(form));void run(async()=>{await mutate(path,value);form.reset();const details=form.closest('details');if(details)details.open=false;await refresh();if(selected)setBill(await request(`${base}/${selected}/invoice`));setNotice(t('inpatient.saved'));});}
   const choose=(name:string,options:{id:string;name:string}[],required=true)=><label>{t(`inpatient.${name}` as InpatientKey)}<select name={name} required={required} aria-label={t(`inpatient.${name}` as InpatientKey)} defaultValue=""><option value="">{t(required?'inpatient.choose':'inpatient.noCharge')}</option>{options.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>;
   const freeBeds=data?.beds.filter(b=>!b.admission_id).map(b=>({id:b.id,name:`${b.room} · ${b.label}`}))??[];
   const active=data?.admissions.find(a=>a.id===selected);
@@ -47,7 +48,7 @@ function Screen({clinic,request,myId,setDirty}:ModuleProps) {
         {a.patient} · {a.room} {a.bed} · {a.attending} · {t(a.status==='admitted'?'inpatient.admitted':'inpatient.discharged')}
       </button>)}</section>
       {active&&<section className="stay-detail"><h3>{active.patient}</h3>
-        {bill&&<div><h4>{t('inpatient.invoice')}</h4>{bill.lines.map(l=><p key={l.id}>{l.name} · {l.quantity} × {l.price} = {l.value} {t('inpatient.uzs')}</p>)}
+        {bill&&<div><h4>{t('inpatient.invoice')}</h4>{bill.lines.map(l=><p key={l.id}>{l.name} · {l.quantity} × {amount(l.price)} = {amount(l.value)} {t('inpatient.uzs')}</p>)}
           <dl>{(['value','discount','payable','paid','due'] as const).map(k=><div key={k}><dt>{t(`inpatient.${k}`)}</dt><dd data-testid={`inpatient-${k}`}>{BigInt(bill[k]).toLocaleString('ru-RU')} {t('inpatient.uzs')}</dd></div>)}</dl>
           <button disabled={busy} onClick={()=>{
             // Open synchronously so the browser treats this as the user's print action.
@@ -57,7 +58,7 @@ function Screen({clinic,request,myId,setDirty}:ModuleProps) {
         </div>}
         {canWrite&&active.status==='admitted'&&<>
           <details><summary>{t('inpatient.addService')}</summary><p>{t('inpatient.medicineHelp')}</p><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,`/${selected}/services`,f=>({serviceId:f.get('service'),quantity:Number(f.get('quantity'))}))}><fieldset disabled={busy}>
-            {choose('service',data.services.filter(s=>!['bed','caretaker'].includes(s.kind)).map(s=>({id:s.id,name:`${s.name} · ${s.price??'—'}`})))}
+            {choose('service',data.services.filter(s=>!['bed','caretaker'].includes(s.kind)).map(s=>({id:s.id,name:`${s.name} · ${s.price===null?'—':amount(s.price)}`})))}
             <label>{t('inpatient.quantity')}<input name="quantity" type="number" min="1" max="10000" required defaultValue="1"/></label><button>{t('inpatient.addService')}</button>
           </fieldset></form></details>
           <details><summary>{t('inpatient.transfer')}</summary><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,`/${selected}/transfer`,f=>({bedId:f.get('bed')}))}><fieldset disabled={busy}>{choose('bed',freeBeds)}<button>{t('inpatient.transfer')}</button></fieldset></form></details>

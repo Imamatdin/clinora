@@ -12,7 +12,7 @@ registerRoutes('payroll',[
   {method:'POST',pattern:/^payroll\/finalize$/,roles:['ceo'],handle:async(c,_p,b)=>({body:await a.finalize(c,parse(Range,await b()))})},
   {method:'POST',pattern:/^payroll\/export$/,roles:['ceo'],handle:async(c,_p,b)=>{
     const i=parse(Range.safeExtend({format:z.enum(['pdf','xlsx'])}),await b()),result=await a.earnings(c,{from:i.from,to:i.to});
-    const rows:unknown[][]=[['Clinora',i.from,i.to,result.period?'Тасдиқланган':'Қоралама'],['Шифокор','Хизмат ID','Қоида ID','Ҳақ, сўм','Тушумдан','Клиника ҳисобидан'],...result.lines.map(l=>[l.doctor,l.charge_line_id,l.rule_id,l.entitlement_uzs,l.from_receipts_uzs,l.clinic_funded_uzs])];
+    const rows:unknown[][]=[['Clinora',i.from,i.to,result.period?'Тасдиқланган':'Қоралама'],['Шифокор','Хизмат ID','Қоида ID','Ҳолат','Ҳақ, сўм','Тушумдан','Клиника ҳисобидан'],...result.lines.map(l=>[l.doctor,l.charge_line_id,l.rule_id,l.status==='rule_missing'?'Қоида белгиланмаган':'',l.entitlement_uzs,l.from_receipts_uzs,l.clinic_funded_uzs])];
     await recordAudit(c.tx,c.actorId,c.clinicId,'payroll.exported',result.period?.id??c.clinicId,{format:i.format});
     return {body:i.format==='pdf'?download('clinora-payroll.pdf','application/pdf',await pdf('Шифокорлар иш ҳақи',rows)):download('clinora-payroll.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',xlsx(rows))};
   }}

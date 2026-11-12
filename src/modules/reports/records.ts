@@ -8,8 +8,9 @@ export const Range = z.object({ from: date, to: date }).strict().refine(v => v.f
   (Date.parse(v.to) - Date.parse(v.from)) / 86400000 <= 366);
 export type Period = z.infer<typeof Range>;
 export type Row = Record<string, any>;
-export type Records = { clinic: Row; version?:string; doctorDiscounts?:Row[]; visits: Row[]; charges: Row[]; discounts: Row[]; payments: Row[]; allocations: Row[]; adjustments: Row[]; cashOuts: Row[]; rules: Row[]; shifts: Row[] };
+export type Records = { clinic: Row; version?:string; doctorDiscounts?:Row[]; activities?:Row[]; visits: Row[]; charges: Row[]; discounts: Row[]; payments: Row[]; allocations: Row[]; adjustments: Row[]; cashOuts: Row[]; rules: Row[]; shifts: Row[] };
 type VisitLedger={charges:Row[];discounts:Row[];payments:Row[];allocations:Row[];adjustments:Row[]};
+const scopedDiscounts=new WeakMap<Records,Map<string,Map<string,string>>>();
 const cached=new WeakMap<Records,{visits:Map<string,Row>;charges:Map<string,Row>;ledger:Map<string,VisitLedger>}>();
 export function indexRecords(data:Records){
   let index=cached.get(data);if(index)return index;
@@ -46,19 +47,22 @@ export async function records(c: ClinicContext, p: Period, options: {outstanding
       WHERE b.base-coalesce(CASE WHEN d.kind='fixed' THEN least(b.base,d.amount_uzs) ELSE floor(b.base*d.percent_bp/10000) END,0)<>
         coalesce((SELECT sum(CASE WHEN p.kind='payment' THEN p.amount_uzs ELSE -p.amount_uzs END) FROM payments p JOIN business_days day ON day.clinic_id=p.clinic_id AND day.id=p.business_day_id WHERE p.clinic_id=$1 AND p.visit_id=b.visit_id AND day.business_date<=$3::date),0)
     ),
-    activity AS (
-      SELECT v.id FROM visits v JOIN business_days d ON d.clinic_id=v.clinic_id AND d.id=v.business_day_id,bounds t WHERE v.clinic_id=$1 AND d.business_date BETWEEN t.lo AND t.hi
-      UNION SELECT l.visit_id FROM report_charge_dates r JOIN charge_lines l ON l.clinic_id=r.clinic_id AND l.id=r.charge_line_id,bounds t WHERE r.clinic_id=$1 AND r.business_date BETWEEN t.lo AND t.hi
-      UNION SELECT l.visit_id FROM charge_lines l,bounds t WHERE l.clinic_id=$1 AND l.cancelled_at>=t.start AND l.cancelled_at<t.finish
-      UNION SELECT p.visit_id FROM payments p JOIN business_days d ON d.clinic_id=p.clinic_id AND d.id=p.business_day_id,bounds t WHERE p.clinic_id=$1 AND d.business_date BETWEEN t.lo AND t.hi
-      UNION SELECT d.visit_id FROM discounts d,bounds t WHERE d.clinic_id=$1 AND (d.created_at>=t.start AND d.created_at<t.finish OR d.voided_at>=t.start AND d.voided_at<t.finish)
-      UNION SELECT p.visit_id FROM cashier_allocation_adjustments a JOIN payments p ON p.clinic_id=a.clinic_id AND p.id=a.payment_id,bounds t WHERE a.clinic_id=$1 AND a.created_at>=t.start AND a.created_at<t.finish
-      UNION SELECT visit_id FROM unsettled
+    events AS (
+      SELECT v.id,d.business_date date FROM visits v JOIN business_days d ON d.clinic_id=v.clinic_id AND d.id=v.business_day_id,bounds t WHERE v.clinic_id=$1 AND d.business_date BETWEEN t.lo AND t.hi
+      UNION SELECT l.visit_id,r.business_date FROM report_charge_dates r JOIN charge_lines l ON l.clinic_id=r.clinic_id AND l.id=r.charge_line_id,bounds t WHERE r.clinic_id=$1 AND r.business_date BETWEEN t.lo AND t.hi
+      UNION SELECT l.visit_id,(l.cancelled_at AT TIME ZONE c.timezone)::date FROM charge_lines l JOIN clinics c ON c.id=l.clinic_id,bounds t WHERE l.clinic_id=$1 AND l.cancelled_at>=t.start AND l.cancelled_at<t.finish
+      UNION SELECT p.visit_id,d.business_date FROM payments p JOIN business_days d ON d.clinic_id=p.clinic_id AND d.id=p.business_day_id,bounds t WHERE p.clinic_id=$1 AND d.business_date BETWEEN t.lo AND t.hi
+      UNION SELECT d.visit_id,(d.created_at AT TIME ZONE c.timezone)::date FROM discounts d JOIN clinics c ON c.id=d.clinic_id,bounds t WHERE d.clinic_id=$1 AND d.created_at>=t.start AND d.created_at<t.finish
+      UNION SELECT d.visit_id,(d.voided_at AT TIME ZONE c.timezone)::date FROM discounts d JOIN clinics c ON c.id=d.clinic_id,bounds t WHERE d.clinic_id=$1 AND d.voided_at>=t.start AND d.voided_at<t.finish
+      UNION SELECT p.visit_id,(a.created_at AT TIME ZONE c.timezone)::date FROM cashier_allocation_adjustments a JOIN payments p ON p.clinic_id=a.clinic_id AND p.id=a.payment_id JOIN clinics c ON c.id=a.clinic_id,bounds t WHERE a.clinic_id=$1 AND a.created_at>=t.start AND a.created_at<t.finish
+    ), activity AS (
+      SELECT id FROM events UNION SELECT visit_id FROM unsettled
     ), selected AS (SELECT id FROM activity WHERE $5::uuid IS NULL OR EXISTS(SELECT 1 FROM charge_lines l WHERE l.clinic_id=$1 AND l.visit_id=activity.id AND l.performer_user_id=$5)),
     ps AS (SELECT p.*,d.business_date::text date FROM payments p JOIN business_days d ON d.id=p.business_day_id AND d.clinic_id=p.clinic_id,bounds t WHERE p.clinic_id=$1 AND p.visit_id IN(SELECT id FROM selected) AND d.business_date<=t.hi)
     SELECT
     (SELECT to_jsonb(x) FROM clinics x WHERE id=$1) clinic,
     coalesce((SELECT version::text FROM report_versions WHERE clinic_id=$1),'0') version,
+    coalesce((SELECT jsonb_agg(x) FROM (SELECT id visit_id,date::text FROM events WHERE $5::uuid IS NOT NULL AND id IN(SELECT id FROM selected)) x),'[]') activities,
     CASE WHEN $5::uuid IS NULL THEN NULL ELSE coalesce((SELECT jsonb_agg(x) FROM (
       SELECT day::date::text date,part.charge_line_id,part.discount_uzs::text amount_uzs
       FROM selected v CROSS JOIN generate_series($2::date-1,$3::date,interval '1 day') day
@@ -89,7 +93,13 @@ export function invoiceAt(data: Records, visit: Row, until: string): readonly Li
   const ledger=indexRecords(data).ledger.get(visit.id)??{charges:[],discounts:[],payments:[],allocations:[],adjustments:[]};
   const charges = ledger.charges.filter(l => serviceDate(l,data) <= until);
   const ds = ledger.discounts.filter(d => dateOf(d.created_at) <= until && (!d.voided_at || dateOf(d.voided_at) > until));
-  const discounts: Discount[] = data.doctorDiscounts ? data.doctorDiscounts.filter(d=>d.date===until && charges.some(l=>l.id===d.charge_line_id && !(l.status==='cancelled' && (!l.cancelled_at || dateOf(l.cancelled_at)<=until)))).map(d=>({kind:'fixed' as const,lineId:d.charge_line_id,amount:uzs(d.amount_uzs),reason:'payroll apportionment',approverId:'report'})) : ds.sort((a,b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)).map(d => ({
+  let scoped:Map<string,string>|undefined;
+  if(data.doctorDiscounts){
+    let dates=scopedDiscounts.get(data);
+    if(!dates){dates=new Map();for(const d of data.doctorDiscounts){const parts=dates.get(d.date)??new Map<string,string>();parts.set(d.charge_line_id,d.amount_uzs);dates.set(d.date,parts);}scopedDiscounts.set(data,dates);}
+    scoped=dates.get(until)??new Map();
+  }
+  const discounts: Discount[] = scoped ? charges.filter(l=>!(l.status==='cancelled' && (!l.cancelled_at || dateOf(l.cancelled_at)<=until))).map(l=>({kind:'fixed' as const,lineId:l.id,amount:uzs(scoped!.get(l.id)??'0'),reason:'payroll apportionment',approverId:'report'})) : ds.sort((a,b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)).map(d => ({
     reason: d.reason, approverId: d.approved_by, ...(d.charge_line_id ? { lineId: d.charge_line_id } : {}),
     ...(d.kind === 'fixed' ? { kind: 'fixed' as const, amount: uzs(d.amount_uzs) } : { kind: 'percent' as const, basisPoints: d.percent_bp })
   }));

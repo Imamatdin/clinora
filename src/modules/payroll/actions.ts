@@ -65,6 +65,7 @@ export function computePayroll(data:Records,p:Period,doctor?:string,affected?:Se
 function daily(data:Records,p:Period,doctor?:string) {
   const days=new Map<string,Set<string>>(),index=indexRecords(data);
   const add=(date:string,visit:string)=>{if(!inRange(date,p))return;const ids=days.get(date)??new Set<string>();ids.add(visit);days.set(date,ids);};
+  for(const v of data.activities??[])add(v.date,v.visit_id);
   for(const v of data.charges)add(serviceDate(v,data),v.visit_id);
   for(const v of data.payments)add(v.date,v.visit_id);
   for(const v of [...data.charges,...data.discounts,...data.adjustments])for(const key of ['created_at','cancelled_at','voided_at'])if(v[key])add(localDate(v[key],data.clinic.timezone),v.visit_id??index.charges.get(v.charge_line_id)?.visit_id);

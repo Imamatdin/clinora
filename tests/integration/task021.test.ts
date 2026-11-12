@@ -7,6 +7,7 @@ import { seedCashier } from './cashier-fixture.js';
 import { inpatientGraph } from '../helpers/inpatient.js';
 import { transaction } from '../../src/server/database.js';
 import { requireRole } from '../../src/server/roles.js';
+import { closeDay } from '../../src/modules/business-days/actions.js';
 import { records,invoiceAt } from '../../src/modules/reports/records.js';
 import { dispatchReports } from '../../src/modules/reports/notify.js';
 import { setOwnPin } from '../../src/modules/devices/actions.js';
@@ -182,3 +183,46 @@ test('021: scoped doctor discount rounding matches complete invoice, including p
   }
 });
 
+
+test('021: close reads before locking, detects an intervening ledger write and preserves the open day',async t=>{
+  const {f,call}=await setup(t),g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
+  await assert.rejects(transaction(f.pool,async tx=>{
+    const c=await requireRole(tx,f.owner.userId,f.owner.clinicId,['ceo']);
+    const query=tx.query.bind(tx);let changed=false;
+    tx.query=(async(...args:any[])=>{
+      const result=await (query as any)(...args);
+      if(!changed && typeof args[0]==='string' && args[0].includes('jsonb_agg')){
+        changed=true;
+        await f.pool.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,source,created_by) VALUES($1,$2,$3,$4,1,50,'registration',$5)`,[id(),f.owner.clinicId,g.visit,g.service,f.owner.userId]);
+      }
+      return result;
+    }) as typeof tx.query;
+    try{await closeDay(c,g.day);}finally{tx.query=query;}
+  }),/INVALID_TRANSITION/);
+  assert.equal((await f.pool.query('SELECT status FROM business_days WHERE id=$1',[g.day])).rows[0].status,'open');
+  assert.equal((await f.pool.query('SELECT count(*)::int n FROM report_notices WHERE clinic_id=$1',[f.owner.clinicId])).rows[0].n,0);
+  await call(`/business-days/${g.day}/close`,{});
+  assert.equal((await call(`/reports/days/${g.day}`)).totals.value,'1000050');
+});
+test('021: unbalanced visit is flagged in a successful immutable close snapshot',async t=>{
+  const {f,call}=await setup(t),g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
+  const shift=await call('/cashier/shifts',{deskId:g.desk,opening:'0'},201);
+  await call(`/cashier/visits/${g.visit}/payments`,{shiftId:shift.id,amount:'1000000',method:'cash',key:id()},201);
+  const payment=(await f.pool.query('SELECT id FROM payments WHERE clinic_id=$1',[f.owner.clinicId])).rows[0].id;
+  const line=id();await f.pool.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,source,created_by) VALUES($1,$2,$3,$4,1,1,'registration',$5)`,[line,f.owner.clinicId,g.visit,g.service,f.owner.userId]);
+  await f.pool.query('INSERT INTO payment_allocations(clinic_id,payment_id,charge_line_id,amount_uzs) VALUES($1,$2,$3,2)',[f.owner.clinicId,payment,line]);
+  await call(`/cashier/shifts/${shift.id}/close`,{counted:'1000000'});
+  await call(`/business-days/${g.day}/close`,{});
+  const report=await call(`/reports/days/${g.day}`);assert.equal(report.snapshot,true);assert.deepEqual(report.needsReview.map((v:any)=>v.id),[g.visit]);assert.equal(report.totals.value,'0');assert.equal(report.totals.collected,'1000000');
+});
+
+test('021: doctor-only payroll includes later visit-discount changes without new payments or owned lines',async t=>{
+  const {f,call}=await setup(t),g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
+  await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
+  const date=(await f.pool.query('SELECT business_date FROM business_days WHERE id=$1',[g.day])).rows[0].business_date,next=new Date(Date.parse(date)+86400000).toISOString().slice(0,10);
+  await call('/payroll/rules',{userId:f.owner.userId,shareBp:5000,basis:'billed',discountBearer:'proportional',categories:['consultation'],effectiveFrom:date},201);
+  await f.pool.query(`INSERT INTO discounts(id,clinic_id,visit_id,kind,amount_uzs,reason,approved_by,created_by,created_at) VALUES($1,$2,$3,'fixed',100000,'Synthetic later waiver',$4,$4,($5::date+time '10:00') AT TIME ZONE 'Asia/Tashkent')`,[id(),f.owner.clinicId,g.visit,f.owner.userId,next]);
+  const p={from:next,to:next},all=await call('/payroll/earnings',p);assert.equal(all.lines[0].entitlement_uzs,'-50000');
+  await f.pool.query("DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2 AND role<>'doctor'",[f.owner.clinicId,f.owner.userId]);
+  const own=await call('/payroll/earnings',p);assert.equal(own.lines[0].entitlement_uzs,all.lines[0].entitlement_uzs);assert.equal(own.lines[0].charge_line_id,g.line);
+});

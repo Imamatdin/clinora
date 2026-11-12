@@ -10,6 +10,7 @@ import { Encounter } from '../contracts/index.js';
 import { Login, ROLES } from '../modules/identity/roles.js';
 import { demoGuard } from './demo-guard.js';
 import { DOCTORS, seedDemoCatalog } from './demo-catalog.js';
+import { seedAssistantDemo } from '../modules/assistant/demo.js';
 
 demoGuard(process.env);
 Password.parse(process.env.DEMO_PASSWORD);
@@ -55,6 +56,7 @@ try {
       await tx.query('INSERT INTO documents(id,clinic_id,patient_id,encounter_id) VALUES($1,$2,$3,$4)', [document, clinicId, patient, id]);
     }
     await tx.query("INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,'synthetic.patient',$4)", [randomUUID(), doctor, clinicId, patient]);
+    await seedAssistantDemo(tx, clinicId, doctor); // Task 003C: synthetic GP patient with history and a visit dated today.
     return (await tx.query('SELECT login FROM accounts WHERE managed_by_clinic_id=$1 ORDER BY login', [clinicId])).rows.map(r => r.login as string);
   });
   console.log(`Synthetic clinic provisioned with one login per role: ${logins.join(', ')}. Password not printed.`);

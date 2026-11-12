@@ -1,0 +1,51 @@
+# Clinora implementation handoff
+
+Date and time including timezone: 12 November 2026, Asia/Tashkent (rebased onto main after 008 and 004)
+Task and increment: 003C, doctor assistant first slice (A1)
+Repository and branch: Imamatdin/clinora, `claude/youthful-hypatia-pmnarw` (session branch; the brief named `task-003c-assistant`). Base `b93714b` (main with 008 and 004).
+Source commit or archive hashes: see the PR commit list; PR opened against `main`.
+
+## Delivered behavior
+
+- Doctor opens a visit → assistant panel: consent box, in-app recording (MediaRecorder, 5 s chunks, SHA-256 per chunk, ordered upload with retry), visible recording/uploading/transcribing/drafting states, retry/discard.
+- Telegram: doctor gets a single-use, 15-minute link code in the app → `/start <code>` makes a *pending* link → doctor confirms the Telegram name in the app → voice messages become captures waiting in that doctor's inbox → attached to the open visit only after the doctor confirms. Bot replies are fixed notices plus a button; no patient data.
+- Transcript stored with segment ids per encounter. Extraction returns typed proposals; the server rejects unknown fields, bad values, unknown lab codes, missing or foreign segment citations (another encounter or patient), "normal" not said in the cited words, and diagnoses/plans/exam backed only by patient speech. Every proposal is kept with its disposition.
+- GP (терапевт) form: complaints, HPI, past history and allergies, examination (observed / measured / not examined), diagnosis (ICD-10 + text), plan, lab orders (10 synthetic labs), follow-up date. Accept / Edit / Clear per field, source words on tap. Later runs never overwrite a doctor-touched field; the new proposal is shown as "held".
+- Approve: requires every proposal resolved, the current draft revision and the exact field revisions; writes one `document_versions` row (template `gp-assistant-v1`) through `requireApprovableVersion`, plus an immutable `assistant_approvals` row naming the field versions and the doctor. Retried approval returns the same result. Server-rendered A4 PDF from the approved version (DejaVu Sans; Uzbek Cyrillic, Latin ʻ and Russian checked visually).
+- Panel UI in uz-Cyrl, uz-Latn and ru. Provider failure: clear message, manual entry of every field, approval still works.
+- Adapters: `SpeechToText` (Aisha), `NoteExtractor` (Gemini on Vertex, via API key or service account), labelled simulated adapters, and an "unavailable" adapter when nothing is configured. Setup: `docs/demo/A1-SETUP.md`.
+- Demo kit: `npm run db:demo` now also seeds "Каримова Дилноза" (prior visit, visit dated today); `docs/demo/A1-DEMO-SCRIPT.md`; `npm run assistant:eval` with the 10-case set in `src/modules/assistant/eval-set.ts`.
+
+## Decisions and changes
+
+- Owned: `db/migrations/003_assistant.sql`, `src/modules/assistant/**`, `src/server/assistant.ts`, `src/web/assistant/**`, `tests/assistant-form.test.ts`, `tests/integration/assistant.test.ts`, `tests/browser/assistant.spec.ts`, `docs/demo/**`, `assets/fonts/` (DejaVu, licence included), `scripts/assistant-eval.mjs`.
+- 008 registries: JSON routes in `src/server/routes/assistant.ts` (one import line in `routes/index.ts`, role `doctor`); strings in `src/web/i18n/assistant.{uz-Cyrl,uz-Latn,ru}.ts` (uz-Cyrl merged via one line in `uz-Cyrl.ts`). `src/server/assistant.ts` keeps only what the JSON registry can't express: raw chunk upload, PDF response, approve (needs the session as policy Principal), job-starting routes, assistant webhook. The panel sits inside the open visit, not a role screen, so it uses the notebook `visitExtra` slot instead of `modules.ts`.
+- Other shared edits: `app.ts` (3 lines: hook, purge timer), `notebook.ts` (`actorFor` exported), `notebook.tsx` (slot), `main.tsx` (one prop), `scripts/demo.mjs` (one seed call), `package.json` (`pdfkit@0.17.2`, `@types/pdfkit`, eval script). `npm audit --omit=dev`: 0 vulnerabilities.
+- Telegram: assistant linking tables and `/api/assistant/telegram/webhook` stay until task 015. The assistant bot reads `ASSISTANT_TELEGRAM_*` and startup refuses 004's token, because one bot has one webhook and sharing it would silently disable 004's sign-in webhook or the assistant's.
+- Transcription runs only after a capture is attached to an encounter, so no unattached clinical text exists. Jobs run in-process with a durable lease (180 s, 5 attempts) and resume through lease expiry. They recheck the doctor's role and scope before publishing, and a discard defeats a late result.
+- Raw audio is purged 24 h after capture, or immediately on discard. That is an engineering default, not a legal retention claim.
+
+## Verification evidence
+
+| Command | Result | Establishes / does not |
+| --- | --- | --- |
+| `npm run check` locally after rebase (PostgreSQL 16, Chromium 1243) | exit 0; counts in the PR | Approval and stale rejection, foreign citations, chunk retries/gaps/conflicts, Telegram dedupe and forged webhook, A/B isolation, revocation and discard mid-run, manual path, 401/403/404/CSRF. Browser: fake-mic recording through real upload at 1280 and 390 px, language switch, PDF |
+| GitHub Actions "Clinora checks" | pre-rebase run 43193228832 success; post-rebase run linked in the PR | |
+| Real Aisha / Gemini / Telegram | **Not run**: no keys in this session; aisha.group docs were unreachable from the sandbox | Aisha request and response shape follow public docs and are unverified against a live key; the Gemini express endpoint follows Google's reference |
+| Measured accuracy (10 cases, phone mic) | **Not measured** | No word-error, missed-field or latency numbers exist. Do not quote any |
+
+## Remaining issues
+
+- Needs Imamatdin: Aisha key, Vertex credentials, a second (assistant) bot token and secret on staging until 015; recordings of the 10 cases by real readers; Mashxura's fallback recording.
+- The notebook timeline and editor still say "unapproved, revision 0" for a visit approved through the assistant. A manual notebook save after approval adds a newer unapproved version (the approval still points at its exact version). Fix this in the C6 doctor workspace by reading `assistant_approvals`.
+- No amendment flow after approval yet. Speaker labels from Aisha are `unknown`, so clinician-only fields need a doctor-or-unknown segment (patient-only evidence is rejected).
+- The shell renders uz-Cyrl only; the panel switches among the three registered assistant dictionaries per viewer.
+
+## Delivery state
+
+- Implemented locally: yes. Tested: yes (above). Committed: yes. Pushed: `origin/claude/youthful-hypatia-pmnarw`.
+- Deployed: no. Production data or external systems affected: none (synthetic data only, no provider calls).
+
+## Next proposed task
+
+Plug in the keys on staging and run `assistant:eval` with real recordings, then put the table in this handoff (before 19 Nov). After C3/C6: replace synthetic labs with catalog services (charge lines, source `assistant`) and add the doctor-queue entry point.

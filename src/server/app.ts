@@ -15,6 +15,7 @@ export const routeShape = (path: string) => path.slice(0, 200)
   .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ':id')
   .replace(/\/[0-9]+(?=\/|$)/g, '/:n')
   .replace(/[^a-zA-Z0-9/_.:-]/g, '?');
+import { handleAssistant, startAssistantHousekeeping } from './assistant.js';
 
 const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
@@ -27,6 +28,7 @@ const PUBLIC_FILES = ['sw.js', 'manifest.webmanifest', 'icons/icon-192.png', 'ic
 export const CSP = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors https://web.telegram.org";
 
 export async function createApp(webDirectory?: string, config?: ApiConfig, options: AppOptions = {}) {
+  if (config) startAssistantHousekeeping(config);
   // Serve only built index and generated assets. Never expose source, env, data, or work/.
   const files = new Map<string, { body: Buffer; contentType: string }>();
   if (webDirectory) {
@@ -76,6 +78,7 @@ export async function createApp(webDirectory?: string, config?: ApiConfig, optio
       } catch { fail('SERVICE_UNAVAILABLE'); }
     } else if (path === '/api' || path.startsWith('/api/')) {
       if (!config) { fail('UNAUTHENTICATED'); return; }
+      if (await handleAssistant(req, res, config, requestId)) return; // Task 003C doctor assistant routes.
       try {
         const result = await api(req, config);
         if (result.cookie) res.setHeader('Set-Cookie', result.cookie);

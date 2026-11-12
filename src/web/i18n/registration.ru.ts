@@ -1,5 +1,23 @@
-import type { registration } from './registration.uz-Cyrl.js';
+import type {
+ registration } from './registration.uz-Cyrl.js';
 export const registrationRu: Record<keyof typeof registration, string> = {
+  "registration.offline.banner": "Нет интернета. Офлайн работают только регистрация и очередь.",
+  "registration.offline.enroll": "Для работы офлайн попросите администратора зарегистрировать компьютер.",
+  "registration.offline.pending": "Ожидают синхронизации: {count}",
+  "registration.offline.sync": "Синхронизировать сейчас",
+  "registration.offline.help": "Памятка для работы офлайн",
+  "registration.offline.cheat": "Откройте регистрацию при подключении к интернету. При обрыве сохраните пациента, выберите направления и распечатайте временный талон. После подключения рядом с временным кодом появится настоящий номер очереди. Вызывайте пациента по обоим номерам. Разрешите пункты «Требует внимания». Только регистрация работает офлайн; платежам и другим модулям нужен интернет. Смена пользователя или отзыв устройства удаляет ожидающие данные.",
+  "registration.offline.provisional": "Временный код. После подключения будет выдан настоящий номер очереди. Вызывайте пациента по обоим номерам.",
+  "registration.offline.saved": "Сохранено на устройстве",
+  "registration.offline.attention": "Требует внимания",
+  "registration.offline.duplicate": "Такой пациент уже есть. Выберите существующего пациента.",
+  "registration.offline.closed": "Этот рабочий день закрыт. Попросите администратора открыть день, затем перенесите запись.",
+  "registration.offline.catalog": "Услуга или направление недоступны. Выберите заново; данные сохранены.",
+  "registration.offline.findDuplicate": "Найти существующего пациента",
+  "registration.offline.moveDay": "Перенести в открытый день",
+  "registration.offline.reroute": "Выбрать направление заново",
+  "registration.offline.retry": "Проверьте подключение и открытый рабочий день, затем повторите.",
+
   'registration.title': 'Регистратура',
   'registration.language': 'Язык',
   'registration.loading': 'Загрузка…',

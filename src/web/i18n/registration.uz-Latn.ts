@@ -1,5 +1,23 @@
-import type { registration } from './registration.uz-Cyrl.js';
+import type {
+ registration } from './registration.uz-Cyrl.js';
 export const registrationUzLatn: Record<keyof typeof registration, string> = {
+  "registration.offline.banner": "Internet yoʻq. Faqat roʻyxatga olish va navbat oflayn ishlaydi.",
+  "registration.offline.enroll": "Oflayn ishlash uchun administrator bu kompyuterni roʻyxatga olsin.",
+  "registration.offline.pending": "Sinxronlash kutilmoqda: {count}",
+  "registration.offline.sync": "Hozir sinxronlash",
+  "registration.offline.help": "Oflayn ishlash qoʻllanmasi",
+  "registration.offline.cheat": "Internet bor paytda roʻyxatga olishni oching. Uzilsa, bemorni saqlang, yoʻnaltiring va vaqtinchalik talonni chop eting. Qayta ulanganda vaqtinchalik kod yonida haqiqiy navbat raqami chiqadi. Bemorni ikkala raqam bilan chaqiring. «Eʼtibor kerak»ni hal qiling. Faqat roʻyxatga olish oflayn; toʻlovlar va boshqa modullar internet talab qiladi. Foydalanuvchini almashtirish yoki qurilmani bekor qilish kutilgan maʼlumotlarni oʻchiradi.",
+  "registration.offline.provisional": "Vaqtinchalik kod. Internet tiklangach haqiqiy navbat raqami beriladi. Bemorni ikkala raqam bilan chaqiring.",
+  "registration.offline.saved": "Qurilmada saqlandi",
+  "registration.offline.attention": "Eʼtibor kerak",
+  "registration.offline.duplicate": "Bunday bemor bor. Mavjud bemorni tanlang.",
+  "registration.offline.closed": "Bu ish kuni yopilgan. Administrator kunni ochsin, soʻng yangi kunga oʻtkazing.",
+  "registration.offline.catalog": "Xizmat yoki yoʻnalish mavjud emas. Qayta tanlang; maʼlumot oʻchirilmadi.",
+  "registration.offline.findDuplicate": "Mavjud bemorni topish",
+  "registration.offline.moveDay": "Ochiq kunga oʻtkazish",
+  "registration.offline.reroute": "Yoʻnalishni qayta tanlash",
+  "registration.offline.retry": "Ulanishni va ochiq ish kunini tekshiring, qayta urining.",
+
   'registration.title': 'Roʻyxatga olish',
   'registration.language': 'Til',
   'registration.loading': 'Yuklanmoqda…',

@@ -13,7 +13,7 @@ import { labModule } from './lab/screen.js';
 
 /** What the shell hands every feature screen. The server still authorizes every call. */
 export type ModuleProps = {
-  clinic: ClinicMembershipView; request: Request; day: CurrentDayView | null; myId: string;
+  clinic: ClinicMembershipView; request: Request; day: CurrentDayView | null; myId: string; offlineDeviceId?: string | null;
   /** Mark unsaved input so the shell asks before navigating away. */
   setDirty: (dirty: boolean) => void;
 };

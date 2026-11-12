@@ -38,3 +38,17 @@
 .registration-duplicates { border: 3px solid #8a5a00; background: #fff8e8; padding: 0.8rem; border-radius: 8px; margin: 0.8rem 0; }
 .registration-tickets li { font-size: 1.25rem; padding: 0.5rem 0; border-bottom: 1px solid #ccd6da; }
 .registration-more summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; }
+
+.offline-status { border: 2px solid #93600b; padding: 12px; margin-block: 12px; }
+.offline-status li { margin-block: 12px; overflow-wrap: anywhere; }
+.offline-status button, .offline-status a { margin: 4px; }
+.offline-attention { border-left: 4px solid #a22; padding: 12px; }
+.offline-print { display: none; }
+@media print {
+  @page { size: 80mm auto; margin: 3mm; }
+  body * { visibility: hidden; }
+  .offline-print, .offline-print * { visibility: visible; }
+  .offline-print { display: block; position: absolute; left: 0; top: 0; width: 100%; max-width: 74mm; color: black; background: white; }
+  .offline-print .ticket { break-after: page; text-align: center; }
+  .offline-print .number { font-size: 28px; font-weight: bold; overflow-wrap: anywhere; }
+}

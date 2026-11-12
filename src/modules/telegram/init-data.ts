@@ -24,7 +24,11 @@ export type VerifiedInitData = {
   telegramUserId: number;
   languageCode: string | null;
   authDate: number;
-  /** SHA-256 of the full raw string, used to refuse a second use of the same init data. */
+  /**
+   * SHA-256 of the canonical authenticated data (sorted data-check string plus hash), used to refuse a
+   * second use of the same init data. Hashing the raw string would let a reordered or re-encoded copy of
+   * the same signed fields pass as new.
+   */
   fingerprint: string;
 };
 export type InitDataFailure = 'malformed' | 'bad_hash' | 'expired' | 'future' | 'no_user';
@@ -63,7 +67,12 @@ export function verifyInitData(raw: string, botToken: string, nowSeconds: number
   let user: z.infer<typeof TelegramUser>;
   try { user = TelegramUser.parse(JSON.parse(parsed.fields.get('user') ?? 'null')); } catch { return { ok: false, reason: 'no_user' }; }
   return { ok: true, value: { telegramUserId: user.id, languageCode: user.language_code ?? null, authDate,
-    fingerprint: createHash('sha256').update(raw).digest('hex') } };
+    fingerprint: initDataFingerprint(parsed.check, parsed.hash) } };
+}
+
+/** Canonical replay fingerprint: independent of field order and URL encoding of the raw query string. */
+export function initDataFingerprint(check: string, hash: string): string {
+  return createHash('sha256').update(check).update('\n').update(hash).digest('hex');
 }
 
 /** Test and tooling helper: signs init data exactly as Telegram does. Never used to accept requests. */

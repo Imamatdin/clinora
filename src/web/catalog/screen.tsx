@@ -21,7 +21,8 @@ type Options = { departments: Ref[]; groups: (Ref & { departmentId: string | nul
 type Counts = { new: number; changed: number; unchanged: number; rejected: number; pricesNew: number };
 type PlanRow = { seq: number; object: string; source: string; code: string | null; kind: string | null; names: Names; service: string | null; priceUzs: string | null; outcome: string; reason: string | null };
 type Preview = { batch: { id: string; received: number; totalRows: number; status: string };
-  plan: null | { objects: Record<string, Counts>; pricesNew: number; samples: Record<string, PlanRow[]>; rejected: PlanRow[]; rejectedTotal: number } };
+  plan: null | { objects: Record<string, Counts>; pricesNew: number; samples: Record<string, PlanRow[]>; rejected: PlanRow[]; rejectedTotal: number };
+  /** Task 019: this exact file was committed before; nothing to import. */ alreadyImported: { batchId: string; at: string } | null };
 type T = ReturnType<typeof translator>;
 
 const money = (v: string | null | undefined) => v === null || v === undefined ? null : formatUzs(uzs(v));
@@ -30,7 +31,7 @@ const kindKey = (k: string) => `catalog.kind.${k}` as CatalogKey;
 
 export function Catalog({ clinic, request, setDirty }: ModuleProps) {
   const [locale, setLocale] = useState<Locale>('uz-Cyrl'), t = translator(locale);
-  const [tab, setTab] = useState<'lists' | 'import'>('lists');
+  const [tab, setTab] = useState<'lists' | 'points' | 'import'>('lists');
   const base = `/api/clinics/${clinic.id}/catalog`;
   return <section className="catalog">
     <div className="catalog-head">
@@ -40,9 +41,11 @@ export function Catalog({ clinic, request, setDirty }: ModuleProps) {
       </label>
     </div>
     <div className="catalog-tabs" role="tablist">
-      {(['lists', 'import'] as const).map(id => <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{t(`catalog.tab.${id}`)}</button>)}
+      {(['lists', 'points', 'import'] as const).map(id => <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{t(`catalog.tab.${id}`)}</button>)}
     </div>
-    {tab === 'lists' ? <Lists base={base} request={request} t={t} locale={locale} setDirty={setDirty} /> : <Import base={base} request={request} t={t} locale={locale} setDirty={setDirty} />}
+    {tab === 'lists' ? <Lists base={base} request={request} t={t} locale={locale} setDirty={setDirty} />
+      : tab === 'points' ? <QueuePoints base={base} request={request} t={t} locale={locale} setDirty={setDirty} />
+      : <Import base={base} request={request} t={t} locale={locale} setDirty={setDirty} />}
   </section>;
 }
 
@@ -251,6 +254,73 @@ function DoctorServices({ base, request, t, locale, setDirty, item, onDone }: Fo
   </form>;
 }
 
+type QueuePoint = { id: string; kind: 'doctor' | 'service' | 'department'; names: Names & { uzCyrl: string }; active: boolean; refId: string | null; refNames: Names | null; doctorName: string | null };
+/**
+ * Queue points registration routes patients to (task 019). Doctor points open and close with the doctor's catalog link;
+ * service points (laboratory, ultrasound) and department points are added and switched here.
+ */
+function QueuePoints({ base, request, t, locale, setDirty }: ViewProps) {
+  const [points, setPoints] = useState<QueuePoint[] | null>(null), [options, setOptions] = useState<Options | null>(null);
+  const [editing, setEditing] = useState<QueuePoint | 'new' | null>(null);
+  const r = useRunner();
+  const load = async () => { const [p, o] = await Promise.all([request<QueuePoint[]>(`${base}/queue-points`), request<Options>(`${base}/options`)]); setPoints(p); setOptions(o); };
+  useEffect(() => { void r.run(load); }, [base]);
+  const done = async (notice?: string) => { setEditing(null); setDirty(false); await load(); if (notice) r.setNotice(notice); };
+  return <div aria-busy={r.busy}>
+    <p className="muted">{t('catalog.points.lead')}</p>
+    {r.error && <p role="alert" className="error">{r.error}</p>}
+    {r.notice && <p role="status" className="notice">{r.notice}</p>}
+    <button type="button" className="primary" onClick={() => setEditing('new')}>{t('catalog.points.new')}</button>
+    {editing && options && <div className="catalog-panel"><PointForm {...{ base, request, t, locale, setDirty, options }} point={editing === 'new' ? null : editing} onDone={done} /></div>}
+    {!points && <p>{t('catalog.loading')}</p>}
+    {points && !points.length && <p className="empty">{t('catalog.empty')}</p>}
+    {points && points.length > 0 && <ul className="catalog-items">{points.map(p => <li key={p.id} className={p.active ? '' : 'off'}>
+      <div className="catalog-item-main">
+        <strong>{pickName(p.names, locale)}</strong>
+        <span className="muted">{[t(`catalog.points.kind.${p.kind}` as CatalogKey), p.doctorName, p.refNames && pickName(p.refNames, locale)].filter(Boolean).join(' · ')}</span>
+        {!p.active && <span className="badge">{t('catalog.inactive')}</span>}
+      </div>
+      <div className="catalog-actions">{p.kind === 'doctor' ? <span className="muted">{t('catalog.points.doctorHint')}</span> : <>
+        <button type="button" onClick={() => setEditing(p)}>{t('catalog.edit')}</button>
+        <button type="button" onClick={() => void r.run(async () => {
+          await request(`${base}/queue-points/active`, { id: p.id, active: !p.active, idempotencyKey: crypto.randomUUID() }); await load(); r.setNotice(t('catalog.saved'));
+        })}>{p.active ? t('catalog.deactivate') : t('catalog.activate')}</button></>}
+      </div>
+    </li>)}</ul>}
+  </div>;
+}
+
+function PointForm({ base, request, t, locale, setDirty, options, point, onDone }: Omit<FormProps, 'item'> & { options: Options; point: QueuePoint | null }) {
+  const [f, setF] = useState({ kind: (point?.kind === 'department' ? 'department' : 'service') as 'service' | 'department', refId: point?.refId ?? '',
+    nameUzCyrl: point?.names.uzCyrl ?? '', nameUzLatn: point?.names.uzLatn ?? '', nameRu: point?.names.ru ?? '' });
+  const key = useRef(crypto.randomUUID()), r = useRunner();
+  const set = (patch: Partial<typeof f>) => { setF(v => ({ ...v, ...patch })); setDirty(true); key.current = crypto.randomUUID(); };
+  const refs: Ref[] = f.kind === 'service' ? options.groups : options.departments;
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!f.nameUzCyrl.trim()) { r.setError(t('catalog.err.nameRequired')); return; }
+    if (!f.refId) { r.setError(t(f.kind === 'service' ? 'catalog.points.err.group' : 'catalog.points.err.department')); return; }
+    await r.run(async () => {
+      await request(`${base}/queue-points`, { ...(point ? { id: point.id } : {}), kind: f.kind, refId: f.refId, nameUzCyrl: f.nameUzCyrl,
+        nameUzLatn: f.nameUzLatn || null, nameRu: f.nameRu || null, idempotencyKey: key.current });
+      await onDone(t('catalog.saved'));
+    });
+  }
+  return <form onSubmit={submit}>
+    <h3>{t(point ? 'catalog.form.title.edit' : 'catalog.form.title.new')} · {t('catalog.tab.points')}</h3>
+    <label>{t('catalog.points.kind')}<select value={f.kind} onChange={e => set({ kind: e.target.value as 'service' | 'department', refId: '' })}>
+      <option value="service">{t('catalog.points.kind.service')}</option><option value="department">{t('catalog.points.kind.department')}</option></select></label>
+    <label>{t(f.kind === 'service' ? 'catalog.form.group' : 'catalog.form.department')}<select value={f.refId} onChange={e => set({ refId: e.target.value })}>
+      <option value="">{t('catalog.form.none')}</option>{refs.map(x => <option key={x.id} value={x.id}>{pickName(x.names, locale)}</option>)}</select></label>
+    <label>{t('catalog.form.nameUzCyrl')}<input required value={f.nameUzCyrl} onChange={e => set({ nameUzCyrl: e.target.value })} /></label>
+    <label>{t('catalog.form.nameUzLatn')}<input value={f.nameUzLatn} onChange={e => set({ nameUzLatn: e.target.value })} /></label>
+    <label>{t('catalog.form.nameRu')}<input value={f.nameRu} onChange={e => set({ nameRu: e.target.value })} /></label>
+    {r.error && <p role="alert" className="error">{r.error}</p>}
+    <button type="submit" className="primary" disabled={r.busy}>{t('catalog.save')}</button>
+    <button type="button" onClick={() => void onDone()}>{t('catalog.cancel')}</button>
+  </form>;
+}
+
 type Step = 'choose' | 'reading' | 'mapping' | 'uploading' | 'preview' | 'done';
 type TableList = keyof typeof FIELDS_FOR;
 function Import({ base, request, t, locale, setDirty }: ViewProps) {
@@ -294,7 +364,14 @@ function Import({ base, request, t, locale, setDirty }: ViewProps) {
         await request(`${base}/imports/${batch.id}/rows`, page);
         setProgress({ done: page.offset + page.rows.length, total: rows.length });
       }
-      setPreview(await request<Preview>(`${base}/imports/${batch.id}`)); setStep('preview');
+      const p = await request<Preview>(`${base}/imports/${batch.id}`);
+      if (p.alreadyImported) {
+        // The same file was committed before: close the staged copy and say so; the catalog is untouched.
+        await request(`${base}/imports/${batch.id}/discard`, { idempotencyKey: crypto.randomUUID() });
+        setResult(t('catalog.import.alreadyImported', { date: new Date(p.alreadyImported.at).toLocaleString(locale === 'ru' ? 'ru-RU' : 'uz-UZ') })); setStep('done'); setDirty(false);
+        return;
+      }
+      setPreview(p); setStep('preview');
     });
     setStep(s => s === 'uploading' ? 'mapping' : s);
   }
@@ -303,9 +380,11 @@ function Import({ base, request, t, locale, setDirty }: ViewProps) {
   async function commit() {
     if (!preview) return;
     await r.run(async () => {
-      const done = await request<{ summary: { objects: Record<string, Counts>; pricesNew: number } }>(`${base}/imports/${preview.batch.id}/commit`, { idempotencyKey: crypto.randomUUID() });
+      const done = await request<{ status: string; alreadyImported?: { at: string }; summary: { objects: Record<string, Counts>; pricesNew: number } }>(`${base}/imports/${preview.batch.id}/commit`, { idempotencyKey: crypto.randomUUID() });
       const sum = totals(done.summary);
-      setResult(t('catalog.import.committed', { new: sum.new, changed: sum.changed, prices: done.summary.pricesNew })); setStep('done'); setDirty(false);
+      setResult(done.status === 'already_imported' && done.alreadyImported
+        ? t('catalog.import.alreadyImported', { date: new Date(done.alreadyImported.at).toLocaleString(locale === 'ru' ? 'ru-RU' : 'uz-UZ') })
+        : t('catalog.import.committed', { new: sum.new, changed: sum.changed, prices: done.summary.pricesNew })); setStep('done'); setDirty(false);
     });
   }
   async function discard() {

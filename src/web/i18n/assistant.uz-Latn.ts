@@ -77,5 +77,6 @@ export const assistantUzLatn: Record<AssistantKey, string> = {
   'assistant.speaker_patient': 'Bemor',
   'assistant.speaker_unknown': 'Nomaʼlum',
   'assistant.loading': 'Yuklanmoqda…',
+  'assistant.staleApproval': 'Qabul yozuvi yoki qoralama ochilgandan keyin oʻzgardi (masalan, qoʻlda saqlandi). Hech narsa tasdiqlanmadi. Yangilandi — koʻrib chiqib, qayta tasdiqlang.',
   'assistant.stale': 'Qoralama boshqa joyda oʻzgardi. Yangilandi — qayta koʻrib chiqing.'
 };

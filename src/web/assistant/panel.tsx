@@ -8,7 +8,7 @@ type FieldView = { key: string; fieldRevision: number; value: unknown; category:
   held: { proposalId: string; value: unknown; category: string; evidence: string[] } | null };
 type Segment = { id: string; speaker: 'doctor' | 'patient' | 'unknown'; text: string };
 type Capture = { id: string; status: string; stage: string | null; errorCode: string | null; createdAt: string; durationS?: number | null };
-type Draft = { draft: { revision: number; status: string }; approval: { approvedBy: string; approvedAt: string; revision: number } | null;
+type Draft = { draft: { revision: number; status: string }; documentRevision: number; approval: { approvedBy: string; approvedAt: string; revision: number } | null;
   fields: FieldView[]; segments: Segment[]; captures: Capture[]; transcripts: { simulated: boolean }[];
   providers: { stt: { name: string; simulated: boolean }; extractor: { name: string; simulated: boolean } } };
 type Lab = { code: string; uzCyrl: string; uzLatn: string; ru: string };
@@ -128,7 +128,14 @@ export function AssistantPanel({ clinicId, patientId, encounterId, request, onAp
   async function approve() {
     if (!draft || !confirm(t('approveConfirm'))) return;
     await run(async () => {
-      await request(`${base}/approve`, { expectedDraftRevision: draft.draft.revision, fieldRevisions: Object.fromEntries(draft.fields.map(f => [f.key, f.fieldRevision])) }, true);
+      try {
+        await request(`${base}/approve`, { expectedDraftRevision: draft.draft.revision, expectedDocumentRevision: draft.documentRevision,
+          fieldRevisions: Object.fromEntries(draft.fields.map(f => [f.key, f.fieldRevision])) }, true);
+      } catch (e) {
+        // Task 019: the draft or the visit note (e.g. a manual save in the doctor workspace) changed; nothing was approved.
+        if (e instanceof ApiFailure && e.code === 'STALE_VERSION') { await refresh().catch(() => {}); onApproved?.(); setError(t('staleApproval')); return; }
+        throw e;
+      }
       await refresh(); onApproved?.();
     });
   }

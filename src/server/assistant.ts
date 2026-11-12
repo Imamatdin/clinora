@@ -99,6 +99,8 @@ export async function handleAssistant(req: IncomingMessage, res: ServerResponse,
       const actor = await actorFor(tx, req);
       if (mutation && !same(String(req.headers['x-csrf-token'] ?? ''), actor.csrf)) fail('FORBIDDEN');
       if (actor.mustChangePassword) fail('PASSWORD_CHANGE_REQUIRED');
+      // Same rule as the main API: a shared-PC session reaches only the device's own clinic.
+      if (actor.deviceClinicId && clinic !== actor.deviceClinicId) fail('NOT_FOUND');
       return route!.handle({ tx, actor: { userId: actor.userId, sessionId: actor.sessionId, expiresAt: actor.principal.expiresAt }, clinic: clinic! }, params, body, config);
     });
     if (out.kick) svc.kick({ pool: config.pool, providers, origin: config.origin }, out.kick);

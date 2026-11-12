@@ -77,5 +77,6 @@ export const assistantRu: Record<AssistantKey, string> = {
   'assistant.speaker_patient': 'Пациент',
   'assistant.speaker_unknown': 'Неизвестно',
   'assistant.loading': 'Загрузка…',
+  'assistant.staleApproval': 'Запись приёма или черновик изменились после открытия (например, ручное сохранение). Ничего не утверждено. Обновлено — проверьте и утвердите снова.',
   'assistant.stale': 'Черновик изменён в другом месте. Обновлено — проверьте ещё раз.'
 };

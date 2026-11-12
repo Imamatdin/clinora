@@ -63,6 +63,12 @@ test('init data verification: exact algorithm, freshness window, malformed input
   // Field order in the query string does not matter; the check string is sorted.
   const reordered = new URLSearchParams([...new URLSearchParams(raw)].reverse()).toString();
   assert.ok(verifyInitData(reordered, TOKEN, t0).ok);
+  // Task 019: the replay fingerprint is canonical, so a reordered or re-encoded copy is the same init data.
+  const fp = (s: string) => { const r = verifyInitData(s, TOKEN, t0); assert.ok(r.ok); return r.ok ? r.value.fingerprint : ''; };
+  const reencoded = raw.split('&').map(pair => pair.replace(/%7B/g, '%7b').replace(/%22/g, '%22')).join('&').replace('auth_date=', 'auth%5Fdate=');
+  assert.equal(fp(reordered), fp(raw));
+  assert.equal(fp(reencoded), fp(raw));
+  assert.notEqual(fp(signInitData({ ...fields, query_id: 'other' }, TOKEN)), fp(raw));
   for (const bad of ['', 'hash=zz', 'auth_date=1&hash=' + 'a'.repeat(64), raw + '&hash=' + 'b'.repeat(64), 'x'.repeat(9000)])
     assert.equal(verifyInitData(bad, TOKEN, t0).ok, false);
   const noUser = signInitData({ auth_date: String(t0) }, TOKEN);

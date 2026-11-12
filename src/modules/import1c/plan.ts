@@ -10,8 +10,11 @@ import type { ImportObject, ParsedImportRow, RejectReason } from './model.js';
  *
  * Rules: rows match existing rows by code (1C code), else (spreadsheets without codes) by folded name.
  * Import never deletes, deactivates or clears: an empty source field leaves the existing value. A
- * changed price adds a service_prices row; an identical price adds nothing. Re-importing the same file
- * therefore changes nothing.
+ * changed price adds a service_prices row; an identical price adds nothing. Task 019: a "now" price is
+ * compared with the price last imported from 1C for that service (service_prices.import_batch_id), not
+ * with the current price, so a manual price set after an import survives re-importing an unchanged price.
+ * Only a service with no imported price yet is compared with its current price. An identical file is
+ * refused before planning (actions.ts).
  */
 
 export type Outcome = 'new' | 'changed' | 'unchanged' | 'rejected';
@@ -48,6 +51,12 @@ export async function buildPlan(tx: Tx, clinicId: string, staged: { seq: number;
   const prices = new Map<string, { at: string | null; priceUzs: string }[]>(); // service id -> rows (at null = "now")
   for (const p of (await tx.query(`SELECT service_id, price_uzs::text price_uzs, effective_from FROM service_prices WHERE clinic_id=$1 ORDER BY effective_from`, [clinicId])).rows)
     prices.set(p.service_id, [...prices.get(p.service_id) ?? [], { at: new Date(p.effective_from).toISOString(), priceUzs: p.price_uzs }]);
+  // Last price imported from 1C per service (task 019): the baseline a re-imported "now" price is compared with.
+  const imported = new Map<string, string>();
+  for (const p of (await tx.query(`SELECT DISTINCT ON (service_id) service_id, price_uzs::text price_uzs FROM service_prices
+      WHERE clinic_id=$1 AND import_batch_id IS NOT NULL ORDER BY service_id, effective_from DESC, created_at DESC`, [clinicId])).rows)
+    imported.set(p.service_id, p.price_uzs);
+  const baseline = (serviceId: string) => imported.get(serviceId) ?? current(prices.get(serviceId) ?? [], nowIso);
   const instantOf = new Map<string, string>();
   for (const d of new Set(staged.map(s => s.row.effectiveFrom).filter((v): v is string => !!v)))
     instantOf.set(d, new Date((await tx.query(`SELECT CASE WHEN $1 ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN ($1::date::timestamp AT TIME ZONE $2) ELSE $1::timestamptz END AS at`, [d, tz])).rows[0].at).toISOString());
@@ -86,8 +95,8 @@ export async function buildPlan(tx: Tx, clinicId: string, staged: { seq: number;
       if (same && same.priceUzs !== row.priceUzs) { reject('PRICE_CONFLICT'); continue; }
       if (same) { plan.rows.push({ seq, row, outcome: 'unchanged', reason: null, id: serviceId, priceOutcome: 'unchanged' }); continue; }
       if (!at && list.some(p => p.at === null)) { reject('PRICE_CONFLICT'); continue; }
-      if (!at && current(list, nowIso) === row.priceUzs) { plan.rows.push({ seq, row, outcome: 'unchanged', reason: null, id: serviceId, priceOutcome: 'unchanged' }); continue; }
-      addPrice(plan, prices, serviceId, row.priceUzs, at);
+      if (!at && baseline(serviceId) === row.priceUzs) { plan.rows.push({ seq, row, outcome: 'unchanged', reason: null, id: serviceId, priceOutcome: 'unchanged' }); continue; }
+      addPrice(plan, prices, serviceId, row.priceUzs, at); imported.set(serviceId, row.priceUzs);
       plan.rows.push({ seq, row, outcome: 'new', reason: null, id: serviceId, priceOutcome: 'new' });
       continue;
     }
@@ -141,9 +150,9 @@ export async function buildPlan(tx: Tx, clinicId: string, staged: { seq: number;
     b.values.set(id, { ...existing, ...values });
     const planned: PlannedRow = { seq, row, outcome, reason: null, id };
     if (object === 'service' && row.priceUzs !== null) {
-      // A price on the item row means "the price now": compared with the price in force at commit time.
-      if (current(prices.get(id) ?? [], nowIso) === row.priceUzs) planned.priceOutcome = 'unchanged';
-      else { addPrice(plan, prices, id, row.priceUzs, null); planned.priceOutcome = 'new'; if (outcome === 'unchanged') planned.outcome = 'changed'; }
+      // A price on the item row means "the price now": compared with the price last imported for it (else the current price).
+      if (baseline(id) === row.priceUzs) planned.priceOutcome = 'unchanged';
+      else { addPrice(plan, prices, id, row.priceUzs, null); imported.set(id, row.priceUzs); planned.priceOutcome = 'new'; if (outcome === 'unchanged') planned.outcome = 'changed'; }
     }
     plan.rows.push(planned);
   }
@@ -167,7 +176,7 @@ const COLUMN_TYPES: Record<string, string> = {
 const typeOf = (c: string) => COLUMN_TYPES[c] ?? 'text';
 
 /** Applies a plan in the caller's transaction, set-based (one statement per table and column set). */
-export async function applyPlan(tx: Tx, clinicId: string, actorId: string, plan: Plan): Promise<void> {
+export async function applyPlan(tx: Tx, clinicId: string, actorId: string, plan: Plan, batchId: string): Promise<void> {
   const order = ['departments', 'service_groups', 'districts', 'mahallas', 'room_types', 'expense_types', 'services', 'catalog_doctors'];
   const groups = new Map<string, Write[]>();
   for (const w of plan.inserts) { const key = `${w.table}|${Object.keys(w.values).sort().join(',')}`; groups.set(key, [...groups.get(key) ?? [], w]); }
@@ -183,7 +192,7 @@ export async function applyPlan(tx: Tx, clinicId: string, actorId: string, plan:
     await tx.query(`UPDATE ${w.table} SET ${columns.map((c, i) => `${c}=$${i + 3}::${typeOf(c)}`).join(',')} WHERE clinic_id=$1 AND id=$2`,
       [clinicId, w.id, ...columns.map(c => w.values[c])]);
   }
-  if (plan.prices.length) await tx.query(`INSERT INTO service_prices(id,clinic_id,service_id,price_uzs,effective_from,set_by)
-    SELECT x.id,$1,x.service_id,x.price_uzs,coalesce(x.effective_from,now()),$2 FROM jsonb_to_recordset($3::jsonb) AS x(id uuid, service_id uuid, price_uzs bigint, effective_from timestamptz)`,
-  [clinicId, actorId, JSON.stringify(plan.prices.map(p => ({ id: p.id, service_id: p.serviceId, price_uzs: p.priceUzs, effective_from: p.effectiveFrom })))]);
+  if (plan.prices.length) await tx.query(`INSERT INTO service_prices(id,clinic_id,service_id,price_uzs,effective_from,set_by,import_batch_id)
+    SELECT x.id,$1,x.service_id,x.price_uzs,coalesce(x.effective_from,now()),$2,$4 FROM jsonb_to_recordset($3::jsonb) AS x(id uuid, service_id uuid, price_uzs bigint, effective_from timestamptz)`,
+  [clinicId, actorId, JSON.stringify(plan.prices.map(p => ({ id: p.id, service_id: p.serviceId, price_uzs: p.priceUzs, effective_from: p.effectiveFrom }))), batchId]);
 }

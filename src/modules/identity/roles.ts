@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** Clinic roles. Shared by server guards and the web shell; the server is the authority. */
-export const ROLES = ['ceo', 'administrator', 'registrar', 'doctor', 'laboratory', 'cashier', 'inpatient'] as const;
+export const ROLES = ['ceo', 'administrator', 'registrar', 'doctor', 'laboratory', 'cashier', 'inpatient', 'pharmacy'] as const;
 export const Role = z.enum(ROLES);
 export type Role = z.infer<typeof Role>;
 

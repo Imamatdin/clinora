@@ -12,7 +12,7 @@ const pool=makePool(env.DATABASE_URL);
 try {
   const count=await pool.query('SELECT count(*) FROM patients');if(Number(count.rows[0].count)<1)throw new Error('Demo did not persist');
   const roles=(await pool.query("SELECT array_agg(DISTINCT r.role ORDER BY r.role) roles FROM membership_roles r JOIN accounts a ON a.id=r.user_id WHERE a.login LIKE $1",[env.DEMO_LOGIN_PREFIX+'.%'])).rows[0].roles;
-  if(roles.join()!=='administrator,cashier,ceo,doctor,inpatient,laboratory,registrar')throw new Error('Demo must create one user per role');
+  if(roles.join()!=='administrator,cashier,ceo,doctor,inpatient,laboratory,pharmacy,registrar')throw new Error('Demo must create one user per role');
   console.log('Explicit synthetic demo provisioning (one login per role) and repeat migration: PASS');
 }
 finally{await pool.end();}

@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { Login, Phone, Role, type Role as RoleName } from '../modules/identity/roles.js';
+import { Login, Phone, Role, ROLES, type Role as RoleName } from '../modules/identity/roles.js';
 import { Password } from './notebook.js';
 
-const RoleSet = z.array(Role).min(1).max(7).refine(r => new Set(r).size === r.length, 'Duplicate role');
+const RoleSet = z.array(Role).min(1).max(ROLES.length).refine(r => new Set(r).size === r.length, 'Duplicate role');
 export const StaffCreateInput = z.object({
   fullName: z.string().trim().min(1).max(160),
   login: Login,

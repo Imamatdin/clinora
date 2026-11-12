@@ -22,15 +22,16 @@ Format: 8-byte header `1CIBDmpF`, then a raw deflate stream (zlib, wbits -15, fr
 | Справочник.Туман, Справочник.МФЙ | District, mahalla | patient address (C4) |
 | Справочник.КАССА, Справочник.КАССА_СМЕНА | Cash desks, cash shifts | cashier shifts (C5) |
 | Справочник.Расходлар | Expense types | cash out (C5) |
-| Справочник.Дорилар, Справочник.Товары | Medicines, goods | pharmacy stock (C10, to confirm) |
-| Справочник.Каровчи, Справочник.Мумкун | Unknown | ask the clinic |
+| Справочник.Дорилар, Справочник.Товары | Medicines, goods | pharmacy stock (C10) |
+| Справочник.Каровчи | Caretaker: a person who stays with an inpatient (Imamatdin, 12 Nov) | admissions: caretakers per stay and any caretaker charges (C7) |
+| Справочник.Мумкун | Literally "possible"; likely a lookup of allowed values or permissions. Builder inspects its records and reports | to decide after inspection |
 | Документ.КАБУЛ | Reception visit | visits and routing (C4) |
 | Документ.ВрачКуриги | Doctor examination | encounters and notes (C6) |
 | Документ.ЛАБАРАТОРИЯ / Лабаратория | Lab order and result | lab workspace (C6) |
 | Документ.СТАЦИОНАР | Inpatient stay | admissions (C7) |
-| Документ.ХИРУРГИЯ | Surgery (second dump only) | surgery charges (C10, to confirm) |
+| Документ.ХИРУРГИЯ | Surgery (second dump only) | surgery charges (C10) |
 | Документ.КАССА_КИРИМИ / КАССА_ЧИКИМИ | Cash in / cash out | payments, expenses (C5) |
-| Документ.Дори_ДармонПриходи | Medicine stock receipt | pharmacy stock (C10, to confirm) |
+| Документ.Дори_ДармонПриходи | Medicine stock receipt | pharmacy stock (C10) |
 | РегистрНакопления.БЕМОР | Patient balance register | invoice balances (C2, C5) |
 | Отчет.КассаКирими | Cash-in report | day close and cash report (C8) |
 | Roles: КАССИР, Рахбар, ВРАЧЛАР, ЛАБАРАТОРИЯ, КАБУЛ | Cashier, head, doctors, lab, reception | membership roles (C1) |
@@ -39,5 +40,5 @@ Format: 8-byte header `1CIBDmpF`, then a raw deflate stream (zlib, wbits -15, fr
 
 - Service, department and doctor names need three fields: `name_uz_cyrl`, `name_uz_latn`, `name_ru`, plus the 1C code for traceability.
 - Cash out (expenses) and cash shifts are part of today's cashier work and belong in C5.
-- Pharmacy stock and surgery exist in the current system. Confirm with the CEO whether the first clinic needs them on day one (C10).
+- Pharmacy stock and surgery exist in the current system and are needed on day one (decided 12 Nov), so C10 is in the go-live scope.
 - The import feature the CEO asked for ("a clinic uploads its 1C data and the base builds itself") can read this configuration's `.dt` directly. Other clinics running different 1C configurations need their own mapping or an Excel export.

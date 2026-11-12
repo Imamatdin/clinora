@@ -8,6 +8,15 @@ features or inherited security controls. Source references remain under ignored
 is included in the deliverable. No public redistribution license was found in the
 documentation-app checkout; confirm rights before publishing reused code/assets.
 
+Task 002 continuation: the PostgreSQL notebook, migration, security/HTTP handlers,
+workspace and acceptance tests are newly implemented in this repository. No
+upstream runtime, config, migration or UI code was copied. Sound scrypt/session
+patterns from the reviewed reference inform the design without importing its
+proprietary/dental Store or changing its source. Node crypto and PostgreSQL locking
+documentation were consulted: [Node crypto](https://nodejs.org/api/crypto.html),
+[PostgreSQL transaction locks](https://www.postgresql.org/docs/17/explicit-locking.html).
+Source provenance for the task-002 brief itself is in `docs/TRANSFER-002.md`.
+
 ## Inputs verified here
 
 | Input | Identity | Local assessment location |

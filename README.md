@@ -6,46 +6,62 @@ Clinora is a doctor-facing clinical assistant centered on a persistent patient r
 
 ## Current status
 
-Task 001 / increment 0: a runnable React/Vite and Node foundation, shared runtime
-contracts and tested policy primitives. The status screen connects to the real
-health API and clearly labels clinical features as unimplemented. Authentication,
-clinical persistence, recording, approvals, Telegram and integrations are not active.
-This is not a clinical demo or clinically validated product. No upstream app code,
-patient data, secrets or production configuration is included in this core.
+Task 002a replay-authorization corrections are implemented and verified remotely on
+the existing review branch: actual reviewed-module failures, all five corrected
+regressions, full Linux aggregate and Windows compatibility passed. Read
+`docs/HANDOFF-TASK-002a-2026-11-12.md`; earlier task-002 green checks did not cover
+these cases. Planner acceptance and PR merge remain separate decisions.
 
-## Run locally
+Task 002 adds an authenticated, clinic-scoped notebook: permitted-patient search
+and creation, dated encounter history, structured unapproved drafts, PostgreSQL
+persistence, scoped invitations, revision conflicts and safe retries. The original
+foundation and approval policy tests are retained. Clinical approval/export,
+Telegram, audio, AI and patient login remain disabled until their assigned tasks.
+Use synthetic patients only; this is not a clinically validated or deployed product.
 
-Use Node 22.17.1 and npm 11.12.1 (the locally tested versions). No account, environment
-file, database or provider credential is required for increment 0.
+## Run and verify
+
+See **docs/RUN-NOTEBOOK.md** for PostgreSQL 17.9 setup, explicit owner provisioning,
+optional synthetic demo, invitations and a walkthrough. Credentials are chosen by
+the operator; no privileged defaults or role-switch shortcuts exist. Node 22.17.1
+and npm 11.12.1 are retained. The agent uses GitHub-hosted runners for task 002's
+heavy installation/build/PostgreSQL/browser checks to respect the user's RAM limit.
 
 ```powershell
 npm ci
+# Configure a dedicated TEST_DATABASE_URL ending in /clinora_test first.
+npx playwright install --with-deps chromium
 npm run check
-npm start
 ```
 
-Open http://127.0.0.1:3001. `check` runs strict typechecking, 12 policy/contract/HTTP
-tests, both application builds and a separate built-process smoke check. The server
-binds only to loopback and blocks all clinical API paths. Set `PORT` to change its
-port. A future PostgreSQL setting is documented, not consumed, in `.env.example`.
+`check` fails when PostgreSQL test configuration is missing; it does not quietly
+skip database acceptance. It runs typechecking, pure policies, real PostgreSQL/HTTP,
+both builds, compiled smoke and Chromium flows. CI has its own isolated test DB.
+No provider or production credentials are required. `npm run test:unit` alone is
+not complete task-002 verification.
 
-For development, run `npm run dev:server` in one terminal and `npm run dev` in another,
-then open http://127.0.0.1:5173. The default dev proxy expects API port 3001. The Node
-development process serves the API only; the Vite process serves client files.
+The compiled server binds to loopback port 3001 by default. Set DATABASE_URL and
+APP_ORIGIN explicitly before starting it. With no database configured, only the
+foundation health/static interface is available and clinical routes remain closed.
+Development proxy and HTTPS cookie settings are documented in the run guide.
 
 ## Engineering records
 
 - docs/ARCHITECTURE-001.md — runtime, authorization and storage boundaries
+- docs/ARCHITECTURE-002.md — concrete notebook transactions, access and limitations
+- docs/RUN-NOTEBOOK.md — setup, credentials, remote verification and demo
 - docs/REUSE-MANIFEST.md — verified sources, exact hashes and reuse decisions
 - docs/THREAT-MODEL.md — controls, remaining threats and implementation gaps
 - docs/NEXT-INCREMENT.md — proposed patient/timeline increment for planner review
 - docs/HANDOFF-2026-11-11.md — exact outcomes and delivery status
+- docs/HANDOFF-TASK-002-2026-11-11.md — notebook source, remote acceptance results and boundaries
+- docs/HANDOFF-TASK-002a-2026-11-12.md — verified replay correction and before/after evidence
 
-One npm lockfile is authoritative. CI is configured for Windows and Linux without
-production secrets; hosted CI has not run. `src/contracts` is shared, `src/modules`
+One npm lockfile is authoritative. CI runs Linux PostgreSQL/Chromium acceptance
+and separate Windows compatibility checks without production secrets. `src/contracts` is shared, `src/modules`
 is server domain policy/ports, `src/server` is HTTP and `src/web` is the browser.
-`db/migrations/` reserves one future PostgreSQL migration history; there is no
-clinical store or migration runner in this increment.
+`db/migrations/001_notebook.sql` is the single clinical migration history. No
+upstream clinical code, databases or migration chains were copied into the core.
 
 ## Planning pack
 
@@ -54,10 +70,13 @@ clinical store or migration runner in this increment.
 - docs/PRODUCT.md — product definition
 - docs/INCREMENTS.md — delivery sequence
 - docs/STATE-2026-11-11.md — supplied assessment and source references
-- tasks/001-baseline-and-foundation.md — pending foundation assignment
+- tasks/001-baseline-and-foundation.md — completed foundation assignment
+- tasks/002-patient-notebook.md — current notebook assignment
+- docs/DELIVERY-PLAN-002.md — updated six-task scope, including native Telegram dictation later
 - HANDOFF_TEMPLATE.md — implementation handoff format
 - START_HERE.txt — original builder entry instructions
 
 ## Next step
 
-When implementation is requested, begin task 001 by inspecting available sources and the specified upstream commit. Record missing archives and current verification results separately from the supplied assessment. Stop at the increment 0 boundary.
+Task 002 acceptance passed remotely. Review its dated handoff and committed source
+before assigning task 003. Telegram/audio work has not started.

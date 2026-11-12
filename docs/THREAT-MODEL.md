@@ -29,3 +29,26 @@ test suite and security helpers are reuse candidates; adopting them later requir
 new core integration tests. Current closed routes protect an empty foundation, not
 a deployed patient chart. Database isolation, persistence, concurrent approvals,
 duplicate replay and external recovery remain unimplemented and unverified.
+
+## Task 002 update — 11 November 2026
+
+The text above records the increment-0 boundary. Task 002 adds concrete PostgreSQL
+enforcement in `src/server/notebook.ts`, session/password handling in `security.ts`
+and migration `001_notebook.sql`. See `ARCHITECTURE-002.md` and its dated handoff for
+current evidence rather than treating the earlier gaps as still all unimplemented.
+
+New controls include hashed opaque sessions, unprivileged registration, bounded
+asynchronous scrypt checks, exact-Origin/session CSRF checks, deployment-aware secure
+cookies, explicit owner clinical permission, hashed expiring scoped invitations,
+fresh transactional membership/assignment reads, non-disclosing patient denials,
+composite SQL foreign keys, append-only document snapshots, expected-version locks,
+transactional audit/idempotency writes and advisory-lock replay serialization.
+Failed DB operations return generic errors without SQL or clinical-content logging.
+
+Runtime is loopback-only. Release review must still cover reverse proxy/rate-limit
+policy, HTTPS deployment, DB least-privilege roles and backups, email verification,
+credential recovery, professional verification, retention, real clinical evaluation,
+and the later approval/export/audio/Telegram/integration boundaries. PostgreSQL
+credentials in CI are disposable test-service fixtures, not application defaults.
+Browser test credentials are generated in memory. Only synthetic UI screenshots
+are retained; no authentication trace or patient dataset is uploaded.

@@ -1,0 +1,1153 @@
+Remote run: https://github.com/Imamatdin/clinora/actions/runs/43066411569
+Application commit: 2edc59e186aa521655ee471d36f1fca6d2161b67
+Connection fixtures and terminal formatting redacted; commands/results retained.
+
+notebook	Set up job	﻿2026-11-11T17:15:42.3890838Z Current runner version: '2.338.2'
+notebook	Set up job	2026-11-11T17:15:42.3920891Z ##[group]Runner Image Provisioner
+notebook	Set up job	2026-11-11T17:15:42.3921931Z Hosted Compute Agent
+notebook	Set up job	2026-11-11T17:15:42.3922628Z Version: 20261028.624
+notebook	Set up job	2026-11-11T17:15:42.3923574Z Commit: 54898b74c23fde5556c9b3c3a2290865feef0dfe
+notebook	Set up job	2026-11-11T17:15:42.3924727Z Build Date: 2026-10-28T21:51:42Z
+notebook	Set up job	2026-11-11T17:15:42.3925676Z Worker ID: {304f18a3-62b2-4878-91a1-69ad3289f2af}
+notebook	Set up job	2026-11-11T17:15:42.3926591Z Region: eastus2
+notebook	Set up job	2026-11-11T17:15:42.3927319Z Cloud: Azure
+notebook	Set up job	2026-11-11T17:15:42.3928154Z ##[endgroup]
+notebook	Set up job	2026-11-11T17:15:42.3929669Z ##[group]Operating System
+notebook	Set up job	2026-11-11T17:15:42.3930954Z Ubuntu
+notebook	Set up job	2026-11-11T17:15:42.3931679Z 24.04.5
+notebook	Set up job	2026-11-11T17:15:42.3932368Z LTS
+notebook	Set up job	2026-11-11T17:15:42.3933105Z ##[endgroup]
+notebook	Set up job	2026-11-11T17:15:42.3933812Z ##[group]Runner Image
+notebook	Set up job	2026-11-11T17:15:42.3934744Z Image: ubuntu-24.04
+notebook	Set up job	2026-11-11T17:15:42.3935631Z Version: 20261101.360.1
+notebook	Set up job	2026-11-11T17:15:42.3937095Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261101.360/images/ubuntu/Ubuntu2404-Readme.md
+notebook	Set up job	2026-11-11T17:15:42.3939434Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261101.360
+notebook	Set up job	2026-11-11T17:15:42.3940677Z ##[endgroup]
+notebook	Set up job	2026-11-11T17:15:42.3942266Z ##[group]GITHUB_TOKEN Permissions
+notebook	Set up job	2026-11-11T17:15:42.3945020Z Contents: read
+notebook	Set up job	2026-11-11T17:15:42.3945791Z Metadata: read
+notebook	Set up job	2026-11-11T17:15:42.3946669Z ##[endgroup]
+notebook	Set up job	2026-11-11T17:15:42.3948985Z Secret source: Actions
+notebook	Set up job	2026-11-11T17:15:42.3950145Z Cache mode: write
+notebook	Set up job	2026-11-11T17:15:42.3951337Z Prepare workflow directory
+notebook	Set up job	2026-11-11T17:15:42.4429875Z Prepare all required actions
+notebook	Set up job	2026-11-11T17:15:42.4485285Z Getting action download info
+notebook	Set up job	2026-11-11T17:15:42.6554176Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+notebook	Set up job	2026-11-11T17:15:42.7416344Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+notebook	Set up job	2026-11-11T17:15:42.8777897Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+notebook	Set up job	2026-11-11T17:15:43.1426174Z Complete job name: notebook
+notebook	Initialize containers	﻿2026-11-11T17:15:43.1926585Z ##[group]Checking docker version
+notebook	Initialize containers	2026-11-11T17:15:43.1937302Z ##[command]/usr/bin/docker version --format '{{.Server.APIVersion}}'
+notebook	Initialize containers	2026-11-11T17:15:43.2905843Z '1.48'
+notebook	Initialize containers	2026-11-11T17:15:43.2916846Z Docker daemon API version: '1.48'
+notebook	Initialize containers	2026-11-11T17:15:43.2917496Z ##[command]/usr/bin/docker version --format '{{.Client.APIVersion}}'
+notebook	Initialize containers	2026-11-11T17:15:43.3073031Z '1.48'
+notebook	Initialize containers	2026-11-11T17:15:43.3086025Z Docker client API version: '1.48'
+notebook	Initialize containers	2026-11-11T17:15:43.3089990Z ##[endgroup]
+notebook	Initialize containers	2026-11-11T17:15:43.3091933Z ##[group]Clean up resources from previous jobs
+notebook	Initialize containers	2026-11-11T17:15:43.3097015Z ##[command]/usr/bin/docker ps --all --quiet --no-trunc --filter "label=950e80"
+notebook	Initialize containers	2026-11-11T17:15:43.3233158Z ##[command]/usr/bin/docker network prune --force --filter "label=950e80"
+notebook	Initialize containers	2026-11-11T17:15:43.3357925Z ##[endgroup]
+notebook	Initialize containers	2026-11-11T17:15:43.3358368Z ##[group]Create local container network
+notebook	Initialize containers	2026-11-11T17:15:43.3366380Z ##[command]/usr/bin/docker network create --label 950e80 github_network_753f00762f064e09bc9518fa0bb79ece
+notebook	Initialize containers	2026-11-11T17:15:43.3879011Z 8328330d01abc3a40bde2528ea2657fe3dd2626b8d0909f7bf80b313f0177d0a
+notebook	Initialize containers	2026-11-11T17:15:43.3897695Z ##[endgroup]
+notebook	Initialize containers	2026-11-11T17:15:43.3919679Z ##[group]Starting postgres service container
+notebook	Initialize containers	2026-11-11T17:15:43.3938854Z ##[command]/usr/bin/docker pull postgres:17.9
+notebook	Initialize containers	2026-11-11T17:15:43.6995961Z 17.9: Pulling from library/postgres
+notebook	Initialize containers	2026-11-11T17:15:43.7849665Z 57fb71246055: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7855572Z a980c9fcef8c: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7856283Z 9a3a8cff569f: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7856923Z 1d4072181936: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7857516Z 156a40446245: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7858111Z 2f80f30ad7f1: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7858706Z 472ffdecc4a8: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7859188Z 7af37a00632a: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7859626Z f0241e7beec7: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7860045Z 9bd8688dc8e1: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7860789Z 4603be59720a: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7861198Z 06b86868b609: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7861635Z 3d94305211dc: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7862043Z 3cc5adf8351e: Pulling fs layer
+notebook	Initialize containers	2026-11-11T17:15:43.7862483Z 2f80f30ad7f1: Waiting
+notebook	Initialize containers	2026-11-11T17:15:43.7862952Z 472ffdecc4a8: Waiting
+notebook	Initialize containers	2026-11-11T17:15:43.7863327Z 7af37a00632a: Waiting
+notebook	Initialize containers	2026-11-11T17:15:43.7863686Z f0241e7beec7: Waiting
+notebook	Initialize containers	2026-11-11T17:15:43.7864036Z 3d94305211dc: Waiting
+notebook	Initialize containers	2026-11-11T17:15:43.7864581Z 3cc5adf8351e: Waiting
+notebook	Initialize containers	2026-11-11T17:15:43.7864999Z 1d4072181936: Waiting
+notebook	Initialize containers	2026-11-11T17:15:43.7865365Z 06b86868b609: Waiting
+notebook	Initialize containers	2026-11-11T17:15:43.7865731Z 156a40446245: Waiting
+notebook	Initialize containers	2026-11-11T17:15:43.7866088Z 4603be59720a: Waiting
+notebook	Initialize containers	2026-11-11T17:15:43.7866449Z 9bd8688dc8e1: Waiting
+notebook	Initialize containers	2026-11-11T17:15:43.8968819Z a980c9fcef8c: Verifying Checksum
+notebook	Initialize containers	2026-11-11T17:15:43.8969753Z a980c9fcef8c: Download complete
+notebook	Initialize containers	2026-11-11T17:15:43.9423990Z 9a3a8cff569f: Verifying Checksum
+notebook	Initialize containers	2026-11-11T17:15:43.9425897Z 9a3a8cff569f: Download complete
+notebook	Initialize containers	2026-11-11T17:15:43.9745762Z 1d4072181936: Verifying Checksum
+notebook	Initialize containers	2026-11-11T17:15:43.9747249Z 1d4072181936: Download complete
+notebook	Initialize containers	2026-11-11T17:15:43.9966754Z 57fb71246055: Download complete
+notebook	Initialize containers	2026-11-11T17:15:44.0430925Z 156a40446245: Verifying Checksum
+notebook	Initialize containers	2026-11-11T17:15:44.0435382Z 156a40446245: Download complete
+notebook	Initialize containers	2026-11-11T17:15:44.0542152Z 2f80f30ad7f1: Verifying Checksum
+notebook	Initialize containers	2026-11-11T17:15:44.0543158Z 2f80f30ad7f1: Download complete
+notebook	Initialize containers	2026-11-11T17:15:44.0547469Z 472ffdecc4a8: Verifying Checksum
+notebook	Initialize containers	2026-11-11T17:15:44.0548512Z 472ffdecc4a8: Download complete
+notebook	Initialize containers	2026-11-11T17:15:44.0933984Z 7af37a00632a: Verifying Checksum
+notebook	Initialize containers	2026-11-11T17:15:44.0935593Z 7af37a00632a: Download complete
+notebook	Initialize containers	2026-11-11T17:15:44.1020375Z 9bd8688dc8e1: Verifying Checksum
+notebook	Initialize containers	2026-11-11T17:15:44.1023554Z 9bd8688dc8e1: Download complete
+notebook	Initialize containers	2026-11-11T17:15:44.1459319Z 4603be59720a: Download complete
+notebook	Initialize containers	2026-11-11T17:15:44.1547496Z 06b86868b609: Download complete
+notebook	Initialize containers	2026-11-11T17:15:44.1967883Z 3d94305211dc: Verifying Checksum
+notebook	Initialize containers	2026-11-11T17:15:44.1971214Z 3d94305211dc: Download complete
+notebook	Initialize containers	2026-11-11T17:15:44.2096577Z 3cc5adf8351e: Verifying Checksum
+notebook	Initialize containers	2026-11-11T17:15:44.2098078Z 3cc5adf8351e: Download complete
+notebook	Initialize containers	2026-11-11T17:15:44.4386502Z f0241e7beec7: Verifying Checksum
+notebook	Initialize containers	2026-11-11T17:15:44.4387009Z f0241e7beec7: Download complete
+notebook	Initialize containers	2026-11-11T17:15:44.8295209Z 57fb71246055: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:47.1879496Z a980c9fcef8c: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:47.4312356Z 9a3a8cff569f: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:47.5284338Z 1d4072181936: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:47.8973729Z 156a40446245: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:47.9797953Z 2f80f30ad7f1: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:47.9863434Z 472ffdecc4a8: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:47.9955927Z 7af37a00632a: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:51.9154318Z f0241e7beec7: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:51.9285761Z 9bd8688dc8e1: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:51.9356887Z 4603be59720a: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:51.9463778Z 06b86868b609: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:51.9543553Z 3d94305211dc: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:51.9606423Z 3cc5adf8351e: Pull complete
+notebook	Initialize containers	2026-11-11T17:15:51.9635669Z Digest: sha256:2a0d0fe14825b0939f78a8cad5cd4e6aa68bf94d0e5dd96e24b6d23af4315545
+notebook	Initialize containers	2026-11-11T17:15:51.9648314Z Status: Downloaded newer image for postgres:17.9
+notebook	Initialize containers	2026-11-11T17:15:51.9656038Z docker.io/library/postgres:17.9
+notebook	Initialize containers	2026-11-11T17:15:51.9712926Z ##[command]/usr/bin/docker create --name 7708084681744b04b4eab52d2a305cda_postgres179_fda444 --label 950e80 --network github_network_753f00762f064e09bc9518fa0bb79ece --network-alias postgres -p 5432:5432 --health-cmd "pg_isready -U clinora_test -d clinora_test" --health-interval 5s --health-timeout 3s --health-retries 20 -e "POSTGRES_USER=clinora_test" -e "POSTGRES_PASSWORD=[CI fixture redacted]" -e "POSTGRES_DB=clinora_test" -e GITHUB_ACTIONS=true -e CI=true postgres:17.9
+notebook	Initialize containers	2026-11-11T17:15:52.0079956Z 7b6e2e5cd36b9ae3009298f4325d355b73abc7aff111e014bdbe5284810db588
+notebook	Initialize containers	2026-11-11T17:15:52.0101626Z ##[command]/usr/bin/docker start 7b6e2e5cd36b9ae3009298f4325d355b73abc7aff111e014bdbe5284810db588
+notebook	Initialize containers	2026-11-11T17:15:52.3360859Z 7b6e2e5cd36b9ae3009298f4325d355b73abc7aff111e014bdbe5284810db588
+notebook	Initialize containers	2026-11-11T17:15:52.3380022Z ##[command]/usr/bin/docker ps --all --filter id=7b6e2e5cd36b9ae3009298f4325d355b73abc7aff111e014bdbe5284810db588 --filter status=running --no-trunc --format "{{.ID}} {{.Status}}"
+notebook	Initialize containers	2026-11-11T17:15:52.3511067Z 7b6e2e5cd36b9ae3009298f4325d355b73abc7aff111e014bdbe5284810db588 Up Less than a second (health: starting)
+notebook	Initialize containers	2026-11-11T17:15:52.3531393Z ##[command]/usr/bin/docker port 7b6e2e5cd36b9ae3009298f4325d355b73abc7aff111e014bdbe5284810db588
+notebook	Initialize containers	2026-11-11T17:15:52.3662148Z 5432/tcp -> 0.0.0.0:5432
+notebook	Initialize containers	2026-11-11T17:15:52.3662550Z 5432/tcp -> [::]:5432
+notebook	Initialize containers	2026-11-11T17:15:52.3714086Z ##[endgroup]
+notebook	Initialize containers	2026-11-11T17:15:52.3721901Z ##[group]Waiting for all services to be ready
+notebook	Initialize containers	2026-11-11T17:15:52.3734512Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 7b6e2e5cd36b9ae3009298f4325d355b73abc7aff111e014bdbe5284810db588
+notebook	Initialize containers	2026-11-11T17:15:52.3867154Z starting
+notebook	Initialize containers	2026-11-11T17:15:52.3893689Z postgres service is starting, waiting 2 seconds before checking again.
+notebook	Initialize containers	2026-11-11T17:15:54.3889712Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 7b6e2e5cd36b9ae3009298f4325d355b73abc7aff111e014bdbe5284810db588
+notebook	Initialize containers	2026-11-11T17:15:54.4018823Z starting
+notebook	Initialize containers	2026-11-11T17:15:54.4036912Z postgres service is starting, waiting 3 seconds before checking again.
+notebook	Initialize containers	2026-11-11T17:15:58.1758346Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 7b6e2e5cd36b9ae3009298f4325d355b73abc7aff111e014bdbe5284810db588
+notebook	Initialize containers	2026-11-11T17:15:58.1893258Z healthy
+notebook	Initialize containers	2026-11-11T17:15:58.1910735Z postgres service is healthy.
+notebook	Initialize containers	2026-11-11T17:15:58.1911115Z ##[endgroup]
+notebook	Run actions/checkout@v4	﻿2026-11-11T17:15:58.2202349Z ##[group]Run actions/checkout@v4
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2202761Z with:
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2202935Z   repository: Imamatdin/clinora
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2204933Z   token: ***
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2205131Z   ssh-strict: true
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2205305Z   ssh-user: git
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2205472Z   persist-credentials: true
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2205665Z   clean: true
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2205835Z   sparse-checkout-cone-mode: true
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2206042Z   fetch-depth: 1
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2206219Z   fetch-tags: false
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2206388Z   show-progress: true
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2206554Z   lfs: false
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2206707Z   submodules: false
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2206874Z   set-safe-directory: true
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2207106Z   allow-unsafe-pr-checkout: false
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2207446Z env:
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2207832Z   TEST_DATABASE_URL: ***127.0.0.1:5432/clinora_test
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.2208072Z ##[endgroup]
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4261991Z Syncing repository: Imamatdin/clinora
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4263550Z ##[group]Getting Git version info
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4263989Z Working directory is '/home/runner/work/clinora/clinora'
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4264792Z [command]/usr/bin/git version
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4341265Z git version 2.56.0
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4358919Z ##[endgroup]
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4372465Z Temporarily overriding HOME='/home/runner/work/_temp/81bd42aa-cdd0-4323-9a72-0b615d02ee64' before making global git config changes
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4373551Z Adding repository directory to the temporary git global config as a safe directory
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4377869Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/clinora/clinora
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4434574Z Deleting the contents of '/home/runner/work/clinora/clinora'
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4439131Z ##[group]Initializing the repository
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4443585Z [command]/usr/bin/git init /home/runner/work/clinora/clinora
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4644577Z hint: Using 'master' as the name for the initial branch. This default branch name
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4645249Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4645698Z hint: to use in all of your new repositories, which will suppress this warning,
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4646445Z hint: call:
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4646605Z hint:
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4646903Z hint: 	git config --global init.defaultBranch <name>
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4647250Z hint:
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4647487Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4647921Z hint: 'development'. The just-created branch can be renamed via this command:
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4648241Z hint:
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4648408Z hint: 	git branch -m <name>
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4648599Z hint:
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4648925Z hint: Disable this message with "git config set advice.defaultBranchName false"
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4654795Z Initialized empty Git repository in /home/runner/work/clinora/clinora/.git/
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4666624Z [command]/usr/bin/git remote add origin https://github.com/Imamatdin/clinora
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4713927Z ##[endgroup]
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4714561Z ##[group]Disabling automatic garbage collection
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4718310Z [command]/usr/bin/git config --local gc.auto 0
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4756538Z ##[endgroup]
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4756988Z ##[group]Setting up auth
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4764130Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.4801884Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.5130877Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.5168614Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.5408701Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.5447697Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.5655612Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.5698298Z ##[endgroup]
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.5708378Z ##[group]Fetching the repository
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.5709300Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +2edc59e186aa521655ee471d36f1fca6d2161b67:refs/remotes/origin/task-002-patient-notebook
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.7793363Z From https://github.com/Imamatdin/clinora
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.7793936Z  * [new ref]         2edc59e186aa521655ee471d36f1fca6d2161b67 -> origin/task-002-patient-notebook
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.7797929Z ##[endgroup]
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.7798251Z ##[group]Determining the checkout info
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.7800100Z ##[endgroup]
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.7805419Z [command]/usr/bin/git sparse-checkout disable
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.7875076Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.7909482Z ##[group]Checking out the ref
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.7913758Z [command]/usr/bin/git checkout --progress --force -B task-002-patient-notebook refs/remotes/origin/task-002-patient-notebook
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.8009663Z Switched to a new branch 'task-002-patient-notebook'
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.8013757Z branch 'task-002-patient-notebook' set up to track 'origin/task-002-patient-notebook'.
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.8018229Z ##[endgroup]
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.8171795Z [command]/usr/bin/git log -1 --format=%H
+notebook	Run actions/checkout@v4	2026-11-11T17:15:58.8202194Z 2edc59e186aa521655ee471d36f1fca6d2161b67
+notebook	Run actions/setup-node@v4	﻿2026-11-11T17:15:58.8423592Z ##[group]Run actions/setup-node@v4
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.8423828Z with:
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.8424016Z   node-version-file: .nvmrc
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.8424208Z   cache: npm
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.8424564Z   always-auth: false
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.8424790Z   check-latest: false
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.8426559Z   token: ***
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.8426729Z env:
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.8427242Z   TEST_DATABASE_URL: ***127.0.0.1:5432/clinora_test
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.8427478Z ##[endgroup]
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.9546567Z Node version file is not JSON file
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.9547715Z Resolved .nvmrc as 22.17.1
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.9562241Z Attempting to download 22.17.1...
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.9675957Z (node:2535) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:58.9676620Z (Use `node --trace-deprecation ...` to show where the warning was created)
+notebook	Run actions/setup-node@v4	2026-11-11T17:15:59.5506592Z Acquiring 22.17.1 - x64 from https://github.com/actions/node-versions/releases/download/22.17.1-16309770702/node-22.17.1-linux-x64.tar.gz
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:00.0728573Z Extracting ...
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:00.0844208Z [command]/usr/bin/tar xz --strip 1 --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/123e322c-c14a-4d9e-ab6e-d22a5be1a458 -f /home/runner/work/_temp/a126862e-3dc0-48a6-9327-2cd0415685d1
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:01.1034133Z Adding to the cache ...
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:02.9762924Z ##[group]Environment details
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:03.2019057Z node: v22.17.1
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:03.2019397Z npm: 10.9.2
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:03.2019649Z yarn: 1.22.22
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:03.2020211Z ##[endgroup]
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:03.2033512Z [command]/opt/hostedtoolcache/node/22.17.1/x64/bin/npm config get cache
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:03.2778154Z /home/runner/.npm
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:03.3555056Z Cache hit for: node-cache-Linux-x64-npm-f20e2e9ba524b5937461743734dc4b88288900952a481267e250287db8623932
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:03.3615735Z (node:2535) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:03.6169082Z Received 33825365 of 33825365 (100.0%), 144.7 MBs/sec
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:03.6169617Z Cache Size: ~32 MB (33825365 B)
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:03.6269280Z [command]/usr/bin/tar -xf /home/runner/work/_temp/7633be0a-f0a1-4910-89a0-188946ac5122/cache.tzst -P -C /home/runner/work/clinora/clinora --use-compress-program unzstd
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:03.7137761Z Cache restored successfully
+notebook	Run actions/setup-node@v4	2026-11-11T17:16:03.7156035Z Cache restored from key: node-cache-Linux-x64-npm-f20e2e9ba524b5937461743734dc4b88288900952a481267e250287db8623932
+notebook	Run npm install --global npm@11.12.1	﻿2026-11-11T17:16:03.7364963Z ##[group]Run npm install --global npm@11.12.1
+notebook	Run npm install --global npm@11.12.1	2026-11-11T17:16:03.7365306Z ^[[36;1mnpm install --global npm@11.12.1^[[0m
+notebook	Run npm install --global npm@11.12.1	2026-11-11T17:16:03.7388239Z shell: /usr/bin/bash -e {0}
+notebook	Run npm install --global npm@11.12.1	2026-11-11T17:16:03.7388475Z env:
+notebook	Run npm install --global npm@11.12.1	2026-11-11T17:16:03.7388968Z   TEST_DATABASE_URL: ***127.0.0.1:5432/clinora_test
+notebook	Run npm install --global npm@11.12.1	2026-11-11T17:16:03.7389224Z ##[endgroup]
+notebook	Run npm install --global npm@11.12.1	2026-11-11T17:16:05.0882451Z
+notebook	Run npm install --global npm@11.12.1	2026-11-11T17:16:05.0892058Z removed 83 packages, and changed 104 packages in 1s
+notebook	Run npm install --global npm@11.12.1	2026-11-11T17:16:05.0892482Z
+notebook	Run npm install --global npm@11.12.1	2026-11-11T17:16:05.0892737Z 15 packages are looking for funding
+notebook	Run npm install --global npm@11.12.1	2026-11-11T17:16:05.0893135Z   run `npm fund` for details
+notebook	Run npm ci	﻿2026-11-11T17:16:05.1331878Z ##[group]Run npm ci
+notebook	Run npm ci	2026-11-11T17:16:05.1332133Z ^[[36;1mnpm ci^[[0m
+notebook	Run npm ci	2026-11-11T17:16:05.1350129Z shell: /usr/bin/bash -e {0}
+notebook	Run npm ci	2026-11-11T17:16:05.1350355Z env:
+notebook	Run npm ci	2026-11-11T17:16:05.1350832Z   TEST_DATABASE_URL: ***127.0.0.1:5432/clinora_test
+notebook	Run npm ci	2026-11-11T17:16:05.1351283Z ##[endgroup]
+notebook	Run npm ci	2026-11-11T17:16:06.3024087Z
+notebook	Run npm ci	2026-11-11T17:16:06.3025190Z added 49 packages, and audited 50 packages in 1s
+notebook	Run npm ci	2026-11-11T17:16:06.3025570Z
+notebook	Run npm ci	2026-11-11T17:16:06.3025833Z 9 packages are looking for funding
+notebook	Run npm ci	2026-11-11T17:16:06.3026223Z   run `npm fund` for details
+notebook	Run npm ci	2026-11-11T17:16:06.3040720Z
+notebook	Run npm ci	2026-11-11T17:16:06.3041001Z found 0 vulnerabilities
+notebook	Run npm audit --omit=dev --audit-level=high	﻿2026-11-11T17:16:06.3787976Z ##[group]Run npm audit --omit=dev --audit-level=high
+notebook	Run npm audit --omit=dev --audit-level=high	2026-11-11T17:16:06.3788346Z ^[[36;1mnpm audit --omit=dev --audit-level=high^[[0m
+notebook	Run npm audit --omit=dev --audit-level=high	2026-11-11T17:16:06.3806038Z shell: /usr/bin/bash -e {0}
+notebook	Run npm audit --omit=dev --audit-level=high	2026-11-11T17:16:06.3806251Z env:
+notebook	Run npm audit --omit=dev --audit-level=high	2026-11-11T17:16:06.3806786Z   TEST_DATABASE_URL: ***127.0.0.1:5432/clinora_test
+notebook	Run npm audit --omit=dev --audit-level=high	2026-11-11T17:16:06.3807045Z ##[endgroup]
+notebook	Run npm audit --omit=dev --audit-level=high	2026-11-11T17:16:06.7546628Z found 0 vulnerabilities
+notebook	Run npm run typecheck	﻿2026-11-11T17:16:06.7645337Z ##[group]Run npm run typecheck
+notebook	Run npm run typecheck	2026-11-11T17:16:06.7645755Z ^[[36;1mnpm run typecheck^[[0m
+notebook	Run npm run typecheck	2026-11-11T17:16:06.7670621Z shell: /usr/bin/bash -e {0}
+notebook	Run npm run typecheck	2026-11-11T17:16:06.7670958Z env:
+notebook	Run npm run typecheck	2026-11-11T17:16:06.7671630Z   TEST_DATABASE_URL: ***127.0.0.1:5432/clinora_test
+notebook	Run npm run typecheck	2026-11-11T17:16:06.7672019Z ##[endgroup]
+notebook	Run npm run typecheck	2026-11-11T17:16:06.8448848Z
+notebook	Run npm run typecheck	2026-11-11T17:16:06.8449644Z > clinora@0.1.0 typecheck
+notebook	Run npm run typecheck	2026-11-11T17:16:06.8450076Z > tsc --noEmit
+notebook	Run npm run typecheck	2026-11-11T17:16:06.8450246Z
+notebook	Run npx playwright install --with-deps chromium	﻿2026-11-11T17:16:09.4135472Z ##[group]Run npx playwright install --with-deps chromium
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:09.4135851Z ^[[36;1mnpx playwright install --with-deps chromium^[[0m
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:09.4153180Z shell: /usr/bin/bash -e {0}
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:09.4153403Z env:
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:09.4153998Z   TEST_DATABASE_URL: ***127.0.0.1:5432/clinora_test
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:09.4154256Z ##[endgroup]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:09.9936660Z Installing dependencies...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.0004509Z Switching to root user to install dependencies...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.0845136Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.1135509Z Get:6 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease [3600 B]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.1222578Z Hit:2 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.1233305Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.1272812Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.1282223Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.1892268Z Get:7 https://packages.microsoft.com/ubuntu/24.04/prod noble/main amd64 Packages [764 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.2234662Z Get:8 https://packages.microsoft.com/ubuntu/24.04/prod noble/main arm64 Packages [693 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.2300249Z Get:9 https://packages.microsoft.com/ubuntu/24.04/prod noble/main armhf Packages [12.6 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.2885547Z Get:10 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1444 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.2950132Z Get:11 http://azure.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [315 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.2965454Z Get:12 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1711 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.3024578Z Get:13 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [344 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.3044565Z Get:14 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [1879 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.3135480Z Get:15 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [429 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.3175445Z Get:16 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Packages [50.7 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.3185450Z Get:17 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse Translation-en [14.3 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.3865059Z Get:18 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Packages [1160 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.3913456Z Get:19 http://azure.archive.ubuntu.com/ubuntu noble-security/main Translation-en [234 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.4369793Z Get:20 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1228 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.4416240Z Get:21 http://azure.archive.ubuntu.com/ubuntu noble-security/universe Translation-en [248 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.4467347Z Get:22 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [1729 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.4515765Z Get:23 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted Translation-en [396 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.4536095Z Get:24 http://azure.archive.ubuntu.com/ubuntu noble-security/multiverse amd64 Packages [45.4 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:10.4545776Z Get:25 http://azure.archive.ubuntu.com/ubuntu noble-security/multiverse Translation-en [12.4 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:14.1870593Z Fetched 13.1 MB in 1s (11.6 MB/s)
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.1326829Z Reading package lists...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.1600846Z Reading package lists...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.3715211Z Building dependency tree...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.3721409Z Reading state information...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5130411Z libasound2t64 is already the newest version (1.2.11-1ubuntu0.3).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5131118Z libasound2t64 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5131820Z libatk-bridge2.0-0t64 is already the newest version (2.52.0-1build1).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5132440Z libatk-bridge2.0-0t64 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5133000Z libatk1.0-0t64 is already the newest version (2.52.0-1build1).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5134267Z libatk1.0-0t64 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5134987Z libatspi2.0-0t64 is already the newest version (2.52.0-1build1).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5135476Z libatspi2.0-0t64 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5135954Z libcairo2 is already the newest version (1.18.0-3build1).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5136400Z libcairo2 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5136886Z libcups2t64 is already the newest version (2.4.7-1.2ubuntu7.14).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5137364Z libcups2t64 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5137809Z libdbus-1-3 is already the newest version (1.14.10-4ubuntu4.1).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5138233Z libdbus-1-3 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5138574Z libdrm2 is already the newest version (2.4.125-1ubuntu0.1~24.04.2).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5138893Z libdrm2 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5139209Z libgbm1 is already the newest version (25.2.8-0ubuntu0.24.04.4).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5139536Z libgbm1 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5140015Z libglib2.0-0t64 is already the newest version (2.80.0-6ubuntu3.10).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5140396Z libglib2.0-0t64 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5140741Z libnspr4 is already the newest version (2:4.35-1.1build1).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5141049Z libnspr4 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5141455Z libnss3 is already the newest version (2:3.98-1ubuntu0.3).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5141840Z libnss3 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5142213Z libpango-1.0-0 is already the newest version (1.52.1+ds-1build1).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5142560Z libpango-1.0-0 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5142889Z libx11-6 is already the newest version (2:1.8.7-1ubuntu0.1).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5143198Z libx11-6 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5143489Z libxcb1 is already the newest version (1.15-1ubuntu2).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5143769Z libxcb1 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5144097Z libxcomposite1 is already the newest version (1:0.4.5-1build3).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5144585Z libxcomposite1 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5144934Z libxdamage1 is already the newest version (1:1.1.6-1build1).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5145248Z libxdamage1 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5145674Z libxext6 is already the newest version (2:1.3.4-1build2).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5146080Z libxext6 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5146528Z libxfixes3 is already the newest version (1:6.0.0-2build1).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5146974Z libxfixes3 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5147447Z libxkbcommon0 is already the newest version (1.6.0-1build1).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5147897Z libxkbcommon0 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5148351Z libxrandr2 is already the newest version (2:1.5.2-2build1).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5148655Z libxrandr2 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5148963Z xvfb is already the newest version (2:21.1.12-1ubuntu1.9).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5149547Z fonts-noto-color-emoji is already the newest version (2.047-0ubuntu0.24.04.1).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5150242Z libfontconfig1 is already the newest version (2.15.0-1.1ubuntu2).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5150741Z libfontconfig1 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5151143Z libfreetype6 is already the newest version (2.13.2+dfsg-1ubuntu0.2).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5151476Z libfreetype6 set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5151802Z fonts-liberation is already the newest version (1:2.1.5-3).
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5152318Z fonts-liberation set to manually installed.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5152808Z The following additional packages will be installed:
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5153236Z   xfonts-encodings xfonts-utils
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5153615Z Recommended packages:
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5153968Z   fonts-ipafont-mincho fonts-tlwg-loma
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5345571Z The following NEW packages will be installed:
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5346427Z   fonts-freefont-ttf fonts-ipafont-gothic fonts-tlwg-loma-otf fonts-unifont
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5354866Z   fonts-wqy-zenhei xfonts-cyrillic xfonts-encodings xfonts-scalable
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5355336Z   xfonts-utils
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5552509Z 0 upgraded, 9 newly installed, 0 to remove and 40 not upgraded.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5552981Z Need to get 21.1 MB of archives.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5553506Z After this operation, 79.5 MB of additional disk space will be used.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5554134Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.5980079Z Get:2 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-ipafont-gothic all 00303-21ubuntu1 [3513 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.6347612Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 fonts-freefont-ttf all 20211204+svn4273-2 [5641 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.6927890Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-tlwg-loma-otf all 1:0.7.3-1 [107 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.7107013Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-unifont all 1:15.1.01-1build1 [2993 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.7429953Z Get:6 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-wqy-zenhei all 0.9.45-8 [7472 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.8007154Z Get:7 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-encodings all 1:1.0.5-0ubuntu2 [578 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.8210469Z Get:8 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-utils amd64 1:7.7+6build3 [94.4 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.8390006Z Get:9 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 xfonts-cyrillic all 1:1.0.5+nmu1 [384 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:15.8588295Z Get:10 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-scalable all 1:1.0.3-1.3 [304 kB]
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1010658Z Fetched 21.1 MB in 0s (66.6 MB/s)
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1357645Z Selecting previously unselected package fonts-ipafont-gothic.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1630895Z (Reading database ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1631248Z (Reading database ... 5%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1631573Z (Reading database ... 10%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1631815Z (Reading database ... 15%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1632032Z (Reading database ... 20%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1632233Z (Reading database ... 25%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1632438Z (Reading database ... 30%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1632635Z (Reading database ... 35%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1632835Z (Reading database ... 40%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1633033Z (Reading database ... 45%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1633225Z (Reading database ... 50%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.1671630Z (Reading database ... 55%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.3292318Z (Reading database ... 60%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.4899210Z (Reading database ... 65%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.6935302Z (Reading database ... 70%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.9006191Z (Reading database ... 75%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:16.9905020Z (Reading database ... 80%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.1349323Z (Reading database ... 85%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.2660837Z (Reading database ... 90%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.3530228Z (Reading database ... 95%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.3530586Z (Reading database ... 100%
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.3530949Z (Reading database ... 215960 files and directories currently installed.)
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.3576789Z Preparing to unpack .../0-fonts-ipafont-gothic_00303-21ubuntu1_all.deb ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.3709369Z Unpacking fonts-ipafont-gothic (00303-21ubuntu1) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.6187646Z Selecting previously unselected package fonts-freefont-ttf.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.6311915Z Preparing to unpack .../1-fonts-freefont-ttf_20211204+svn4273-2_all.deb ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.6317914Z Unpacking fonts-freefont-ttf (20211204+svn4273-2) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.7520172Z Selecting previously unselected package fonts-tlwg-loma-otf.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.7645709Z Preparing to unpack .../2-fonts-tlwg-loma-otf_1%3a0.7.3-1_all.deb ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.7654731Z Unpacking fonts-tlwg-loma-otf (1:0.7.3-1) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.7879037Z Selecting previously unselected package fonts-unifont.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.8008744Z Preparing to unpack .../3-fonts-unifont_1%3a15.1.01-1build1_all.deb ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:17.8176105Z Unpacking fonts-unifont (1:15.1.01-1build1) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.0177223Z Selecting previously unselected package fonts-wqy-zenhei.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.0304163Z Preparing to unpack .../4-fonts-wqy-zenhei_0.9.45-8_all.deb ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.0404554Z Unpacking fonts-wqy-zenhei (0.9.45-8) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.5135821Z Selecting previously unselected package xfonts-encodings.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.5261491Z Preparing to unpack .../5-xfonts-encodings_1%3a1.0.5-0ubuntu2_all.deb ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.5268754Z Unpacking xfonts-encodings (1:1.0.5-0ubuntu2) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.5547162Z Selecting previously unselected package xfonts-utils.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.5676205Z Preparing to unpack .../6-xfonts-utils_1%3a7.7+6build3_amd64.deb ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.5683766Z Unpacking xfonts-utils (1:7.7+6build3) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.6124618Z Selecting previously unselected package xfonts-cyrillic.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.6255641Z Preparing to unpack .../7-xfonts-cyrillic_1%3a1.0.5+nmu1_all.deb ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.6380630Z Unpacking xfonts-cyrillic (1:1.0.5+nmu1) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.6700773Z Selecting previously unselected package xfonts-scalable.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.6830163Z Preparing to unpack .../8-xfonts-scalable_1%3a1.0.3-1.3_all.deb ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.6839652Z Unpacking xfonts-scalable (1:1.0.3-1.3) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.7498050Z Setting up fonts-wqy-zenhei (0.9.45-8) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.7610076Z Setting up fonts-freefont-ttf (20211204+svn4273-2) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.7627462Z Setting up fonts-tlwg-loma-otf (1:0.7.3-1) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.7651304Z Setting up xfonts-encodings (1:1.0.5-0ubuntu2) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.7669050Z Setting up fonts-ipafont-gothic (00303-21ubuntu1) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.7730491Z update-alternatives: using /usr/share/fonts/opentype/ipafont-gothic/ipag.ttf to provide /usr/share/fonts/truetype/fonts-japanese-gothic.ttf (fonts-japanese-gothic.ttf) in auto mode
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.7770562Z Setting up fonts-unifont (1:15.1.01-1build1) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.7815325Z Setting up xfonts-utils (1:7.7+6build3) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.7854306Z Setting up xfonts-cyrillic (1:1.0.5+nmu1) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.8113407Z Setting up xfonts-scalable (1:1.0.3-1.3) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.8371628Z Processing triggers for man-db (2.12.0-4build2) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.8390095Z Not building database; man-db/auto-update is not 'true'.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:18.8402972Z Processing triggers for fontconfig (2.15.0-1.1ubuntu2) ...
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:19.5005934Z
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:19.5006642Z Running kernel seems to be up-to-date.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:19.5007005Z
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:19.5007134Z No services need to be restarted.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:19.5007298Z
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:19.5007425Z No containers need to be restarted.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:19.5007572Z
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:19.5007720Z No user sessions are running outdated binaries.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:19.5007899Z
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:19.5008131Z No VM guests are running outdated hypervisor (qemu) binaries on this host.
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:20.6509683Z Downloading Chrome for Testing 158.0.8127.18 (playwright chromium v1254) from https://cdn.playwright.dev/builds/cft/158.0.8127.18/linux64/chrome-linux64.zip
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:20.9802043Z |                                                                                |   0% of 197.8 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:21.1739547Z |■■■■■■■■                                                                        |  10% of 197.8 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:21.2689966Z |■■■■■■■■■■■■■■■■                                                                |  20% of 197.8 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:21.3670300Z |■■■■■■■■■■■■■■■■■■■■■■■■                                                        |  30% of 197.8 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:21.4523101Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                                |  40% of 197.8 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:21.5299147Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                        |  50% of 197.8 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:21.6078817Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                |  60% of 197.8 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:21.6998579Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                        |  70% of 197.8 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:21.7869237Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                |  80% of 197.8 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:21.8567006Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■        |  90% of 197.8 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:21.9215063Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■| 100% of 197.8 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.0190738Z Chrome for Testing 158.0.8127.18 (playwright chromium v1254) downloaded to /home/runner/.cache/ms-playwright/chromium-1254
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.0193638Z Downloading FFmpeg (playwright ffmpeg v1013) from https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1013/ffmpeg-linux.zip
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.3435743Z |                                                                                |   0% of 2.2 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.3556203Z |■■■■■■■■                                                                        |  10% of 2.2 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.3614277Z |■■■■■■■■■■■■■■■■                                                                |  20% of 2.2 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.3640911Z |■■■■■■■■■■■■■■■■■■■■■■■■                                                        |  30% of 2.2 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.3725090Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                                |  40% of 2.2 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.3761974Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                        |  50% of 2.2 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.3789446Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                |  60% of 2.2 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.3859518Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                        |  70% of 2.2 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.3874926Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                |  80% of 2.2 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.3888796Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■        |  90% of 2.2 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.3896729Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■| 100% of 2.2 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.4350941Z FFmpeg (playwright ffmpeg v1013) downloaded to /home/runner/.cache/ms-playwright/ffmpeg-1013
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.4353476Z Downloading Chrome Headless Shell 158.0.8127.18 (playwright chromium-headless-shell v1254) from https://cdn.playwright.dev/builds/cft/158.0.8127.18/linux64/chrome-headless-shell-linux64.zip
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.7722653Z |                                                                                |   0% of 125.9 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.8928820Z |■■■■■■■■                                                                        |  10% of 125.9 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.9421817Z |■■■■■■■■■■■■■■■■                                                                |  20% of 125.9 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:24.9907987Z |■■■■■■■■■■■■■■■■■■■■■■■■                                                        |  30% of 125.9 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:25.0307569Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                                |  40% of 125.9 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:25.0667642Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                        |  50% of 125.9 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:25.1081820Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                |  60% of 125.9 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:25.1605955Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                        |  70% of 125.9 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:25.2121134Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                |  80% of 125.9 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:25.2638665Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■        |  90% of 125.9 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:25.3156032Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■| 100% of 125.9 MiB
+notebook	Run npx playwright install --with-deps chromium	2026-11-11T17:16:26.8846984Z Chrome Headless Shell 158.0.8127.18 (playwright chromium-headless-shell v1254) downloaded to /home/runner/.cache/ms-playwright/chromium_headless_shell-1254
+notebook	Run npm run check	﻿2026-11-11T17:16:26.9059107Z ##[group]Run npm run check
+notebook	Run npm run check	2026-11-11T17:16:26.9059496Z ^[[36;1mnpm run check^[[0m
+notebook	Run npm run check	2026-11-11T17:16:26.9084063Z shell: /usr/bin/bash -e {0}
+notebook	Run npm run check	2026-11-11T17:16:26.9084648Z env:
+notebook	Run npm run check	2026-11-11T17:16:26.9085318Z   TEST_DATABASE_URL: ***127.0.0.1:5432/clinora_test
+notebook	Run npm run check	2026-11-11T17:16:26.9085711Z ##[endgroup]
+notebook	Run npm run check	2026-11-11T17:16:26.9915606Z
+notebook	Run npm run check	2026-11-11T17:16:26.9916213Z > clinora@0.1.0 check
+notebook	Run npm run check	2026-11-11T17:16:26.9916814Z > npm run typecheck && npm test && npm run build && npm run test:built && npm run test:browser
+notebook	Run npm run check	2026-11-11T17:16:26.9917096Z
+notebook	Run npm run check	2026-11-11T17:16:27.0710083Z
+notebook	Run npm run check	2026-11-11T17:16:27.0710749Z > clinora@0.1.0 typecheck
+notebook	Run npm run check	2026-11-11T17:16:27.0711102Z > tsc --noEmit
+notebook	Run npm run check	2026-11-11T17:16:27.0711216Z
+notebook	Run npm run check	2026-11-11T17:16:29.7057361Z
+notebook	Run npm run check	2026-11-11T17:16:29.7058257Z > clinora@0.1.0 test
+notebook	Run npm run check	2026-11-11T17:16:29.7058793Z > npm run test:unit && npm run test:integration
+notebook	Run npm run check	2026-11-11T17:16:29.7059060Z
+notebook	Run npm run check	2026-11-11T17:16:29.7839188Z
+notebook	Run npm run check	2026-11-11T17:16:29.7840000Z > clinora@0.1.0 test:unit
+notebook	Run npm run check	2026-11-11T17:16:29.7853190Z > node --import tsx --test tests/*.test.ts
+notebook	Run npm run check	2026-11-11T17:16:29.7853568Z
+notebook	Run npm run check	2026-11-11T17:16:29.8255101Z TAP version 13
+notebook	Run npm run check	2026-11-11T17:16:30.2286335Z # Subtest: registration rejects self-granted doctor, clinic, verification and Telegram claims
+notebook	Run npm run check	2026-11-11T17:16:30.2315817Z ok 1 - registration rejects self-granted doctor, clinic, verification and Telegram claims
+notebook	Run npm run check	2026-11-11T17:16:30.2316688Z   ---
+notebook	Run npm run check	2026-11-11T17:16:30.2331555Z   duration_ms: 3.316856
+notebook	Run npm run check	2026-11-11T17:16:30.2332059Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:30.2332455Z   ...
+notebook	Run npm run check	2026-11-11T17:16:30.2333157Z # Subtest: only an active server-authorized clinician can access the permitted clinic
+notebook	Run npm run check	2026-11-11T17:16:30.2345553Z ok 2 - only an active server-authorized clinician can access the permitted clinic
+notebook	Run npm run check	2026-11-11T17:16:30.2388689Z   ---
+notebook	Run npm run check	2026-11-11T17:16:30.2389316Z   duration_ms: 5.446088
+notebook	Run npm run check	2026-11-11T17:16:30.2389743Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:30.2390133Z   ...
+notebook	Run npm run check	2026-11-11T17:16:30.2390882Z # Subtest: patient restrictions and revocation take effect on the next policy invocation
+notebook	Run npm run check	2026-11-11T17:16:30.2391880Z ok 3 - patient restrictions and revocation take effect on the next policy invocation
+notebook	Run npm run check	2026-11-11T17:16:30.2392516Z   ---
+notebook	Run npm run check	2026-11-11T17:16:30.2392884Z   duration_ms: 1.167905
+notebook	Run npm run check	2026-11-11T17:16:30.2393281Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:30.2393654Z   ...
+notebook	Run npm run check	2026-11-11T17:16:30.2394300Z # Subtest: a valid Telegram identity link cannot substitute for a clinical membership
+notebook	Run npm run check	2026-11-11T17:16:30.2395363Z ok 4 - a valid Telegram identity link cannot substitute for a clinical membership
+notebook	Run npm run check	2026-11-11T17:16:30.2396099Z   ---
+notebook	Run npm run check	2026-11-11T17:16:30.2404968Z   duration_ms: 0.931051
+notebook	Run npm run check	2026-11-11T17:16:30.2405267Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:30.2405522Z   ...
+notebook	Run npm run check	2026-11-11T17:16:30.2973136Z # Subtest: approval requires the current reviewed version and explicit eligible actor
+notebook	Run npm run check	2026-11-11T17:16:30.2985470Z ok 5 - approval requires the current reviewed version and explicit eligible actor
+notebook	Run npm run check	2026-11-11T17:16:30.2986305Z   ---
+notebook	Run npm run check	2026-11-11T17:16:30.2986831Z   duration_ms: 10.940097
+notebook	Run npm run check	2026-11-11T17:16:30.2987324Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:30.2987756Z   ...
+notebook	Run npm run check	2026-11-11T17:16:30.2988584Z # Subtest: export rejects mismatched approvals, stale content and revoked access
+notebook	Run npm run check	2026-11-11T17:16:30.2989786Z ok 6 - export rejects mismatched approvals, stale content and revoked access
+notebook	Run npm run check	2026-11-11T17:16:30.2990719Z   ---
+notebook	Run npm run check	2026-11-11T17:16:30.2991117Z   duration_ms: 2.641257
+notebook	Run npm run check	2026-11-11T17:16:30.2991698Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:30.2992241Z   ...
+notebook	Run npm run check	2026-11-11T17:16:30.3437765Z # Subtest: uncertain writes cannot be blindly dispatched again and success needs acknowledgement
+notebook	Run npm run check	2026-11-11T17:16:30.3501751Z ok 7 - uncertain writes cannot be blindly dispatched again and success needs acknowledgement
+notebook	Run npm run check	2026-11-11T17:16:30.3525409Z   ---
+notebook	Run npm run check	2026-11-11T17:16:30.3555289Z   duration_ms: 7.559525
+notebook	Run npm run check	2026-11-11T17:16:30.3556122Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:30.3595312Z   ...
+notebook	Run npm run check	2026-11-11T17:16:30.7256373Z # Subtest: retrospective and date-only occurrence survive independently of entry time
+notebook	Run npm run check	2026-11-11T17:16:30.7273617Z ok 8 - retrospective and date-only occurrence survive independently of entry time
+notebook	Run npm run check	2026-11-11T17:16:30.7295054Z   ---
+notebook	Run npm run check	2026-11-11T17:16:30.7295455Z   duration_ms: 23.144694
+notebook	Run npm run check	2026-11-11T17:16:30.7295869Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:30.7296211Z   ...
+notebook	Run npm run check	2026-11-11T17:16:30.7296846Z # Subtest: missing clinical values remain unknown and AI proposals need revisioned evidence
+notebook	Run npm run check	2026-11-11T17:16:30.7297825Z ok 9 - missing clinical values remain unknown and AI proposals need revisioned evidence
+notebook	Run npm run check	2026-11-11T17:16:30.7355144Z   ---
+notebook	Run npm run check	2026-11-11T17:16:30.7375212Z   duration_ms: 2.648788
+notebook	Run npm run check	2026-11-11T17:16:30.7376017Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:30.7376756Z   ...
+notebook	Run npm run check	2026-11-11T17:16:30.7377624Z # Subtest: transcript coordinates cannot reverse and amendments require provenance
+notebook	Run npm run check	2026-11-11T17:16:30.7378932Z ok 10 - transcript coordinates cannot reverse and amendments require provenance
+notebook	Run npm run check	2026-11-11T17:16:30.7379761Z   ---
+notebook	Run npm run check	2026-11-11T17:16:30.7380109Z   duration_ms: 2.866283
+notebook	Run npm run check	2026-11-11T17:16:30.7380502Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:30.7380873Z   ...
+notebook	Run npm run check	2026-11-11T17:16:30.7381557Z # Subtest: patient account linking requires explicit proof, not a name or telephone
+notebook	Run npm run check	2026-11-11T17:16:30.7382516Z ok 11 - patient account linking requires explicit proof, not a name or telephone
+notebook	Run npm run check	2026-11-11T17:16:30.7383157Z   ---
+notebook	Run npm run check	2026-11-11T17:16:30.7383523Z   duration_ms: 0.941988
+notebook	Run npm run check	2026-11-11T17:16:30.7383938Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:30.7384322Z   ...
+notebook	Run npm run check	2026-11-11T17:16:30.8208869Z # Subtest: real HTTP health works; claimed roles and bearer tokens cannot open clinical endpoints
+notebook	Run npm run check	2026-11-11T17:16:30.8210604Z ok 12 - real HTTP health works; claimed roles and bearer tokens cannot open clinical endpoints
+notebook	Run npm run check	2026-11-11T17:16:30.8211271Z   ---
+notebook	Run npm run check	2026-11-11T17:16:30.8211531Z   duration_ms: 45.475681
+notebook	Run npm run check	2026-11-11T17:16:30.8211894Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:30.8212240Z   ...
+notebook	Run npm run check	2026-11-11T17:16:30.8571886Z # Subtest: timeline uses elapsed time across offsets, preserves date-only precision and places unknown dates last
+notebook	Run npm run check	2026-11-11T17:16:30.8573052Z ok 13 - timeline uses elapsed time across offsets, preserves date-only precision and places unknown dates last
+notebook	Run npm run check	2026-11-11T17:16:30.8573745Z   ---
+notebook	Run npm run check	2026-11-11T17:16:30.8574015Z   duration_ms: 10.709753
+notebook	Run npm run check	2026-11-11T17:16:30.8574305Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:30.8574672Z   ...
+notebook	Run npm run check	2026-11-11T17:16:30.8574909Z 1..13
+notebook	Run npm run check	2026-11-11T17:16:30.8575131Z # tests 13
+notebook	Run npm run check	2026-11-11T17:16:30.8575355Z # suites 0
+notebook	Run npm run check	2026-11-11T17:16:30.8575586Z # pass 13
+notebook	Run npm run check	2026-11-11T17:16:30.8575805Z # fail 0
+notebook	Run npm run check	2026-11-11T17:16:30.8576035Z # cancelled 0
+notebook	Run npm run check	2026-11-11T17:16:30.8576274Z # skipped 0
+notebook	Run npm run check	2026-11-11T17:16:30.8576514Z # todo 0
+notebook	Run npm run check	2026-11-11T17:16:30.8576763Z # duration_ms 1048.118319
+notebook	Run npm run check	2026-11-11T17:16:30.9405211Z
+notebook	Run npm run check	2026-11-11T17:16:30.9405713Z > clinora@0.1.0 test:integration
+notebook	Run npm run check	2026-11-11T17:16:30.9406202Z > node --import tsx --test tests/integration/*.test.ts
+notebook	Run npm run check	2026-11-11T17:16:30.9406507Z
+notebook	Run npm run check	2026-11-11T17:16:30.9786188Z TAP version 13
+notebook	Run npm run check	2026-11-11T17:16:31.9202687Z # Subtest: fresh migration repeat, explicit ownership, invitation scope/expiry/single use and pending registration
+notebook	Run npm run check	2026-11-11T17:16:31.9207112Z ok 1 - fresh migration repeat, explicit ownership, invitation scope/expiry/single use and pending registration
+notebook	Run npm run check	2026-11-11T17:16:31.9207852Z   ---
+notebook	Run npm run check	2026-11-11T17:16:31.9208110Z   duration_ms: 531.128477
+notebook	Run npm run check	2026-11-11T17:16:31.9208414Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:31.9208651Z   ...
+notebook	Run npm run check	2026-11-11T17:16:33.1524670Z # Subtest: HTTP session hashes, CSRF, unsupported bearer, logout/expiry, blocked and revoked access
+notebook	Run npm run check	2026-11-11T17:16:33.1526130Z ok 2 - HTTP session hashes, CSRF, unsupported bearer, logout/expiry, blocked and revoked access
+notebook	Run npm run check	2026-11-11T17:16:33.1528590Z   ---
+notebook	Run npm run check	2026-11-11T17:16:33.1528990Z   duration_ms: 1232.163458
+notebook	Run npm run check	2026-11-11T17:16:33.1529297Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:33.1529541Z   ...
+notebook	Run npm run check	2026-11-11T17:16:34.8968857Z # Subtest: patient and clinic isolation, duplicate names, unique clinic MRN and DB composite references
+notebook	Run npm run check	2026-11-11T17:16:34.8970278Z ok 3 - patient and clinic isolation, duplicate names, unique clinic MRN and DB composite references
+notebook	Run npm run check	2026-11-11T17:16:34.8971234Z   ---
+notebook	Run npm run check	2026-11-11T17:16:34.8971724Z   duration_ms: 1744.473727
+notebook	Run npm run check	2026-11-11T17:16:34.8972463Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:34.8972716Z   ...
+notebook	Run npm run check	2026-11-11T17:16:36.3405281Z # Subtest: concurrent idempotency, changed-payload conflicts, actor scope and retry after lost response
+notebook	Run npm run check	2026-11-11T17:16:36.3406611Z ok 4 - concurrent idempotency, changed-payload conflicts, actor scope and retry after lost response
+notebook	Run npm run check	2026-11-11T17:16:36.3407197Z   ---
+notebook	Run npm run check	2026-11-11T17:16:36.3407498Z   duration_ms: 1442.810121
+notebook	Run npm run check	2026-11-11T17:16:36.3407791Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:36.3408032Z   ...
+notebook	Run npm run check	2026-11-11T17:16:36.6359880Z # Subtest: versioned drafts persist across server restart; concurrent edits conflict and approval forgery is rejected
+notebook	Run npm run check	2026-11-11T17:16:36.6361444Z ok 5 - versioned drafts persist across server restart; concurrent edits conflict and approval forgery is rejected
+notebook	Run npm run check	2026-11-11T17:16:36.6362479Z   ---
+notebook	Run npm run check	2026-11-11T17:16:36.6362938Z   duration_ms: 296.495544
+notebook	Run npm run check	2026-11-11T17:16:36.6363695Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:36.6364077Z   ...
+notebook	Run npm run check	2026-11-11T17:16:36.8367861Z # Subtest: timeline preserves visit-specific dates, clinicians, location and unapproved historical assessment
+notebook	Run npm run check	2026-11-11T17:16:36.8369600Z ok 6 - timeline preserves visit-specific dates, clinicians, location and unapproved historical assessment
+notebook	Run npm run check	2026-11-11T17:16:36.8370030Z   ---
+notebook	Run npm run check	2026-11-11T17:16:36.8370219Z   duration_ms: 199.931647
+notebook	Run npm run check	2026-11-11T17:16:36.8370426Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:36.8370935Z   ...
+notebook	Run npm run check	2026-11-11T17:16:37.0189621Z # Subtest: transaction failure rolls back draft, current version, idempotency result and audit; unavailable DB returns 503
+notebook	Run npm run check	2026-11-11T17:16:37.0190859Z ok 7 - transaction failure rolls back draft, current version, idempotency result and audit; unavailable DB returns 503
+notebook	Run npm run check	2026-11-11T17:16:37.0191517Z   ---
+notebook	Run npm run check	2026-11-11T17:16:37.0191769Z   duration_ms: 183.564091
+notebook	Run npm run check	2026-11-11T17:16:37.0192051Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:37.0192298Z   ...
+notebook	Run npm run check	2026-11-11T17:16:37.0469568Z # Subtest: failed patient and encounter transactions cannot leave orphan assignments, documents or replay results
+notebook	Run npm run check	2026-11-11T17:16:37.0470836Z ok 8 - failed patient and encounter transactions cannot leave orphan assignments, documents or replay results
+notebook	Run npm run check	2026-11-11T17:16:37.0471467Z   ---
+notebook	Run npm run check	2026-11-11T17:16:37.0471714Z   duration_ms: 368.656709
+notebook	Run npm run check	2026-11-11T17:16:37.0471990Z   type: 'test'
+notebook	Run npm run check	2026-11-11T17:16:37.0472253Z   ...
+notebook	Run npm run check	2026-11-11T17:16:37.0472483Z 1..8
+notebook	Run npm run check	2026-11-11T17:16:37.0472715Z # tests 8
+notebook	Run npm run check	2026-11-11T17:16:37.0472969Z # suites 0
+notebook	Run npm run check	2026-11-11T17:16:37.0473234Z # pass 8
+notebook	Run npm run check	2026-11-11T17:16:37.0473472Z # fail 0
+notebook	Run npm run check	2026-11-11T17:16:37.0473709Z # cancelled 0
+notebook	Run npm run check	2026-11-11T17:16:37.0473972Z # skipped 0
+notebook	Run npm run check	2026-11-11T17:16:37.0474552Z # todo 0
+notebook	Run npm run check	2026-11-11T17:16:37.0475012Z # duration_ms 6081.232496
+notebook	Run npm run check	2026-11-11T17:16:37.1376599Z
+notebook	Run npm run check	2026-11-11T17:16:37.1377297Z > clinora@0.1.0 build
+notebook	Run npm run check	2026-11-11T17:16:37.1377813Z > tsc -p tsconfig.server.json && vite build
+notebook	Run npm run check	2026-11-11T17:16:37.1378087Z
+notebook	Run npm run check	2026-11-11T17:16:39.1730313Z ^[[36mvite v8.3.8 ^[[32mbuilding client environment for production...^[[36m^[[39m
+notebook	Run npm run check	2026-11-11T17:16:39.1832932Z transforming...
+notebook	Run npm run check	2026-11-11T17:16:39.2221855Z ✓ 15 modules transformed.
+notebook	Run npm run check	2026-11-11T17:16:39.2391923Z rendering chunks...
+notebook	Run npm run check	2026-11-11T17:16:39.2613546Z computing gzip size...
+notebook	Run npm run check	2026-11-11T17:16:39.2641497Z dist/web/index.html                   0.37 kB │ gzip:  0.27 kB
+notebook	Run npm run check	2026-11-11T17:16:39.2642209Z dist/web/assets/index-BlFtHzaj.css    6.89 kB │ gzip:  2.13 kB
+notebook	Run npm run check	2026-11-11T17:16:39.2642649Z dist/web/assets/index-7-E6YvnQ.js   160.22 kB │ gzip: 51.61 kB
+notebook	Run npm run check	2026-11-11T17:16:39.2642893Z
+notebook	Run npm run check	2026-11-11T17:16:39.2648314Z ^[[32m✓ built in 91ms^[[39m
+notebook	Run npm run check	2026-11-11T17:16:39.3657540Z
+notebook	Run npm run check	2026-11-11T17:16:39.3658196Z > clinora@0.1.0 test:built
+notebook	Run npm run check	2026-11-11T17:16:39.3658600Z > node scripts/smoke.mjs
+notebook	Run npm run check	2026-11-11T17:16:39.3658796Z
+notebook	Run npm run check	2026-11-11T17:16:39.5836068Z Built server, HTML, JS/CSS assets, health, source isolation and clinical denial: PASS
+notebook	Run npm run check	2026-11-11T17:16:39.7411303Z
+notebook	Run npm run check	2026-11-11T17:16:39.7411890Z > clinora@0.1.0 test:browser
+notebook	Run npm run check	2026-11-11T17:16:39.7412197Z > playwright test
+notebook	Run npm run check	2026-11-11T17:16:39.7412320Z
+notebook	Run npm run check	2026-11-11T17:16:40.6686021Z
+notebook	Run npm run check	2026-11-11T17:16:40.6686745Z Running 3 tests using 1 worker
+notebook	Run npm run check	2026-11-11T17:16:40.6687657Z
+notebook	Run npm run check	2026-11-11T17:16:42.9922869Z   ✓  1 tests/browser/notebook.spec.ts:18:31 › real notebook login/create/save/reload/process restart at 1280px (1.5s)
+notebook	Run npm run check	2026-11-11T17:16:44.2657331Z   ✓  2 tests/browser/notebook.spec.ts:18:31 › real notebook login/create/save/reload/process restart at 390px (1.3s)
+notebook	Run npm run check	2026-11-11T17:16:45.7173723Z   ✓  3 tests/browser/notebook.spec.ts:34:1 › two real browser pages surface a version conflict and retain dirty text, including a failed save (1.4s)
+notebook	Run npm run check	2026-11-11T17:16:45.7608399Z
+notebook	Run npm run check	2026-11-11T17:16:45.7612673Z   3 passed (5.4s)
+notebook	Run node --import tsx scripts/check-provision.mjs	﻿2026-11-11T17:16:45.7895836Z ##[group]Run node --import tsx scripts/check-provision.mjs
+notebook	Run node --import tsx scripts/check-provision.mjs	2026-11-11T17:16:45.7896250Z ^[[36;1mnode --import tsx scripts/check-provision.mjs^[[0m
+notebook	Run node --import tsx scripts/check-provision.mjs	2026-11-11T17:16:45.7913526Z shell: /usr/bin/bash -e {0}
+notebook	Run node --import tsx scripts/check-provision.mjs	2026-11-11T17:16:45.7913747Z env:
+notebook	Run node --import tsx scripts/check-provision.mjs	2026-11-11T17:16:45.7914229Z   TEST_DATABASE_URL: ***127.0.0.1:5432/clinora_test
+notebook	Run node --import tsx scripts/check-provision.mjs	2026-11-11T17:16:45.7914656Z ##[endgroup]
+notebook	Run node --import tsx scripts/check-provision.mjs	2026-11-11T17:16:46.6139086Z Explicit synthetic demo provisioning and repeat migration: PASS
+notebook	Run actions/upload-artifact@v4	﻿2026-11-11T17:16:46.6285379Z ##[group]Run actions/upload-artifact@v4
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.6285641Z with:
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.6285821Z   name: synthetic-browser-evidence
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.6286097Z   path: work/browser-evidence/
+notebook	Run actions/upload-artifact@v4	work/browser-results/**/*.png
+notebook	Run actions/upload-artifact@v4
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.6286402Z   if-no-files-found: ignore
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.6286604Z   compression-level: 6
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.6286957Z   overwrite: false
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.6287135Z   include-hidden-files: false
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.6287327Z env:
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.6287777Z   TEST_DATABASE_URL: ***127.0.0.1:5432/clinora_test
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.6288026Z ##[endgroup]
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.7671894Z (node:4065) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.7672587Z (Use `node --trace-deprecation ...` to show where the warning was created)
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.7748124Z Multiple search paths detected. Calculating the least common ancestor of all paths
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.7755787Z The least common ancestor is /home/runner/work/clinora/clinora/work. This will be the root directory of the artifact
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.7756807Z With the provided path, there will be 3 files uploaded
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.7757654Z Artifact name is valid!
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.7758014Z Root directory input is valid!
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:46.9911239Z Beginning upload of artifact content to blob storage
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:47.0661423Z (node:4065) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:47.0989406Z Uploaded bytes 376001
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:47.1118345Z Finished uploading artifact content to blob storage!
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:47.1119496Z SHA256 digest of uploaded artifact zip is b58d878603ee7ef95b156dce75720620f6bccc8c78ad613c6343f1d127f1129e
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:47.1120500Z Finalizing artifact upload
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:47.4993264Z Artifact synthetic-browser-evidence.zip successfully finalized. Artifact ID 13876740725
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:47.4994807Z Artifact synthetic-browser-evidence has been successfully uploaded! Final size is 376001 bytes. Artifact ID is 13876740725
+notebook	Run actions/upload-artifact@v4	2026-11-11T17:16:47.5000334Z Artifact download URL: https://github.com/Imamatdin/clinora/actions/runs/43066411569/artifacts/13876740725
+notebook	Post Run actions/setup-node@v4	﻿2026-11-11T17:16:47.5182117Z Post job cleanup.
+notebook	Post Run actions/setup-node@v4	2026-11-11T17:16:47.6179956Z (node:4077) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+notebook	Post Run actions/setup-node@v4	2026-11-11T17:16:47.6180688Z (Use `node --trace-deprecation ...` to show where the warning was created)
+notebook	Post Run actions/setup-node@v4	2026-11-11T17:16:47.6182586Z Cache hit occurred on the primary key node-cache-Linux-x64-npm-f20e2e9ba524b5937461743734dc4b88288900952a481267e250287db8623932, not saving cache.
+notebook	Post Run actions/checkout@v4	﻿2026-11-11T17:16:47.6316663Z Post job cleanup.
+notebook	Post Run actions/checkout@v4	2026-11-11T17:16:47.7010408Z [command]/usr/bin/git version
+notebook	Post Run actions/checkout@v4	2026-11-11T17:16:47.7047772Z git version 2.56.0
+notebook	Post Run actions/checkout@v4	2026-11-11T17:16:47.7077080Z Temporarily overriding HOME='/home/runner/work/_temp/eb74dd67-c79a-46e6-8922-2913bcd1f140' before making global git config changes
+notebook	Post Run actions/checkout@v4	2026-11-11T17:16:47.7078235Z Adding repository directory to the temporary git global config as a safe directory
+notebook	Post Run actions/checkout@v4	2026-11-11T17:16:47.7081525Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/clinora/clinora
+notebook	Post Run actions/checkout@v4	2026-11-11T17:16:47.7116814Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+notebook	Post Run actions/checkout@v4	2026-11-11T17:16:47.7152242Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+notebook	Post Run actions/checkout@v4	2026-11-11T17:16:47.7450442Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+notebook	Post Run actions/checkout@v4	2026-11-11T17:16:47.7469798Z http.https://github.com/.extraheader
+notebook	Post Run actions/checkout@v4	2026-11-11T17:16:47.7483441Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+notebook	Post Run actions/checkout@v4	2026-11-11T17:16:47.7523626Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+notebook	Post Run actions/checkout@v4	2026-11-11T17:16:47.7841711Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+notebook	Post Run actions/checkout@v4	2026-11-11T17:16:47.7889917Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+notebook	Stop containers	﻿2026-11-11T17:16:47.8223989Z Print service container logs: 7708084681744b04b4eab52d2a305cda_postgres179_fda444
+notebook	Stop containers	2026-11-11T17:16:47.8228145Z ##[command]/usr/bin/docker logs --details 7b6e2e5cd36b9ae3009298f4325d355b73abc7aff111e014bdbe5284810db588
+notebook	Stop containers	2026-11-11T17:16:47.8352995Z  The files belonging to this database system will be owned by user "postgres".
+notebook	Stop containers	2026-11-11T17:16:47.8354155Z  This user must also own the server process.
+notebook	Stop containers	2026-11-11T17:16:47.8354685Z
+notebook	Stop containers	2026-11-11T17:16:47.8355075Z  The database cluster will be initialized with locale "en_US.utf8".
+notebook	Stop containers	2026-11-11T17:16:47.8356809Z  initdb: warning: enabling "trust" authentication for local connections
+notebook	Stop containers	2026-11-11T17:16:47.8357717Z  initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+notebook	Stop containers	2026-11-11T17:16:47.8358668Z  2026-11-11 17:15:53.631 UTC [1] LOG:  starting PostgreSQL 17.9 (Debian 17.9-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+notebook	Stop containers	2026-11-11T17:16:47.8359273Z  2026-11-11 17:15:53.632 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+notebook	Stop containers	2026-11-11T17:16:47.8359686Z  2026-11-11 17:15:53.632 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+notebook	Stop containers	2026-11-11T17:16:47.8360091Z  2026-11-11 17:15:53.632 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+notebook	Stop containers	2026-11-11T17:16:47.8360553Z  2026-11-11 17:15:53.635 UTC [64] LOG:  database system was shut down at 2026-11-11 17:15:53 UTC
+notebook	Stop containers	2026-11-11T17:16:47.8360998Z  2026-11-11 17:15:53.639 UTC [1] LOG:  database system is ready to accept connections
+notebook	Stop containers	2026-11-11T17:16:47.8361357Z  2026-11-11 17:16:31.631 UTC [125] ERROR:  synthetic transaction failure
+notebook	Stop containers	2026-11-11T17:16:47.8361743Z  2026-11-11 17:16:31.631 UTC [125] CONTEXT:  PL/pgSQL function fail_creation() line 1 at RAISE
+notebook	Stop containers	2026-11-11T17:16:47.8362260Z  2026-11-11 17:16:31.631 UTC [125] STATEMENT:  INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,$4,$5)
+notebook	Stop containers	2026-11-11T17:16:47.8362743Z  2026-11-11 17:16:31.672 UTC [125] ERROR:  synthetic transaction failure
+notebook	Stop containers	2026-11-11T17:16:47.8363112Z  2026-11-11 17:16:31.672 UTC [125] CONTEXT:  PL/pgSQL function fail_creation() line 1 at RAISE
+notebook	Stop containers	2026-11-11T17:16:47.8363632Z  2026-11-11 17:16:31.672 UTC [125] STATEMENT:  INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,$4,$5)
+notebook	Stop containers	2026-11-11T17:16:47.8364194Z  2026-11-11 17:16:33.791 UTC [141] ERROR:  duplicate key value violates unique constraint "patients_clinic_id_mrn_key"
+notebook	Stop containers	2026-11-11T17:16:47.8364953Z  2026-11-11 17:16:33.791 UTC [141] DETAIL:  Key (clinic_id, mrn)=(a29c932d-e491-4a15-a989-9e0fcf2d10a2, SYN-1) already exists.
+notebook	Stop containers	2026-11-11T17:16:47.8365976Z  2026-11-11 17:16:33.791 UTC [141] STATEMENT:  INSERT INTO patients(id,clinic_id,display_name,mrn,date_of_birth,provenance) VALUES($1,$2,$3,$4,$5,$6) RETURNING *
+notebook	Stop containers	2026-11-11T17:16:47.8366757Z  2026-11-11 17:16:34.791 UTC [141] ERROR:  insert or update on table "encounters" violates foreign key constraint "encounters_clinic_id_patient_id_fkey"
+notebook	Stop containers	2026-11-11T17:16:47.8367533Z  2026-11-11 17:16:34.791 UTC [141] DETAIL:  Key (clinic_id, patient_id)=(0336c998-f252-41ce-9d5d-42cf09b6a8df, 6ae9a5fd-5bb5-45bb-b498-7fb17ee061f7) is not present in table "patients".
+notebook	Stop containers	2026-11-11T17:16:47.8368266Z  2026-11-11 17:16:34.791 UTC [141] STATEMENT:  INSERT INTO encounters(id,clinic_id,patient_id,clinician_id,data) VALUES($1,$2,$3,$4,$5)
+notebook	Stop containers	2026-11-11T17:16:47.8368738Z  2026-11-11 17:16:36.620 UTC [149] ERROR:  Append-only clinical revisions
+notebook	Stop containers	2026-11-11T17:16:47.8369123Z  2026-11-11 17:16:36.620 UTC [149] CONTEXT:  PL/pgSQL function immutable_revision() line 1 at RAISE
+notebook	Stop containers	2026-11-11T17:16:47.8369551Z  2026-11-11 17:16:36.620 UTC [149] STATEMENT:  UPDATE document_versions SET data='{}' WHERE id=$1
+notebook	Stop containers	2026-11-11T17:16:47.8369929Z  2026-11-11 17:16:37.002 UTC [153] ERROR:  synthetic rollback test
+notebook	Stop containers	2026-11-11T17:16:47.8370281Z  2026-11-11 17:16:37.002 UTC [153] CONTEXT:  PL/pgSQL function reject_test_audit() line 1 at RAISE
+notebook	Stop containers	2026-11-11T17:16:47.8371023Z  2026-11-11 17:16:37.002 UTC [153] STATEMENT:  INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,$4,$5)
+notebook	Stop containers	2026-11-11T17:16:47.8371630Z  2026-11-11 17:16:45.485 UTC [180] ERROR:  synthetic failure
+notebook	Stop containers	2026-11-11T17:16:47.8371991Z  2026-11-11 17:16:45.485 UTC [180] CONTEXT:  PL/pgSQL function browser_fail_audit() line 1 at RAISE
+notebook	Stop containers	2026-11-11T17:16:47.8372496Z  2026-11-11 17:16:45.485 UTC [180] STATEMENT:  INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,$4,$5)
+notebook	Stop containers	2026-11-11T17:16:47.8372994Z  The default database encoding has accordingly been set to "UTF8".
+notebook	Stop containers	2026-11-11T17:16:47.8373344Z  The default text search configuration will be set to "english".
+notebook	Stop containers	2026-11-11T17:16:47.8373609Z
+notebook	Stop containers	2026-11-11T17:16:47.8373779Z  Data page checksums are disabled.
+notebook	Stop containers	2026-11-11T17:16:47.8373991Z
+notebook	Stop containers	2026-11-11T17:16:47.8374227Z  fixing permissions on existing directory /var/lib/postgresql/data ... ok
+notebook	Stop containers	2026-11-11T17:16:47.8374817Z  creating subdirectories ... ok
+notebook	Stop containers	2026-11-11T17:16:47.8375199Z  selecting dynamic shared memory implementation ... posix
+notebook	Stop containers	2026-11-11T17:16:47.8375602Z  selecting default "max_connections" ... 100
+notebook	Stop containers	2026-11-11T17:16:47.8375930Z  selecting default "shared_buffers" ... 128MB
+notebook	Stop containers	2026-11-11T17:16:47.8376184Z  selecting default time zone ... Etc/UTC
+notebook	Stop containers	2026-11-11T17:16:47.8376422Z  creating configuration files ... ok
+notebook	Stop containers	2026-11-11T17:16:47.8376655Z  running bootstrap script ... ok
+notebook	Stop containers	2026-11-11T17:16:47.8376894Z  performing post-bootstrap initialization ... ok
+notebook	Stop containers	2026-11-11T17:16:47.8377145Z  syncing data to disk ... ok
+notebook	Stop containers	2026-11-11T17:16:47.8377346Z
+notebook	Stop containers	2026-11-11T17:16:47.8377490Z
+notebook	Stop containers	2026-11-11T17:16:47.8377687Z  Success. You can now start the database server using:
+notebook	Stop containers	2026-11-11T17:16:47.8377932Z
+notebook	Stop containers	2026-11-11T17:16:47.8378140Z      pg_ctl -D /var/lib/postgresql/data -l logfile start
+notebook	Stop containers	2026-11-11T17:16:47.8378375Z
+notebook	Stop containers	2026-11-11T17:16:47.8378849Z  waiting for server to start....2026-11-11 17:15:53.221 UTC [48] LOG:  starting PostgreSQL 17.9 (Debian 17.9-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+notebook	Stop containers	2026-11-11T17:16:47.8379537Z  2026-11-11 17:15:53.222 UTC [48] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+notebook	Stop containers	2026-11-11T17:16:47.8379978Z  2026-11-11 17:15:53.224 UTC [51] LOG:  database system was shut down at 2026-11-11 17:15:52 UTC
+notebook	Stop containers	2026-11-11T17:16:47.8380372Z  2026-11-11 17:15:53.227 UTC [48] LOG:  database system is ready to accept connections
+notebook	Stop containers	2026-11-11T17:16:47.8380666Z   done
+notebook	Stop containers	2026-11-11T17:16:47.8380830Z  server started
+notebook	Stop containers	2026-11-11T17:16:47.8380998Z  CREATE DATABASE
+notebook	Stop containers	2026-11-11T17:16:47.8381172Z
+notebook	Stop containers	2026-11-11T17:16:47.8381323Z
+notebook	Stop containers	2026-11-11T17:16:47.8381583Z  /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+notebook	Stop containers	2026-11-11T17:16:47.8381885Z
+notebook	Stop containers	2026-11-11T17:16:47.8382088Z  2026-11-11 17:15:53.401 UTC [48] LOG:  received fast shutdown request
+notebook	Stop containers	2026-11-11T17:16:47.8382494Z  waiting for server to shut down....2026-11-11 17:15:53.401 UTC [48] LOG:  aborting any active transactions
+notebook	Stop containers	2026-11-11T17:16:47.8383012Z  2026-11-11 17:15:53.402 UTC [48] LOG:  background worker "logical replication launcher" (PID 54) exited with exit code 1
+notebook	Stop containers	2026-11-11T17:16:47.8383429Z  2026-11-11 17:15:53.403 UTC [49] LOG:  shutting down
+notebook	Stop containers	2026-11-11T17:16:47.8383733Z  2026-11-11 17:15:53.404 UTC [49] LOG:  checkpoint starting: shutdown immediate
+notebook	Stop containers	2026-11-11T17:16:47.8399403Z  2026-11-11 17:15:53.508 UTC [49] LOG:  checkpoint complete: wrote 925 buffers (5.6%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.078 s, sync=0.026 s, total=0.105 s; sync files=301, longest=0.021 s, average=0.001 s; distance=4256 kB, estimate=4256 kB; lsn=0/1915978, redo lsn=0/1915978
+notebook	Stop containers	2026-11-11T17:16:47.8400742Z  2026-11-11 17:15:53.515 UTC [48] LOG:  database system is shut down
+notebook	Stop containers	2026-11-11T17:16:47.8401149Z   done
+notebook	Stop containers	2026-11-11T17:16:47.8401338Z  server stopped
+notebook	Stop containers	2026-11-11T17:16:47.8401521Z
+notebook	Stop containers	2026-11-11T17:16:47.8401730Z  PostgreSQL init process complete; ready for start up.
+notebook	Stop containers	2026-11-11T17:16:47.8402129Z
+notebook	Stop containers	2026-11-11T17:16:47.8406956Z Stop and remove container: 7708084681744b04b4eab52d2a305cda_postgres179_fda444
+notebook	Stop containers	2026-11-11T17:16:47.8411014Z ##[command]/usr/bin/docker rm --force 7b6e2e5cd36b9ae3009298f4325d355b73abc7aff111e014bdbe5284810db588
+notebook	Stop containers	2026-11-11T17:16:50.8880421Z 7b6e2e5cd36b9ae3009298f4325d355b73abc7aff111e014bdbe5284810db588
+notebook	Stop containers	2026-11-11T17:16:50.8911262Z Remove container network: github_network_753f00762f064e09bc9518fa0bb79ece
+notebook	Stop containers	2026-11-11T17:16:50.8915248Z ##[command]/usr/bin/docker network rm github_network_753f00762f064e09bc9518fa0bb79ece
+notebook	Stop containers	2026-11-11T17:16:50.9719068Z github_network_753f00762f064e09bc9518fa0bb79ece
+notebook	Complete job	﻿2026-11-11T17:16:50.9786520Z Cleaning up orphan processes
+notebook	Complete job	2026-11-11T17:16:51.0134180Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+windows-compatibility	Set up job	﻿2026-11-11T17:15:42.5366864Z Current runner version: '2.338.2'
+windows-compatibility	Set up job	2026-11-11T17:15:42.5663124Z ##[group]Runner Image Provisioner
+windows-compatibility	Set up job	2026-11-11T17:15:42.5664013Z Hosted Compute Agent
+windows-compatibility	Set up job	2026-11-11T17:15:42.5664469Z Version: 20261103.629
+windows-compatibility	Set up job	2026-11-11T17:15:42.5664995Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+windows-compatibility	Set up job	2026-11-11T17:15:42.5665660Z Build Date: 2026-11-03T17:26:59Z
+windows-compatibility	Set up job	2026-11-11T17:15:42.5666209Z Worker ID: {2a44e60d-1f74-4434-a01e-1973f7db58c0}
+windows-compatibility	Set up job	2026-11-11T17:15:42.5666821Z Region: centralus
+windows-compatibility	Set up job	2026-11-11T17:15:42.5667261Z Cloud: Azure
+windows-compatibility	Set up job	2026-11-11T17:15:42.5667704Z ##[endgroup]
+windows-compatibility	Set up job	2026-11-11T17:15:42.5668893Z ##[group]Operating System
+windows-compatibility	Set up job	2026-11-11T17:15:42.5669483Z Microsoft Windows Server 2025
+windows-compatibility	Set up job	2026-11-11T17:15:42.5670224Z 10.0.26100
+windows-compatibility	Set up job	2026-11-11T17:15:42.5670727Z Datacenter
+windows-compatibility	Set up job	2026-11-11T17:15:42.5671132Z ##[endgroup]
+windows-compatibility	Set up job	2026-11-11T17:15:42.5671569Z ##[group]Runner Image
+windows-compatibility	Set up job	2026-11-11T17:15:42.5672081Z Image: windows-2025-vs2026
+windows-compatibility	Set up job	2026-11-11T17:15:42.5672599Z Version: 20261103.298.1
+windows-compatibility	Set up job	2026-11-11T17:15:42.5673520Z Included Software: https://github.com/actions/runner-images/blob/win25-vs2026/20261103.298/images/windows/Windows2025-VS2026-Readme.md
+windows-compatibility	Set up job	2026-11-11T17:15:42.5675651Z Image Release: https://github.com/actions/runner-images/releases/tag/win25-vs2026%2F20261103.298
+windows-compatibility	Set up job	2026-11-11T17:15:42.5676461Z ##[endgroup]
+windows-compatibility	Set up job	2026-11-11T17:15:42.5677426Z ##[group]GITHUB_TOKEN Permissions
+windows-compatibility	Set up job	2026-11-11T17:15:42.5679176Z Contents: read
+windows-compatibility	Set up job	2026-11-11T17:15:42.5679632Z Metadata: read
+windows-compatibility	Set up job	2026-11-11T17:15:42.5680104Z ##[endgroup]
+windows-compatibility	Set up job	2026-11-11T17:15:42.5681866Z Secret source: Actions
+windows-compatibility	Set up job	2026-11-11T17:15:42.5682594Z Cache mode: write
+windows-compatibility	Set up job	2026-11-11T17:15:42.5683235Z Prepare workflow directory
+windows-compatibility	Set up job	2026-11-11T17:15:42.5959666Z Prepare all required actions
+windows-compatibility	Set up job	2026-11-11T17:15:42.6002518Z Getting action download info
+windows-compatibility	Set up job	2026-11-11T17:15:42.8046201Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+windows-compatibility	Set up job	2026-11-11T17:15:42.9234751Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+windows-compatibility	Set up job	2026-11-11T17:15:43.1620598Z Complete job name: windows-compatibility
+windows-compatibility	Run actions/checkout@v4	﻿2026-11-11T17:15:43.2915119Z ##[group]Run actions/checkout@v4
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2916399Z with:
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2916815Z   repository: Imamatdin/clinora
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2920069Z   token: ***
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2920468Z   ssh-strict: true
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2920900Z   ssh-user: git
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2921304Z   persist-credentials: true
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2921743Z   clean: true
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2922125Z   sparse-checkout-cone-mode: true
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2922601Z   fetch-depth: 1
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2922991Z   fetch-tags: false
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2923376Z   show-progress: true
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2923919Z   lfs: false
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2924356Z   submodules: false
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2924817Z   set-safe-directory: true
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2925266Z   allow-unsafe-pr-checkout: false
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.2925894Z ##[endgroup]
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.4271729Z Syncing repository: Imamatdin/clinora
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.4274742Z ##[group]Getting Git version info
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.4275772Z Working directory is 'D:\a\clinora\clinora'
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.4916651Z [command]"C:\Program Files\Git\bin\git.exe" version
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.8858907Z git version 2.56.0.windows.4
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.8904660Z ##[endgroup]
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.8929014Z Temporarily overriding HOME='D:\a\_temp\a4cef322-ddf5-451c-b6f5-bab7ce1fd478' before making global git config changes
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.8930480Z Adding repository directory to the temporary git global config as a safe directory
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.8932292Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\clinora\clinora
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.9625248Z Deleting the contents of 'D:\a\clinora\clinora'
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.9630875Z ##[group]Initializing the repository
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:43.9639130Z [command]"C:\Program Files\Git\bin\git.exe" init D:\a\clinora\clinora
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:44.0459704Z Initialized empty Git repository in D:/a/clinora/clinora/.git/
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:44.0498746Z [command]"C:\Program Files\Git\bin\git.exe" remote add origin https://github.com/Imamatdin/clinora
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:44.1262421Z ##[endgroup]
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:44.1263982Z ##[group]Disabling automatic garbage collection
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:44.1265457Z [command]"C:\Program Files\Git\bin\git.exe" config --local gc.auto 0
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:44.1581977Z ##[endgroup]
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:44.1583369Z ##[group]Setting up auth
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:44.1592083Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:44.1915039Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:45.7950065Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:45.8285081Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:46.3027700Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:46.3346314Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:46.7801219Z [command]"C:\Program Files\Git\bin\git.exe" config --local http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:46.8133746Z ##[endgroup]
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:46.8134363Z ##[group]Fetching the repository
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:46.8147353Z [command]"C:\Program Files\Git\bin\git.exe" -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +2edc59e186aa521655ee471d36f1fca6d2161b67:refs/remotes/origin/task-002-patient-notebook
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:47.9532050Z From https://github.com/Imamatdin/clinora
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:47.9535249Z  * [new ref]         2edc59e186aa521655ee471d36f1fca6d2161b67 -> origin/task-002-patient-notebook
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:47.9569852Z ##[endgroup]
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:47.9570683Z ##[group]Determining the checkout info
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:47.9571433Z ##[endgroup]
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:47.9580986Z [command]"C:\Program Files\Git\bin\git.exe" sparse-checkout disable
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:48.0200962Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all extensions.worktreeConfig
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:48.0534897Z ##[group]Checking out the ref
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:48.0542285Z [command]"C:\Program Files\Git\bin\git.exe" checkout --progress --force -B task-002-patient-notebook refs/remotes/origin/task-002-patient-notebook
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:48.1243595Z Switched to a new branch 'task-002-patient-notebook'
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:48.1353885Z branch 'task-002-patient-notebook' set up to track 'origin/task-002-patient-notebook'.
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:48.1392622Z ##[endgroup]
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:48.1923632Z [command]"C:\Program Files\Git\bin\git.exe" log -1 --format=%H
+windows-compatibility	Run actions/checkout@v4	2026-11-11T17:15:48.2217433Z 2edc59e186aa521655ee471d36f1fca6d2161b67
+windows-compatibility	Run actions/setup-node@v4	﻿2026-11-11T17:15:48.2631155Z ##[group]Run actions/setup-node@v4
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:48.2631668Z with:
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:48.2631959Z   node-version-file: .nvmrc
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:48.2632272Z   cache: npm
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:48.2632563Z   always-auth: false
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:48.2632816Z   check-latest: false
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:48.2634817Z   token: ***
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:48.2635073Z ##[endgroup]
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:48.4116678Z Node version file is not JSON file
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:48.4119961Z Resolved .nvmrc as 22.17.1
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:48.4135560Z Attempting to download 22.17.1...
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:48.4288408Z (node:8592) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:48.4289102Z (Use `node --trace-deprecation ...` to show where the warning was created)
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:49.2838704Z Acquiring 22.17.1 - x64 from https://github.com/actions/node-versions/releases/download/22.17.1-16309770702/node-22.17.1-win32-x64.7z
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:49.7772378Z Extracting ...
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:51.6585758Z Adding to the cache ...
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:55.6456832Z ##[group]Environment details
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:56.9788459Z node: v22.17.1
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:56.9789110Z npm: 10.9.2
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:56.9789462Z yarn: 1.22.22
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:56.9790271Z ##[endgroup]
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:57.0265169Z [command]C:\Windows\system32\cmd.exe /D /S /C "C:\hostedtoolcache\windows\node\22.17.1\x64\npm.cmd config get cache"
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:57.2698561Z C:\npm\cache
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:57.5958051Z Cache hit for: node-cache-Windows-x64-npm-f20e2e9ba524b5937461743734dc4b88288900952a481267e250287db8623932
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:57.6048703Z (node:8592) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:58.3314072Z Received 33884108 of 33884108 (100.0%), 54.8 MBs/sec
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:58.3315787Z Cache Size: ~32 MB (33884108 B)
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:58.3382543Z [command]"C:\Program Files\Git\usr\bin\tar.exe" -xf D:/a/_temp/ae6ed4bc-75d4-488e-9ed0-9315625cf966/cache.tzst -P -C D:/a/clinora/clinora --force-local --use-compress-program "zstd -d"
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:59.8103541Z Cache restored successfully
+windows-compatibility	Run actions/setup-node@v4	2026-11-11T17:15:59.8149480Z Cache restored from key: node-cache-Windows-x64-npm-f20e2e9ba524b5937461743734dc4b88288900952a481267e250287db8623932
+windows-compatibility	Run npm install --global npm@11.12.1	﻿2026-11-11T17:15:59.8467126Z ##[group]Run npm install --global npm@11.12.1
+windows-compatibility	Run npm install --global npm@11.12.1	2026-11-11T17:15:59.8467976Z ^[[36;1mnpm install --global npm@11.12.1^[[0m
+windows-compatibility	Run npm install --global npm@11.12.1	2026-11-11T17:15:59.9116460Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+windows-compatibility	Run npm install --global npm@11.12.1	2026-11-11T17:15:59.9116893Z ##[endgroup]
+windows-compatibility	Run npm install --global npm@11.12.1	2026-11-11T17:16:14.5282261Z
+windows-compatibility	Run npm install --global npm@11.12.1	2026-11-11T17:16:14.5288172Z added 1 package in 14s
+windows-compatibility	Run npm install --global npm@11.12.1	2026-11-11T17:16:14.5288665Z
+windows-compatibility	Run npm install --global npm@11.12.1	2026-11-11T17:16:14.5288910Z 15 packages are looking for funding
+windows-compatibility	Run npm install --global npm@11.12.1	2026-11-11T17:16:14.5289309Z   run `npm fund` for details
+windows-compatibility	Run npm ci	﻿2026-11-11T17:16:15.9062190Z ##[group]Run npm ci
+windows-compatibility	Run npm ci	2026-11-11T17:16:15.9062637Z ^[[36;1mnpm ci^[[0m
+windows-compatibility	Run npm ci	2026-11-11T17:16:15.9121025Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+windows-compatibility	Run npm ci	2026-11-11T17:16:15.9121422Z ##[endgroup]
+windows-compatibility	Run npm ci	2026-11-11T17:16:18.8157311Z
+windows-compatibility	Run npm ci	2026-11-11T17:16:18.8158952Z added 49 packages, and audited 50 packages in 2s
+windows-compatibility	Run npm ci	2026-11-11T17:16:18.8159413Z
+windows-compatibility	Run npm ci	2026-11-11T17:16:18.8159666Z 9 packages are looking for funding
+windows-compatibility	Run npm ci	2026-11-11T17:16:18.8160175Z   run `npm fund` for details
+windows-compatibility	Run npm ci	2026-11-11T17:16:18.8169918Z
+windows-compatibility	Run npm ci	2026-11-11T17:16:18.8170770Z found 0 vulnerabilities
+windows-compatibility	Run npm run typecheck	﻿2026-11-11T17:16:20.1370411Z ##[group]Run npm run typecheck
+windows-compatibility	Run npm run typecheck	2026-11-11T17:16:20.1370843Z ^[[36;1mnpm run typecheck^[[0m
+windows-compatibility	Run npm run typecheck	2026-11-11T17:16:20.1427207Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+windows-compatibility	Run npm run typecheck	2026-11-11T17:16:20.1427662Z ##[endgroup]
+windows-compatibility	Run npm run typecheck	2026-11-11T17:16:20.6740664Z
+windows-compatibility	Run npm run typecheck	2026-11-11T17:16:20.6741752Z > clinora@0.1.0 typecheck
+windows-compatibility	Run npm run typecheck	2026-11-11T17:16:20.6742276Z > tsc --noEmit
+windows-compatibility	Run npm run typecheck	2026-11-11T17:16:20.6742520Z
+windows-compatibility	Run npm run test:unit	﻿2026-11-11T17:16:23.7154888Z ##[group]Run npm run test:unit
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:23.7155454Z ^[[36;1mnpm run test:unit^[[0m
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:23.7226902Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:23.7227442Z ##[endgroup]
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.2453427Z
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.2454322Z > clinora@0.1.0 test:unit
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.2455051Z > node --import tsx --test tests/*.test.ts
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.2455322Z
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.3261230Z TAP version 13
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8756875Z # Subtest: registration rejects self-granted doctor, clinic, verification and Telegram claims
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8761586Z ok 1 - registration rejects self-granted doctor, clinic, verification and Telegram claims
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8767197Z   ---
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8815913Z   duration_ms: 4.6615
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8832861Z   type: 'test'
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8851475Z   ...
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8866690Z # Subtest: only an active server-authorized clinician can access the permitted clinic
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8868105Z ok 2 - only an active server-authorized clinician can access the permitted clinic
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8869170Z   ---
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8869695Z   duration_ms: 9.3382
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8870328Z   type: 'test'
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8870930Z   ...
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8871793Z # Subtest: patient restrictions and revocation take effect on the next policy invocation
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8872811Z ok 3 - patient restrictions and revocation take effect on the next policy invocation
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8875886Z   ---
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8883012Z   duration_ms: 1.6176
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8895875Z   type: 'test'
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8900692Z   ...
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8904787Z # Subtest: a valid Telegram identity link cannot substitute for a clinical membership
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8918399Z ok 4 - a valid Telegram identity link cannot substitute for a clinical membership
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8926675Z   ---
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8932591Z   duration_ms: 1.1678
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8933538Z   type: 'test'
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.8934315Z   ...
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9102154Z # Subtest: approval requires the current reviewed version and explicit eligible actor
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9103801Z ok 5 - approval requires the current reviewed version and explicit eligible actor
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9104951Z   ---
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9107529Z   duration_ms: 17.92
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9108158Z   type: 'test'
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9108706Z   ...
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9109422Z # Subtest: export rejects mismatched approvals, stale content and revoked access
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9110406Z ok 6 - export rejects mismatched approvals, stale content and revoked access
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9111075Z   ---
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9111692Z   duration_ms: 3.1245
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9112148Z   type: 'test'
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9112552Z   ...
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9159811Z # Subtest: uncertain writes cannot be blindly dispatched again and success needs acknowledgement
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9192770Z ok 7 - uncertain writes cannot be blindly dispatched again and success needs acknowledgement
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9196182Z   ---
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9196663Z   duration_ms: 6.8694
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9197392Z   type: 'test'
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:24.9198100Z   ...
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.4966486Z # Subtest: retrospective and date-only occurrence survive independently of entry time
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.4968423Z ok 8 - retrospective and date-only occurrence survive independently of entry time
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.4969670Z   ---
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.4977546Z   duration_ms: 39.3618
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.4983096Z   type: 'test'
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5020914Z   ...
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5022126Z # Subtest: missing clinical values remain unknown and AI proposals need revisioned evidence
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5025043Z ok 9 - missing clinical values remain unknown and AI proposals need revisioned evidence
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5029495Z   ---
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5030635Z   duration_ms: 2.377
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5031283Z   type: 'test'
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5031783Z   ...
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5046181Z # Subtest: transcript coordinates cannot reverse and amendments require provenance
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5047266Z ok 10 - transcript coordinates cannot reverse and amendments require provenance
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5048106Z   ---
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5048562Z   duration_ms: 2.6954
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5049077Z   type: 'test'
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5049550Z   ...
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5050291Z # Subtest: patient account linking requires explicit proof, not a name or telephone
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5051240Z ok 11 - patient account linking requires explicit proof, not a name or telephone
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5051940Z   ---
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5052394Z   duration_ms: 1.124
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5052862Z   type: 'test'
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5053360Z   ...
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5685691Z # Subtest: real HTTP health works; claimed roles and bearer tokens cannot open clinical endpoints
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5687744Z ok 12 - real HTTP health works; claimed roles and bearer tokens cannot open clinical endpoints
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5689050Z   ---
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5689441Z   duration_ms: 49.7631
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5689762Z   type: 'test'
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.5690027Z   ...
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6127861Z # Subtest: timeline uses elapsed time across offsets, preserves date-only precision and places unknown dates last
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6129147Z ok 13 - timeline uses elapsed time across offsets, preserves date-only precision and places unknown dates last
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6129786Z   ---
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6130212Z   duration_ms: 34.3472
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6130580Z   type: 'test'
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6130931Z   ...
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6131230Z 1..13
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6131506Z # tests 13
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6131757Z # suites 0
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6132018Z # pass 13
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6132281Z # fail 0
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6132512Z # cancelled 0
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6132789Z # skipped 0
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6133085Z # todo 0
+windows-compatibility	Run npm run test:unit	2026-11-11T17:16:25.6133609Z # duration_ms 1315.8705
+windows-compatibility	Run npm run build	﻿2026-11-11T17:16:25.6843139Z ##[group]Run npm run build
+windows-compatibility	Run npm run build	2026-11-11T17:16:25.6843806Z ^[[36;1mnpm run build^[[0m
+windows-compatibility	Run npm run build	2026-11-11T17:16:25.6900352Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+windows-compatibility	Run npm run build	2026-11-11T17:16:25.6900760Z ##[endgroup]
+windows-compatibility	Run npm run build	2026-11-11T17:16:26.1903392Z
+windows-compatibility	Run npm run build	2026-11-11T17:16:26.1904208Z > clinora@0.1.0 build
+windows-compatibility	Run npm run build	2026-11-11T17:16:26.1904897Z > tsc -p tsconfig.server.json && vite build
+windows-compatibility	Run npm run build	2026-11-11T17:16:26.1905439Z
+windows-compatibility	Run npm run build	2026-11-11T17:16:28.5890453Z ^[[36mvite v8.3.8 ^[[32mbuilding client environment for production...^[[36m^[[39m
+windows-compatibility	Run npm run build	2026-11-11T17:16:28.5999743Z transforming...
+windows-compatibility	Run npm run build	2026-11-11T17:16:28.6462107Z ✓ 15 modules transformed.
+windows-compatibility	Run npm run build	2026-11-11T17:16:28.6649987Z rendering chunks...
+windows-compatibility	Run npm run build	2026-11-11T17:16:28.6911276Z computing gzip size...
+windows-compatibility	Run npm run build	2026-11-11T17:16:28.6941220Z dist/web/index.html                   0.37 kB │ gzip:  0.27 kB
+windows-compatibility	Run npm run build	2026-11-11T17:16:28.6942137Z dist/web/assets/index-BlFtHzaj.css    6.89 kB │ gzip:  2.13 kB
+windows-compatibility	Run npm run build	2026-11-11T17:16:28.6943082Z dist/web/assets/index-7-E6YvnQ.js   160.22 kB │ gzip: 51.61 kB
+windows-compatibility	Run npm run build	2026-11-11T17:16:28.6943668Z
+windows-compatibility	Run npm run build	2026-11-11T17:16:28.6948071Z ^[[32m✓ built in 105ms^[[39m
+windows-compatibility	Run npm run test:built	﻿2026-11-11T17:16:28.8636348Z ##[group]Run npm run test:built
+windows-compatibility	Run npm run test:built	2026-11-11T17:16:28.8636798Z ^[[36;1mnpm run test:built^[[0m
+windows-compatibility	Run npm run test:built	2026-11-11T17:16:28.8694295Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+windows-compatibility	Run npm run test:built	2026-11-11T17:16:28.8695123Z ##[endgroup]
+windows-compatibility	Run npm run test:built	2026-11-11T17:16:29.3749180Z
+windows-compatibility	Run npm run test:built	2026-11-11T17:16:29.3750022Z > clinora@0.1.0 test:built
+windows-compatibility	Run npm run test:built	2026-11-11T17:16:29.3750448Z > node scripts/smoke.mjs
+windows-compatibility	Run npm run test:built	2026-11-11T17:16:29.3750645Z
+windows-compatibility	Run npm run test:built	2026-11-11T17:16:29.6686260Z Built server, HTML, JS/CSS assets, health, source isolation and clinical denial: PASS
+windows-compatibility	Post Run actions/setup-node@v4	﻿2026-11-11T17:16:29.7916600Z Post job cleanup.
+windows-compatibility	Post Run actions/setup-node@v4	2026-11-11T17:16:29.9258197Z (node:3324) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+windows-compatibility	Post Run actions/setup-node@v4	2026-11-11T17:16:29.9259183Z (Use `node --trace-deprecation ...` to show where the warning was created)
+windows-compatibility	Post Run actions/setup-node@v4	2026-11-11T17:16:29.9263560Z Cache hit occurred on the primary key node-cache-Windows-x64-npm-f20e2e9ba524b5937461743734dc4b88288900952a481267e250287db8623932, not saving cache.
+windows-compatibility	Post Run actions/checkout@v4	﻿2026-11-11T17:16:29.9530114Z Post job cleanup.
+windows-compatibility	Post Run actions/checkout@v4	2026-11-11T17:16:30.1030598Z [command]"C:\Program Files\Git\bin\git.exe" version
+windows-compatibility	Post Run actions/checkout@v4	2026-11-11T17:16:30.1416369Z git version 2.56.0.windows.4
+windows-compatibility	Post Run actions/checkout@v4	2026-11-11T17:16:30.1481986Z Temporarily overriding HOME='D:\a\_temp\c786da73-a071-41cf-9ae8-d2f6f37eac43' before making global git config changes
+windows-compatibility	Post Run actions/checkout@v4	2026-11-11T17:16:30.1483179Z Adding repository directory to the temporary git global config as a safe directory
+windows-compatibility	Post Run actions/checkout@v4	2026-11-11T17:16:30.1491411Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\clinora\clinora
+windows-compatibility	Post Run actions/checkout@v4	2026-11-11T17:16:30.1854966Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+windows-compatibility	Post Run actions/checkout@v4	2026-11-11T17:16:30.2198686Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+windows-compatibility	Post Run actions/checkout@v4	2026-11-11T17:16:30.7263658Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+windows-compatibility	Post Run actions/checkout@v4	2026-11-11T17:16:30.7566259Z http.https://github.com/.extraheader
+windows-compatibility	Post Run actions/checkout@v4	2026-11-11T17:16:30.7606277Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all http.https://github.com/.extraheader
+windows-compatibility	Post Run actions/checkout@v4	2026-11-11T17:16:30.7927335Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+windows-compatibility	Post Run actions/checkout@v4	2026-11-11T17:16:31.2963769Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+windows-compatibility	Post Run actions/checkout@v4	2026-11-11T17:16:31.3297347Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+windows-compatibility	Complete job	﻿2026-11-11T17:16:31.8250970Z Cleaning up orphan processes
+windows-compatibility	Complete job	2026-11-11T17:16:31.8339882Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

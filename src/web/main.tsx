@@ -1,29 +1,100 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
+import type { Note, PatientView, VisitView } from '../contracts/notebook.js';
+import { sortVisits } from '../contracts/timeline.js';
 import './style.css';
 
-function App() {
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/health', { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) }).then(async response => {
-      if (!response.ok) throw new Error('unavailable');
-      const health: unknown = await response.json();
-      if (!health || typeof health !== 'object' || !('service' in health) || health.service !== 'clinora') throw new Error('invalid');
-      setStatus('ready');
-    }).catch(() => { if (!controller.signal.aborted) setStatus('error'); });
-    return () => controller.abort();
-  }, []);
-  return <main>
-    <header><p className="eyebrow">CLINORA / DEVELOPMENT</p><span>Increment 0</span></header>
-    <h1>A foundation for the clinical workspace.</h1>
-    <p className="intro">Project checks and shared contracts are in place. Patient care workflows will arrive in the next increments.</p>
-    <section aria-labelledby="status"><h2 id="status">Foundation status</h2>
-      <p role="status" aria-live="polite">{status === 'loading' ? 'Checking the server…' : status === 'ready' ? 'Server connected' : 'Server unavailable. Start the API server and reload.'}</p>
-      <dl><div><dt>Patient records</dt><dd>Not implemented</dd></div><div><dt>Doctor sign-in</dt><dd>Not implemented</dd></div><div><dt>Clinical integrations</dt><dd>Unavailable</dd></div></dl>
-    </section>
-    <aside>No patient data is stored here. This build is an engineering foundation and has not been clinically validated.</aside>
-  </main>;
+type Clinic = { id: string; name: string; isOwner: boolean; clinicalAccess: boolean };
+type Me = { id: string; name: string; csrf: string; clinics: Clinic[]; professionalVerification: { status: string } };
+class ApiFailure extends Error { constructor(public code: string) { super(code); } }
+const messages: Record<string,string> = {
+  UNAUTHENTICATED: 'Sign-in failed or your session expired. Sign in again.',
+  FORBIDDEN: 'Access is not permitted. Membership may have changed, or the invitation is invalid.',
+  NOT_FOUND: 'This record is unavailable or outside your permitted patients.',
+  INVALID_INPUT: 'Check the fields. Medical-record numbers must be unique within the clinic.',
+  STALE_VERSION: 'Another save changed this draft. Your unsaved text is retained. Load the latest version for comparison.',
+  IDEMPOTENCY_CONFLICT: 'This retry differs from the original request. Review your input and retry.',
+  SERVICE_UNAVAILABLE: 'Service unavailable. Nothing has been marked saved. Keep this page open and retry.',
+  RATE_LIMITED: 'Too many sign-in attempts. Wait 15 minutes and try again.'
+};
+const empty: Note = { reported: '', observed: '', assessment: '', plan: '' };
+const noteFrom = (v: VisitView): Note => Object.fromEntries(Object.keys(empty).map(k => [k, String(v.version?.fields.find(f => f.key === k)?.value ?? '')])) as Note;
+const labels: Record<keyof Note,string> = { reported:'Reported information', observed:'Observed / measured findings', assessment:'Assessment — unapproved', plan:'Plan — unapproved' };
+function visitDate(v: VisitView) {
+  const o = v.encounter.occurrence;
+  if (o.precision === 'unknown') return `Date unknown · ${o.reason}`;
+  if (o.precision === 'date') return `${o.date} · date only · ${o.timezone}`;
+  return `${new Intl.DateTimeFormat('en-GB',{dateStyle:'medium',timeStyle:'short',timeZone:o.timezone}).format(new Date(o.at))} · ${o.timezone}`;
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+function App() {
+  const [me,setMe]=useState<Me|null>(null),[loading,setLoading]=useState(true),[mode,setMode]=useState<'login'|'register'>('login');
+  const [clinicId,setClinicId]=useState(''),[patients,setPatients]=useState<PatientView[]>([]),[search,setSearch]=useState('');
+  const [patient,setPatient]=useState<PatientView|null>(null),[visits,setVisits]=useState<VisitView[]>([]),[visit,setVisit]=useState<VisitView|null>(null);
+  const [note,setNote]=useState<Note>({...empty}),[template,setTemplate]=useState('general-note-v1');
+  const [dirty,setDirty]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+  const [newPatient,setNewPatient]=useState(false),[newVisit,setNewVisit]=useState(false),[precision,setPrecision]=useState('date');
+  const [conflict,setConflict]=useState(false),[latest,setLatest]=useState<VisitView|null>(null);
+  const [pendingNavigation,setPendingNavigation]=useState<(()=>void)|null>(null);
+  const [invite,setInvite]=useState(()=>new URLSearchParams(location.hash.slice(1)).get('invite')??''),[inviteLink,setInviteLink]=useState('');
+  const retry=useRef<{path:string;payload:string;key:string}|null>(null);
+  const clinic=me?.clinics.find(c=>c.id===clinicId), base=`/api/clinics/${clinicId}/patients`;
+  const navigate=(action:()=>void)=>{if(dirty)setPendingNavigation(()=>action);else action();};
+  async function request<T>(path:string,body?:unknown,idempotent=false):Promise<T> {
+    let key:string|undefined;
+    if(idempotent){const payload=JSON.stringify(body);if(!retry.current||retry.current.path!==path||retry.current.payload!==payload)retry.current={path,payload,key:crypto.randomUUID()};key=retry.current.key;}
+    const response=await fetch(path,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':me?.csrf??''}),...(key?{'Idempotency-Key':key}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(15000)});
+    const value=await response.json();if(!response.ok)throw new ApiFailure(value.error?.code??'SERVICE_UNAVAILABLE');
+    if(idempotent)retry.current=null;return value;
+  }
+  const run=async(work:()=>Promise<void>)=>{setBusy(true);setError('');setNotice('');try{await work();}catch(e){setError(e instanceof ApiFailure?messages[e.code]??e.code:messages.SERVICE_UNAVAILABLE!);if(e instanceof ApiFailure&&e.code==='STALE_VERSION')setConflict(true);}finally{setBusy(false);}};
+  async function refreshMe(){const user=await request<Me>('/api/auth/me');setMe(user);setClinicId(old=>user.clinics.some(c=>c.id===old)?old:user.clinics[0]?.id??'');}
+  useEffect(()=>{history.replaceState(null,'',location.pathname);refreshMe().catch(e=>{if(!(e instanceof ApiFailure&&e.code==='UNAUTHENTICATED'))setError(messages.SERVICE_UNAVAILABLE!);}).finally(()=>setLoading(false));},[]);
+  useEffect(()=>{const handler=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',handler);return()=>window.removeEventListener('beforeunload',handler);},[dirty]);
+  useEffect(()=>{setPatients([]);setPatient(null);setVisit(null);setVisits([]);setSearch('');setInviteLink('');if(!clinicId||!clinic?.clinicalAccess)return;
+    let active=true;request<PatientView[]>(base).then(rows=>{if(active)setPatients(rows);}).catch(()=>{if(active)setError(messages.SERVICE_UNAVAILABLE!);});return()=>{active=false;};},[clinicId]);
+  function openPatient(p:PatientView){navigate(()=>void run(async()=>{const d=await request<{patient:PatientView;visits:VisitView[]}>(`${base}/${p.id}`);setPatient(d.patient);setVisits(d.visits);setVisit(null);setDirty(false);setNewPatient(false);setNewVisit(false);setConflict(false);setLatest(null);}));}
+  function openVisit(v:VisitView){navigate(()=>{setVisit(v);setNote(noteFrom(v));setTemplate(v.version?.templateId??'general-note-v1');setDirty(false);setConflict(false);setLatest(null);setNewVisit(false);setNotice('');setError('');});}
+  async function signIn(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);await run(async()=>{
+    if(mode==='register'){await request('/api/auth/register',{email:f.get('email'),displayName:f.get('name'),password:f.get('password')});setMode('login');setNotice('Account request received. Sign in next; clinic access still requires an invitation.');}
+    else{await request('/api/auth/login',{email:f.get('email'),password:f.get('password')});await refreshMe();}
+  });}
+  async function save(e:FormEvent){e.preventDefault();if(!patient||!visit)return;const current=visit;await run(async()=>{
+    const result=await request<{revision:number;version:NonNullable<VisitView['version']>}>(`${base}/${patient.id}/encounters/${current.encounter.id}/draft`,{expectedRevision:current.revision,note,templateId:template},true);
+    const saved={...current,...result};setVisit(saved);setVisits(old=>old.map(v=>v.encounter.id===saved.encounter.id?saved:v));setDirty(false);setConflict(false);setLatest(null);setNotice(`Saved · revision ${result.revision} · unapproved draft`);
+  });}
+  if(loading)return <main className="auth"><p role="status">Loading your workspace…</p></main>;
+  return <div className="app">
+    <header className="topbar"><div className="brand">clinora<span>clinical notebook</span></div><span className="pill">Development · synthetic data only</span>{me&&<div className="account"><span>{me.name}</span><button className="quiet" disabled={busy} onClick={()=>navigate(()=>void run(async()=>{await request('/api/auth/logout',{});setMe(null);setDirty(false);setClinicId('');setPatient(null);setVisit(null);setNote({...empty});}))}>Sign out</button></div>}</header>
+    {!me?<main className="auth"><p className="eyebrow">YOUR CLINICAL WORKSPACE</p><h1>{mode==='login'?'Welcome back.':'Create an account.'}</h1><p className="muted">A notebook for your permitted patients and consultation drafts.</p>
+      <form onSubmit={signIn}><label>Email<input name="email" type="email" autoComplete="username" required maxLength={254}/></label>{mode==='register'&&<label>Full name<input name="name" required maxLength={160} autoComplete="name"/></label>}<label>Password<input name="password" type="password" required minLength={mode==='register'?12:1} maxLength={128} autoComplete={mode==='login'?'current-password':'new-password'}/></label><button disabled={busy} className="primary">{busy?'Please wait…':mode==='login'?'Sign in':'Create unprivileged account'}</button></form>
+      <button className="link" disabled={busy} onClick={()=>{setMode(mode==='login'?'register':'login');setError('');}}>{mode==='login'?'Create an account':'Back to sign in'}</button><p className="fine">Registration does not grant clinical access or verify professional credentials.</p>{error&&<p role="alert" className="error">{error}</p>}{notice&&<p role="status" className="notice">{notice}</p>}</main>:
+    <><div className="clinicbar"><label>Clinic<select aria-label="Clinic" value={clinicId} disabled={busy} onChange={e=>{const id=e.target.value;navigate(()=>{setDirty(false);setClinicId(id);setNewPatient(false);setNewVisit(false);setInviteLink('');});}}>{!me.clinics.length&&<option value="">No active clinic membership</option>}{me.clinics.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}</select></label><p className="fine">Professional credentials: {me.professionalVerification.status}. Clinic access is a separate grant.</p></div>
+    <div className="banners" aria-live="polite">{error&&<p role="alert" className="error">{error}</p>}{notice&&<p role="status" className="notice">{notice}</p>}</div>
+    {(!clinic||invite)&&<section className="pending"><h1>Clinic access pending</h1><p>An authorized clinic owner must invite you before you can access patient records.</p><form onSubmit={e=>{e.preventDefault();void run(async()=>{await request('/api/invitations/accept',{token:invite});setInvite('');await refreshMe();setNotice('Invitation accepted. You can now work with assigned patients.');});}}><label>Invitation token<input value={invite} onChange={e=>setInvite(e.target.value)} required autoComplete="off"/></label><button className="primary" disabled={busy}>Accept invitation</button></form></section>}
+    {clinic&&<div className="workspace"><aside className="patients"><div className="section-heading"><h2>Patients</h2>{clinic.clinicalAccess&&<button className="small" disabled={busy} onClick={()=>navigate(()=>{setDirty(false);setNewPatient(true);setPatient(null);setVisit(null);})}>+ New patient</button>}</div>
+      {clinic.clinicalAccess?<><form className="search" onSubmit={e=>{e.preventDefault();void run(async()=>setPatients(await request<PatientView[]>(`${base}?q=${encodeURIComponent(search)}`)));}}><label>Search patients<input value={search} placeholder="Name or medical-record number" onChange={e=>setSearch(e.target.value)} maxLength={200}/></label><button disabled={busy}>Search</button></form><p className="fine">Up to 100 permitted patients. Search to narrow results.</p><nav aria-label="Patients">{patients.map(p=><button className={`patient-row ${p.id===patient?.id?'selected':''}`} key={p.id} disabled={busy} onClick={()=>void openPatient(p)}><strong>{p.displayName}</strong><span>{p.mrn??'No medical-record number'} · {p.dateOfBirth??'Birth date unrecorded'}</span></button>)}</nav>{!patients.length&&<p className="empty">No matching patients in your permitted records.</p>}</>:<p className="empty">This membership can manage invitations; it has no clinical access.</p>}
+      {clinic.isOwner&&<details className="owner"><summary>Invite a clinician</summary><p className="fine">Assigned patients only. Professional credentials are not verified by an invitation.</p><form onSubmit={e=>{e.preventDefault();const email=new FormData(e.currentTarget).get('email');void run(async()=>{const r=await request<{link:string}>(`/api/clinics/${clinicId}/invitations`,{email});setInviteLink(r.link);});}}><label>Clinician email<input name="email" type="email" required/></label><button disabled={busy}>Create 48-hour invitation</button></form>{inviteLink&&<label>Private invitation link<textarea readOnly value={inviteLink}/><span className="fine">Deliver manually to the intended clinician. Single use; do not publish.</span></label>}</details>}
+    </aside><main className="chart">
+      {newPatient?<section className="panel"><p className="eyebrow">PATIENT IDENTITY</p><h1>New patient</h1><p className="muted">Creates a clinic record. No patient login is required.</p><form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void run(async()=>{const p=await request<PatientView>(base,{displayName:f.get('displayName'),mrn:f.get('mrn')||null,dateOfBirth:f.get('dateOfBirth')||null},true);setPatients(old=>[p,...old]);setPatient(p);setVisits([]);setVisit(null);setNewPatient(false);setNotice('Patient record created and assigned to you.');});}}><label>Patient name<input name="displayName" required maxLength={200}/></label><div className="two"><label>Medical-record number <small>optional</small><input name="mrn" maxLength={80}/></label><label>Date of birth <small>optional</small><input name="dateOfBirth" type="date"/></label></div><button disabled={busy} className="primary">{busy?'Creating…':'Create patient'}</button></form></section>:
+      patient?<><section className="patient-header"><div><p className="eyebrow">PATIENT RECORD</p><h1>{patient.displayName}</h1><p>{patient.mrn??'No medical-record number'} · Birth date: {patient.dateOfBirth??'unrecorded'}</p></div><button disabled={busy} onClick={()=>navigate(()=>{setDirty(false);setNewVisit(true);setVisit(null);setError('');})}>+ New encounter</button></section>
+        <div className="notebook"><section className="timeline" aria-label="Patient history"><h2>Visit history</h2><p className="fine">Dated visits first; undated visits last. Assessments remain unapproved drafts.</p>{visits.map(v=><button className={`visit-row ${v.encounter.id===visit?.encounter.id?'selected':''}`} disabled={busy} key={v.encounter.id} onClick={()=>openVisit(v)}><strong>{visitDate(v)}</strong><span>{v.encounter.specialty} · {v.encounter.location.label}</span><span>{v.clinicianName}</span><span className="draft-tag">Unapproved draft · revision {v.revision}</span>{v.version?.fields.find(f=>f.key==='assessment')?.value&&<span className="assessment-preview">{String(v.version.fields.find(f=>f.key==='assessment')!.value)}</span>}</button>)}{!visits.length&&<p className="empty">No visits yet. Start a dated encounter to begin this history.</p>}</section>
+        <section className="editor">{newVisit?<><p className="eyebrow">NEW CONSULTATION</p><h2>Start an encounter</h2><form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);let o:unknown;
+          if(precision==='date')o={precision,date:f.get('date'),timezone:f.get('timezone')};else if(precision==='instant'){const at=String(f.get('instant'));if(!/([zZ]|[+-]\d\d:\d\d)$/.test(at)){setError('Exact time needs an offset, for example +05:00.');return;}o={precision,at,timezone:f.get('timezone')};}else o={precision:'unknown',reason:f.get('reason')};
+          void run(async()=>{const v=await request<VisitView>(`${base}/${patient.id}/encounters`,{occurrence:o,location:f.get('location'),specialty:f.get('specialty')},true);setVisits(old=>sortVisits([v,...old]));setVisit(v);setNote({...empty});setTemplate('general-note-v1');setNewVisit(false);setDirty(false);setNotice('Encounter created. Its note is empty and unapproved.');});}}>
+          <label>Date precision<select value={precision} onChange={e=>setPrecision(e.target.value)}><option value="date">Date only</option><option value="instant">Exact time with offset</option><option value="unknown">Unknown date</option></select></label>{precision==='date'&&<label>Visit date<input type="date" name="date" required/></label>}{precision==='instant'&&<label>Visit timestamp with UTC offset<input name="instant" placeholder="2026-11-11T10:30:00+05:00" required/></label>}{precision==='unknown'?<label>Why is the date unknown?<input name="reason" required maxLength={200}/></label>:<label>IANA timezone<input name="timezone" defaultValue="Asia/Tashkent" required/></label>}<label>Location<input name="location" required maxLength={200}/></label><label>Specialty<input name="specialty" defaultValue="General medicine" required maxLength={100}/></label><button className="primary" disabled={busy}>{busy?'Creating…':'Create encounter'}</button></form></>:
+        visit?<><div className="section-heading"><div><p className="eyebrow">CONSULTATION NOTE</p><h2>{visitDate(visit)}</h2></div><span className="draft-tag">Unapproved</span></div><p className="fine">{visit.encounter.location.label} · {visit.encounter.specialty} · {visit.clinicianName}</p><form onSubmit={save}><label>Template identifier<input value={template} required maxLength={100} disabled={busy} onChange={e=>{setTemplate(e.target.value);setDirty(true);setNotice('');}}/></label>
+          {(Object.entries(labels) as [keyof Note,string][]).map(([key,label])=><label key={key}>{label}<textarea id={`note-${key}`} aria-label={label} value={note[key]} maxLength={16000} rows={key==='reported'?4:3} disabled={busy} placeholder="Not recorded" onChange={e=>{const value=e.target.value;setNote(old=>({...old,[key]:value}));setDirty(true);setNotice('');}}/></label>)}<div className="savebar"><p role="status">{busy?'Saving…':dirty?'Unsaved changes':visit.revision?`Saved revision ${visit.revision}`:'Empty note · not saved'}</p><button className="primary" disabled={busy||(!dirty&&visit.revision>0)}>{busy?'Saving…':'Save draft'}</button></div></form>
+          {conflict&&<div className="conflict"><h3>Resolve the version conflict</h3><p>Your unsaved note is retained. Compare the latest saved note before deliberately replacing it.</p><button disabled={busy} onClick={()=>void run(async()=>{const d=await request<{visits:VisitView[]}>(`${base}/${patient.id}`);const v=d.visits.find(x=>x.encounter.id===visit.encounter.id);if(v)setLatest(v);})}>Load latest for comparison</button>{latest&&<><h4>Latest saved revision {latest.revision}</h4><pre>{Object.entries(noteFrom(latest)).map(([k,v])=>`${k}: ${v||'Not recorded'}`).join('\n\n')}</pre><button disabled={busy} onClick={()=>{setVisit(latest);setConflict(false);setLatest(null);setError('');setDirty(true);retry.current=null;setNotice('Your text is retained against the latest version. Review it, then Save draft.');}}>Keep my text and use latest as the base</button><button disabled={busy} onClick={()=>{if(confirm('Discard your text and use the latest saved note?')){setDirty(false);setVisit(latest);setNote(noteFrom(latest));setTemplate(latest.version?.templateId??'general-note-v1');setConflict(false);setLatest(null);setError('');}}}>Discard my text and use latest</button></>}</div>}
+        </>:<div className="empty editor-empty"><h2>Open a visit</h2><p>Select an encounter or start a new one. Blank findings stay unrecorded.</p></div>}</section></div></>:
+      <section className="empty welcome"><p className="eyebrow">THE CLINICAL NOTEBOOK</p><h1>Start with a patient.</h1><p>Select a permitted record or create a fictional patient. Keep each consultation's date, context and draft together.</p><p className="fine">Recording, AI, approval and export are not enabled in this increment.</p></section>}
+    </main></div>}</>}
+    {pendingNavigation&&<div className="modal-backdrop"><section role="alertdialog" aria-modal="true" aria-labelledby="dirty-title" className="modal" onKeyDown={e=>{
+      const buttons=e.currentTarget.querySelectorAll('button');
+      if(e.key==='Escape'){setPendingNavigation(null);requestAnimationFrame(()=>document.getElementById('note-reported')?.focus());}
+      if(e.key==='Tab'&&((e.shiftKey&&document.activeElement===buttons[0])||(!e.shiftKey&&document.activeElement===buttons[buttons.length-1]))){e.preventDefault();(e.shiftKey?buttons[buttons.length-1]:buttons[0])?.focus();}
+    }}><h2 id="dirty-title">Keep your unsaved changes?</h2><p>Leaving this note will discard your unsaved text.</p><button autoFocus onClick={()=>{setPendingNavigation(null);requestAnimationFrame(()=>document.getElementById('note-reported')?.focus());}}>Keep editing</button><button onClick={()=>{const action=pendingNavigation;setPendingNavigation(null);action();}}>Discard changes and continue</button></section></div>}
+    <footer>Development notebook · Use synthetic patients only · Saved notes are unapproved and not clinically validated</footer>
+  </div>;
+}
+createRoot(document.getElementById('root')!).render(<App/>);

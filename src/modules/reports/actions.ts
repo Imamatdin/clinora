@@ -1,6 +1,6 @@
 import { DomainError } from '../identity/access.js';
 import { requireRole, type ClinicContext } from '../../server/roles.js';
-import { records, invoiceAt, inRange, localDate, sum, type Period, type Records, type Row } from './records.js';
+import { records, invoiceAt, inRange, localDate, sum, indexRecords, type Period, type Records, type Row } from './records.js';
 
 export type Detail = { id: string; date: string; label: string; amount: string; doctorId?: string; doctor?: string; departmentId?: string; department?: string; kind?: string; source?: string };
 export type Report = { from: string; to: string; clinic: string; generatedAt: string; snapshot?: boolean; totals: Record<string,string>;
@@ -16,6 +16,7 @@ const group = (lines: Detail[], key: 'doctor'|'department'|'source'): Group[] =>
   return [...map.values()].sort((a,b) => BigInt(a.amount) > BigInt(b.amount) ? -1 : 1);
 };
 export function computeReport(data: Records, p: Period): Report {
+  const index=indexRecords(data);
   const details: Record<string,Detail[]> = Object.fromEntries(['patients','new','returning','outpatient','inpatient','value','discounts','outstanding','collected','cash','card','transfer','refunds','cashOuts','net','lab','ward'].map(k=>[k,[]]));
   const add = (k: string, d: Detail) => details[k]!.push(d);
   const visits = data.visits.filter(v => inRange(v.date,p) && v.status !== 'cancelled');
@@ -27,7 +28,7 @@ export function computeReport(data: Records, p: Period): Report {
       const identity = `${k}:${v.patient_id}`; if (!seen.has(identity)) { add(k,l); seen.add(identity); }
     }
     for (const line of invoiceAt(data,v,p.to)) {
-      const raw = data.charges.find(c=>c.id===line.id)!;
+      const raw = index.charges.get(line.id)!;
       const d: Detail = { id: line.id,date: v.date,label: `${v.patient_no} · ${raw.service}`,amount: line.value.toString(),
         doctorId: raw.performer_user_id,doctor: raw.doctor,departmentId:raw.department_id,department:raw.department,kind:raw.kind };
       add('value',d); add('discounts',{...d,amount:line.discount.toString()}); add('outstanding',{...d,amount:(line.payable-line.allocatedPaid).toString()});
@@ -35,8 +36,9 @@ export function computeReport(data: Records, p: Period): Report {
   }
   // Receipt provenance is preserved, including refunds for visits from earlier business days.
   const selectedPayments = data.payments.filter(r=>inRange(r.date,p));
+  const selectedById=new Map(selectedPayments.map(p=>[p.id,p])),allPayments=new Map(data.payments.map(p=>[p.id,p]));
   for (const r of selectedPayments) {
-    const v = data.visits.find(v=>v.id===r.visit_id)!;
+    const v = index.visits.get(r.visit_id)!;
     const d: Detail = {id:r.id,date:r.date,label:`${v.patient_no} · ${v.full_name}`,amount:r.amount_uzs};
     if (r.kind === 'payment') { add('collected',d); add(r.method,d); }
     else add('refunds',d);
@@ -45,14 +47,14 @@ export function computeReport(data: Records, p: Period): Report {
   for (const r of data.cashOuts.filter(r=>inRange(r.date,p))) add('cashOuts',{id:r.id,date:r.date,label:r.note??'—',amount:r.amount_uzs});
   const revenue: Detail[] = [];
   for (const a of data.allocations) {
-    const payment = selectedPayments.find(p=>p.id===a.payment_id); if (!payment) continue;
-    const l = data.charges.find(l=>l.id===a.charge_line_id)!;
+    const payment = selectedById.get(a.payment_id); if (!payment) continue;
+    const l = index.charges.get(a.charge_line_id)!;
     revenue.push({id:`${payment.id}:${l.id}`,date:payment.date,label:l.service,amount:(BigInt(a.amount_uzs)*(payment.kind==='payment'?1n:-1n)).toString(),doctorId:l.performer_user_id,doctor:l.doctor,departmentId:l.department_id,department:l.department,kind:l.kind});
   }
   for (const a of data.adjustments) {
-    const payment=data.payments.find(p=>p.id===a.payment_id), date=localDate(a.created_at,data.clinic.timezone);
+    const payment=allPayments.get(a.payment_id), date=localDate(a.created_at,data.clinic.timezone);
     if (!payment || !inRange(date,p)) continue;
-    const l=data.charges.find(l=>l.id===a.charge_line_id)!;
+    const l=index.charges.get(a.charge_line_id)!;
     revenue.push({id:a.id,date,label:l.service,amount:a.delta_uzs,doctorId:l.performer_user_id,doctor:l.doctor,departmentId:l.department_id,department:l.department,kind:l.kind});
   }
   details.lab = revenue.filter(l=>l.kind==='lab'); details.ward = revenue.filter(l=>['bed','caretaker'].includes(l.kind!));

@@ -58,7 +58,7 @@ test('C8: CEO-only exports are valid PDF/XLSX/CSV ZIP, exact UZS, audited and cl
     assert.doesNotMatch(strFromU8(files['staff.csv']!),/password_hash|token_hash/);
     assert.equal((await f.pool.query("SELECT count(*) FROM audit_events WHERE clinic_id=$1 AND action='reports.full_export'",[f.owner.clinicId])).rows[0].count,'1');
     assert.equal((await client.request(`/api/clinics/${f.other.clinicId}/reports/dashboard`,period)).status,404);
-    for(const role of ['doctor','administrator','cashier','registrar','laboratory','inpatient']){
+    for(const role of ['doctor','administrator','cashier','registrar','laboratory','inpatient','pharmacy']){
       await f.pool.query('DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2',[f.owner.clinicId,f.owner.userId]);await f.pool.query('INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,$3,$2)',[f.owner.clinicId,f.owner.userId,role]);
       for(const path of ['/reports/export','/reports/full-export','/payroll/export'])assert.equal((await client.request(base+path,{})).status,403,`${role} ${path}`);
       assert.equal((await client.request(base+'/reports/dashboard',period)).status,403,role);

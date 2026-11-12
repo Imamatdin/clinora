@@ -16,7 +16,8 @@ BEGIN
     SELECT business_day_id INTO day_id FROM visits WHERE clinic_id=NEW.clinic_id AND id=NEW.visit_id;
   END IF;
   SELECT status INTO state FROM business_days WHERE clinic_id=NEW.clinic_id AND id=day_id FOR SHARE;
-  IF state IS DISTINCT FROM 'open' THEN RAISE EXCEPTION 'business day is closed' USING ERRCODE='restrict_violation'; END IF;
+  -- Missing/cross-clinic references are rejected by their original qualified foreign key.
+  IF state IS NOT NULL AND state <> 'open' THEN RAISE EXCEPTION 'business day is closed' USING ERRCODE='restrict_violation'; END IF;
   RETURN NEW;
 END $$;
 CREATE TRIGGER reports_shift_day BEFORE INSERT ON cash_shifts FOR EACH ROW EXECUTE FUNCTION reports_open_day();

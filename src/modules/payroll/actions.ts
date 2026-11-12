@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { calculateDoctorShares } from '../billing/index.js';
 import { DomainError } from '../identity/access.js';
 import { requireRole, recordAudit, type ClinicContext } from '../../server/roles.js';
-import { records, invoiceAt, localDate, inRange, type Period, type Records, type Row } from '../reports/records.js';
+import { records, invoiceAt, localDate, inRange, indexRecords, type Period, type Records, type Row } from '../reports/records.js';
 import { ServiceKind } from '../../contracts/db/common.js';
 
 export const Rule = z.object({ userId:z.string().uuid(),shareBp:z.number().int().min(0).max(10000),basis:z.enum(['billed','paid']),discountBearer:z.enum(['clinic','doctor','proportional']),categories:z.array(ServiceKind).min(1),effectiveFrom:z.iso.date() }).strict();
@@ -29,9 +29,10 @@ export async function setRule(c:ClinicContext,input:z.infer<typeof Rule>) {
   if(!result.rowCount) return fail('INVALID_TRANSITION');
   await recordAudit(c.tx,c.actorId,c.clinicId,'payroll.rule_created',id); return result.rows[0];
 }
-function at(data:Records,until:string,doctor?:string) {
+function at(data:Records,until:string,doctor?:string,affected?:Set<string>) {
   const out=new Map<string,Row>();
-  for(const v of data.visits.filter(v=>v.date<=until)) for(const l of invoiceAt(data,v,until)) {
+  const visits=affected?[...affected].map(id=>indexRecords(data).visits.get(id)!).filter(Boolean):data.visits;
+  for(const v of visits.filter(v=>v.date<=until)) for(const l of invoiceAt(data,v,until)) {
     if(!l.doctorId || (doctor && l.doctorId!==doctor))continue;
     const rule=data.rules.find(r=>r.user_id===l.doctorId && r.effective_from<=v.date);
     if(!rule && l.status!=='cancelled') return fail('INVALID_TRANSITION');
@@ -41,8 +42,8 @@ function at(data:Records,until:string,doctor?:string) {
   }
   return out;
 }
-export function computePayroll(data:Records,p:Period,doctor?:string) {
-  const prev=new Date(Date.parse(p.from)-86400000).toISOString().slice(0,10), before=at(data,prev,doctor), after=at(data,p.to,doctor);
+export function computePayroll(data:Records,p:Period,doctor?:string,affected?:Set<string>) {
+  const prev=new Date(Date.parse(p.from)-86400000).toISOString().slice(0,10), before=at(data,prev,doctor,affected), after=at(data,p.to,doctor,affected);
   // Period deltas pay each entitlement once and carry refunds/corrections as signed adjustments.
   return [...new Set([...before.keys(),...after.keys()])].map(id=>{
     const a=after.get(id), b=before.get(id), row={...(a??b)};
@@ -51,11 +52,12 @@ export function computePayroll(data:Records,p:Period,doctor?:string) {
   }).filter(r=>r.entitlement_uzs!==0n || r.from_receipts_uzs!==0n || r.clinic_funded_uzs!==0n);
 }
 function daily(data:Records,p:Period,doctor?:string) {
-  const days=new Set<string>();
-  for(const v of data.visits)days.add(v.date);
-  for(const v of data.payments)days.add(v.date);
-  for(const v of [...data.charges,...data.discounts,...data.adjustments])for(const key of ['created_at','cancelled_at','voided_at'])if(v[key])days.add(localDate(v[key],data.clinic.timezone));
-  return [...days].filter(date=>inRange(date,p)).sort().flatMap(date=>computePayroll(data,{from:date,to:date},doctor).map(l=>({...l,date})));
+  const days=new Map<string,Set<string>>(),index=indexRecords(data);
+  const add=(date:string,visit:string)=>{if(!inRange(date,p))return;const ids=days.get(date)??new Set<string>();ids.add(visit);days.set(date,ids);};
+  for(const v of data.visits)add(v.date,v.id);
+  for(const v of data.payments)add(v.date,v.visit_id);
+  for(const v of [...data.charges,...data.discounts,...data.adjustments])for(const key of ['created_at','cancelled_at','voided_at'])if(v[key])add(localDate(v[key],data.clinic.timezone),v.visit_id??index.charges.get(v.charge_line_id)?.visit_id);
+  return [...days].sort(([a],[b])=>a.localeCompare(b)).flatMap(([date,ids])=>computePayroll(data,{from:date,to:date},doctor,ids).map(l=>({...l,date})));
 }
 function aggregate(lines:Row[]) {
   const map=new Map<string,Row>();

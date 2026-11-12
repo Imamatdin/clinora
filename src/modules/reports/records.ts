@@ -9,6 +9,20 @@ export const Range = z.object({ from: date, to: date }).strict().refine(v => v.f
 export type Period = z.infer<typeof Range>;
 export type Row = Record<string, any>;
 export type Records = { clinic: Row; visits: Row[]; charges: Row[]; discounts: Row[]; payments: Row[]; allocations: Row[]; adjustments: Row[]; cashOuts: Row[]; rules: Row[]; shifts: Row[] };
+type VisitLedger={charges:Row[];discounts:Row[];payments:Row[];allocations:Row[];adjustments:Row[]};
+const cached=new WeakMap<Records,{visits:Map<string,Row>;charges:Map<string,Row>;ledger:Map<string,VisitLedger>}>();
+export function indexRecords(data:Records){
+  let index=cached.get(data);if(index)return index;
+  index={visits:new Map(data.visits.map(v=>[v.id,v])),charges:new Map(data.charges.map(l=>[l.id,l])),ledger:new Map()};
+  const ledger=(id:string)=>{let v=index!.ledger.get(id);if(!v){v={charges:[],discounts:[],payments:[],allocations:[],adjustments:[]};index!.ledger.set(id,v);}return v;};
+  const paymentVisits=new Map(data.payments.map(p=>[p.id,p.visit_id]));
+  for(const row of data.charges)ledger(row.visit_id).charges.push(row);
+  for(const row of data.discounts)ledger(row.visit_id).discounts.push(row);
+  for(const row of data.payments)ledger(row.visit_id).payments.push(row);
+  for(const row of data.allocations)ledger(paymentVisits.get(row.payment_id)!).allocations.push(row);
+  for(const row of data.adjustments)ledger(paymentVisits.get(row.payment_id)!).adjustments.push(row);
+  cached.set(data,index);return index;
+}
 /** One SQL statement gives all ledgers the same MVCC snapshot, even during live payments. */
 export async function records(c: ClinicContext): Promise<Records> {
   const r = await c.tx.query(`SELECT
@@ -28,12 +42,14 @@ export async function records(c: ClinicContext): Promise<Records> {
   return r.rows[0] as Records;
 }
 export const inRange = (date: string, p: Period) => date >= p.from && date <= p.to;
-export const localDate = (stamp: string, timezone: string) => new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(stamp));
+const calendars=new Map<string,Intl.DateTimeFormat>();
+export const localDate = (stamp: string, timezone: string) => {let f=calendars.get(timezone);if(!f){f=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'});calendars.set(timezone,f);}return f.format(new Date(stamp));};
 export const sum = (rows: Row[], field: string) => rows.reduce((n, r) => n + BigInt(r[field]), 0n);
 export function invoiceAt(data: Records, visit: Row, until: string): readonly LineTotal[] {
   const dateOf = (v: string) => localDate(v, data.clinic.timezone);
-  const charges = data.charges.filter(l => l.visit_id === visit.id && dateOf(l.created_at) <= until);
-  const ds = data.discounts.filter(d => d.visit_id === visit.id && dateOf(d.created_at) <= until && (!d.voided_at || dateOf(d.voided_at) > until));
+  const ledger=indexRecords(data).ledger.get(visit.id)??{charges:[],discounts:[],payments:[],allocations:[],adjustments:[]};
+  const charges = ledger.charges.filter(l => dateOf(l.created_at) <= until);
+  const ds = ledger.discounts.filter(d => dateOf(d.created_at) <= until && (!d.voided_at || dateOf(d.voided_at) > until));
   const discounts: Discount[] = ds.sort((a,b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)).map(d => ({
     reason: d.reason, approverId: d.approved_by, ...(d.charge_line_id ? { lineId: d.charge_line_id } : {}),
     ...(d.kind === 'fixed' ? { kind: 'fixed' as const, amount: uzs(d.amount_uzs) } : { kind: 'percent' as const, basisPoints: d.percent_bp })
@@ -43,13 +59,13 @@ export function invoiceAt(data: Records, visit: Row, until: string): readonly Li
     status: l.cancelled_at && dateOf(l.cancelled_at) > until ? 'ordered' : l.status,
     category: l.kind, ...(l.performer_user_id ? { doctorId: l.performer_user_id } : {})
   })), discounts, []);
-  const payments = new Map(data.payments.filter(p => p.date <= until).map(p => [p.id, p]));
+  const payments = new Map(ledger.payments.filter(p => p.date <= until).map(p => [p.id, p]));
   const allocated = new Map<string,bigint>();
-  for (const a of data.allocations) {
+  for (const a of ledger.allocations) {
     const p = payments.get(a.payment_id); if (!p) continue;
     allocated.set(a.charge_line_id, (allocated.get(a.charge_line_id) ?? 0n) + BigInt(a.amount_uzs) * (p.kind === 'payment' ? 1n : -1n));
   }
-  for (const a of data.adjustments) if (payments.has(a.payment_id) && dateOf(a.created_at) <= until)
+  for (const a of ledger.adjustments) if (payments.has(a.payment_id) && dateOf(a.created_at) <= until)
     allocated.set(a.charge_line_id, (allocated.get(a.charge_line_id) ?? 0n) + BigInt(a.delta_uzs));
   return invoice.lines.map(l => {
     const paid = allocated.get(l.id) ?? 0n;

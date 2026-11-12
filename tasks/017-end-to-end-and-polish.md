@@ -1,7 +1,7 @@
 # Task 017: end-to-end clinic day and UX consistency pass
 
 Assigned to: Claude Code (builder). Review: Codex. Planner: 12 November 2026.
-Base: `main` after 005, 007, 009, 010, 011, 012 and 013 are merged. Branch: `task-017-e2e`.
+Base: `main` after 015, 019, 020 and 021 are merged. Branch: `task-017-e2e`.
 Read first: `docs/PRODUCT.md` ease-of-use rules, the Claude Doc "Clinora: what we're building" role table (mirrored in PRODUCT.md), every merged handoff.
 
 ## Goal
@@ -14,7 +14,7 @@ One synthetic clinic day works end to end across all roles, every screen follows
 4. Translation completeness: every key present in uz-Cyrl, uz-Latn and ru (test fails on a missing key); Uzbek Latin text uses the official alphabet (oʻ, gʻ, sh, ch).
 5. Role home screens: each role lands on its main job; navigation shows only that role's modules.
 6. Demo data for the founders' presentation: `db:demo` produces a believable clinic day (patients in queues, a few admissions, some payments) so dashboards are not empty.
-7. Open items from task 010: (a) decide whether the old notebook form below the doctor's visit screen stays; preferred: fold its remaining functions into the visit screen and remove it. (b) An assistant approval while a doctor's manual draft is open must not leave the draft out silently: block the approval with a clear message until the draft is saved or discarded. (c) Lab results confirmed after their business day is closed: allow confirmation, post the charge to the current open business day with a reference to the original visit date; if no day is open, keep it pending until one opens.
+7. Open items from task 010: (a) decide whether the old notebook form below the doctor's visit screen stays; preferred: fold its remaining functions into the visit screen and remove it. (c) Lab results confirmed after their business day is closed: allow confirmation, post the charge to the current open business day with a reference to the original visit date; if no day is open, keep it pending until one opens.
 8. Cheat sheets: one printable page per role in Uzbek Cyrillic generated from the app (`/help/<role>`), with the main steps and screenshots from the browser tests.
 
 ## Acceptance

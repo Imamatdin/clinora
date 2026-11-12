@@ -1,0 +1,37 @@
+/* Catalog and import (task 005). Administrator work, mostly on clinic PCs; still usable at 360 px. */
+.catalog { font-size: 1rem; max-width: 960px; }
+.catalog h2 { margin: 0.3rem 0; }
+.catalog fieldset { border: 0; padding: 0; margin: 0.4rem 0; min-width: 0; }
+.catalog label { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.6rem 0; }
+.catalog input, .catalog select, .catalog button { min-height: 48px; font-size: 1rem; max-width: 100%; box-sizing: border-box; }
+.catalog input:not([type=checkbox]):not([type=radio]), .catalog select { width: 100%; padding: 0 0.6rem; }
+.catalog input[type=checkbox], .catalog input[type=radio] { width: 24px; height: 24px; min-height: 24px; flex: none; }
+.catalog button { margin: 0.3rem 0.3rem 0.3rem 0; padding: 0 1rem; }
+.catalog .primary { display: block; width: 100%; font-size: 1.15rem; font-weight: bold; margin: 0.8rem 0; }
+.catalog .choice { flex-direction: row; align-items: center; gap: 0.6rem; min-height: 48px; margin: 0.2rem 0; }
+.catalog .muted { color: #44545b; }
+.catalog .badge { display: inline-block; padding: 0 0.5rem; border: 1px solid #44545b; border-radius: 4px; font-size: 0.9rem; }
+.catalog-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.catalog-lang { flex-direction: row !important; align-items: center; }
+.catalog-lang select { width: auto !important; }
+.catalog-tabs, .catalog-lists { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.5rem 0; }
+.catalog-tabs button, .catalog-lists button { margin: 0; border: 2px solid #204b5c; background: #fff; color: #10232b; border-radius: 6px; }
+.catalog-tabs button.on, .catalog-lists button.on { background: #204b5c; color: #fff; }
+.catalog-search { display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end; }
+.catalog-search button { margin: 0.6rem 0; }
+.catalog-items, .catalog-history, .catalog-checks, .catalog-objects { list-style: none; padding: 0; margin: 0.5rem 0; }
+.catalog-items > li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.4rem; border: 2px solid #b8c6cc; border-radius: 8px; padding: 0.5rem 0.8rem; margin: 0.5rem 0; }
+.catalog-items > li.off { border-style: dashed; color: #44545b; }
+.catalog-item-main { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; flex: 1 1 260px; }
+.catalog-item-main strong { font-size: 1.1rem; overflow-wrap: anywhere; }
+.catalog-price { font-weight: bold; white-space: nowrap; }
+.catalog-actions { display: flex; flex-wrap: wrap; align-items: center; }
+.catalog-panel { border: 3px solid #204b5c; border-radius: 8px; padding: 0.6rem 0.9rem; margin: 0.8rem 0; background: #f7fbfc; }
+.catalog-confirm { border: 3px solid #8a5a00; background: #fff8e8; padding: 0.6rem 0.9rem; border-radius: 8px; margin: 0.6rem 0; }
+.catalog-mapping { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 1rem; }
+.catalog-table { overflow-x: auto; max-width: 100%; }
+.catalog-table table { border-collapse: collapse; min-width: 100%; }
+.catalog-table th, .catalog-table td { border: 1px solid #ccd6da; padding: 0.4rem 0.6rem; text-align: start; }
+.catalog-more summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; font-weight: bold; }
+.catalog-checks li, .catalog-objects li { padding: 0.2rem 0; border-bottom: 1px solid #e3eaed; }
+.catalog-history li { padding: 0.3rem 0; border-bottom: 1px solid #e3eaed; }

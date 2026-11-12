@@ -7,6 +7,7 @@ import type { Request } from './api.js';
 import type { UiKey } from './i18n/index.js';
 import { cashierModule } from './cashier/screen.js';
 import { registrationModule } from './registration/screen.js';
+import { catalogModule } from './catalog/screen.js';
 
 /** What the shell hands every feature screen. The server still authorizes every call. */
 export type ModuleProps = {
@@ -31,12 +32,13 @@ export type WebModule = {
 export const MODULES: readonly WebModule[] = [
   cashierModule, pharmacyModule, surgeryModule,
   registrationModule,
+  catalogModule,
 ];
 
 /** Placeholders per role for increments not yet built. A registered module with the same label hides its placeholder. */
 export const PLANNED: Record<Role, UiKey[]> = {
   ceo: ['module.dashboard', 'module.reports', 'module.payroll', 'module.export'],
-  administrator: ['module.catalog', 'module.departments', 'module.queueMonitor'],
+  administrator: ['module.catalog', 'module.queueMonitor'],
   // Task 007: search, registration and tickets are one registration screen.
   registrar: ['module.registration'],
   doctor: ['module.myQueue', 'module.prescription'],

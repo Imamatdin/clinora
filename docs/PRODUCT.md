@@ -71,7 +71,7 @@ Previous planner's detailed AI briefs: `docs/backlog/ai-documentation/`.
 - Doctor split: adjustable per doctor by the CEO, effective from a date forward, every change recorded with who and when. Each doctor sees their own rule, its change history and their own earnings. A change never rewrites past periods.
 - Caretakers: optional entry on an admission with an optional charge. Low priority; details later.
 - Testing: Mashxura is a doctor and leads clinical testing.
-- President's Tech Award: 19 November 2026, the same day as the clinic go-live. The doctor assistant slice (A1) is the award demo, so it runs in parallel now on the existing notebook, on a staging environment with synthetic data, separate from the live clinic.
+- Founders receive the working platform for their own testing on 15 November 2026. President's Tech Award: 19 November 2026, the same day as the clinic go-live. Work is sequenced, never scoped down, to meet these. The doctor assistant slice (A1) is the award demo, so it runs in parallel now on the existing notebook, on a staging environment with synthetic data, separate from the live clinic.
 
 ## Data model direction
 

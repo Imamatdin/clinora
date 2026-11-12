@@ -21,7 +21,8 @@ import { handleAssistant, startAssistantHousekeeping } from './assistant.js';
 const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 /** Installed-app files copied from src/web/public. A fixed list: nothing else at the root is served. */
-const PUBLIC_FILES = ['sw.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png', 'icons/icon.svg'];
+const PUBLIC_FILES = ['sw.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png', 'icons/icon.svg',
+  'ticket.css', 'ticket.js'];
 /**
  * Strict policy for every response. Only change for task 004: Telegram Web (web.telegram.org) may
  * frame the app so the Mini App works there. Scripts stay same-origin: the Telegram bridge is our own code.
@@ -83,7 +84,14 @@ export async function createApp(webDirectory?: string, config?: ApiConfig, optio
       try {
         const result = await api(req, config);
         if (result.cookie) res.setHeader('Set-Cookie', result.cookie);
-        json(result.status ?? 200, result.body);
+        if (result.html !== undefined) { // Server-rendered print pages (queue tickets); same CSP as everything else.
+          res.writeHead(result.status ?? 200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(req.method === 'HEAD' ? undefined : result.html);
+        } else if (result.file !== undefined) { // Server-rendered files (prescription PDF).
+          res.writeHead(200, { 'Content-Type': result.file.contentType, 'Content-Length': result.file.data.length,
+            'Content-Disposition': `inline; filename="${result.file.filename.replace(/[^a-zA-Z0-9._-]/g, '')}"` });
+          res.end(req.method === 'HEAD' ? undefined : result.file.data);
+        } else json(result.status ?? 200, result.body);
       } catch (error) {
         if (error instanceof LoginLimited) {
           res.setHeader('Retry-After', String(Math.max(1, Math.ceil((Date.parse(error.unlockAt) - Date.now()) / 1000))));

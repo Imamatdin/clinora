@@ -28,7 +28,8 @@ type Phase = { kind: 'idle' } | { kind: 'requesting' } | { kind: 'recording'; se
   | { kind: 'processing'; captureId: string; stage: string | null } | { kind: 'failed'; captureId: string | null; message: string };
 
 /** Assistant panel for the encounter the doctor has open. Every decision is checked again on the server. */
-export function AssistantPanel({ clinicId, patientId, encounterId, request }: { clinicId: string; patientId: string; encounterId: string; request: Request }) {
+export function AssistantPanel({ clinicId, patientId, encounterId, request, onApproved }: { clinicId: string; patientId: string; encounterId: string; request: Request;
+  /** Task 010: lets the host reload its view of the note after an approval. */ onApproved?: () => void }) {
   const [locale, setLocaleState] = useState<ALocale>(loadLocale);
   const t = translator(locale);
   const root = `/api/clinics/${clinicId}/assistant`, base = `${root}/patients/${patientId}/encounters/${encounterId}`;
@@ -129,7 +130,7 @@ export function AssistantPanel({ clinicId, patientId, encounterId, request }: { 
     if (!draft || !confirm(t('approveConfirm'))) return;
     await run(async () => {
       await request(`${base}/approve`, { expectedDraftRevision: draft.draft.revision, fieldRevisions: Object.fromEntries(draft.fields.map(f => [f.key, f.fieldRevision])) }, true);
-      await refresh();
+      await refresh(); onApproved?.();
     });
   }
 

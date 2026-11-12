@@ -16,13 +16,13 @@ function Screen({clinic,request,myId,setDirty}:ModuleProps) {
   const amount=(value:string)=>BigInt(value).toLocaleString('ru-RU');
   const [data,setData]=useState<WardView|null>(null),[selected,setSelected]=useState(''),[bill,setBill]=useState<InvoiceView|null>(null);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[confirm,setConfirm]=useState(false),[mine,setMine]=useState(false);
-  const pending=useRef<{payload:string;key:string}|null>(null),pdf=useRef('');
+  const pending=useRef<{payload:string;key:string}|null>(null);
   const base=`/api/clinics/${clinic.id}/inpatient`;
   const canWrite=clinic.roles.some(r=>['ceo','administrator','inpatient'].includes(r));
   const manager=clinic.roles.some(r=>['ceo','administrator'].includes(r));
   async function refresh(){setData(await request<WardView>(base));}
   async function run(fn:()=>Promise<void>){setBusy(true);setError('');setNotice('');try{await fn();}catch(e){setError(errorText(e instanceof ApiFailure?e.code:'SERVICE_UNAVAILABLE'));}finally{setBusy(false);}}
-  useEffect(()=>{setData(null);setSelected('');setBill(null);pending.current=null;void run(refresh);return()=>{if(pdf.current)URL.revokeObjectURL(pdf.current);};},[clinic.id]);
+  useEffect(()=>{setData(null);setSelected('');setBill(null);pending.current=null;void run(refresh);},[clinic.id]);
   async function mutate(path:string,value:Record<string,unknown>){
     const payload=JSON.stringify({path,value});if(pending.current?.payload!==payload)pending.current={payload,key:crypto.randomUUID()};
     const result=await request(`${base}${path}`,{...value,key:pending.current.key});pending.current=null;setDirty(false);return result;
@@ -50,11 +50,7 @@ function Screen({clinic,request,myId,setDirty}:ModuleProps) {
       {active&&<section className="stay-detail"><h3>{active.patient}</h3>
         {bill&&<div><h4>{t('inpatient.invoice')}</h4>{bill.lines.map(l=><p key={l.id}>{l.name} · {l.quantity} × {amount(l.price)} = {amount(l.value)} {t('inpatient.uzs')}</p>)}
           <dl>{(['value','discount','payable','paid','due'] as const).map(k=><div key={k}><dt>{t(`inpatient.${k}`)}</dt><dd data-testid={`inpatient-${k}`}>{BigInt(bill[k]).toLocaleString('ru-RU')} {t('inpatient.uzs')}</dd></div>)}</dl>
-          <button disabled={busy} onClick={()=>{
-            // Open synchronously so the browser treats this as the user's print action.
-            const popup=window.open('about:blank','_blank');void run(async()=>{try{const result=await request<{base64:string}>(`${base}/${selected}/invoice-pdf`);if(pdf.current)URL.revokeObjectURL(pdf.current);
-              pdf.current=URL.createObjectURL(new Blob([Uint8Array.from(atob(result.base64),c=>c.charCodeAt(0))],{type:'application/pdf'}));if(popup)popup.location.href=pdf.current;setNotice(t('inpatient.printHelp'));}catch(e){popup?.close();throw e;}});
-          }}>{t('inpatient.print')}</button>
+          <a className="invoice-pdf" href={`${base}/${selected}/invoice-pdf`} target="_blank" rel="noopener noreferrer">{t('inpatient.print')}</a>
         </div>}
         {canWrite&&active.status==='admitted'&&<>
           <details><summary>{t('inpatient.addService')}</summary><p>{t('inpatient.medicineHelp')}</p><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,`/${selected}/services`,f=>({serviceId:f.get('service'),quantity:Number(f.get('quantity'))}))}><fieldset disabled={busy}>

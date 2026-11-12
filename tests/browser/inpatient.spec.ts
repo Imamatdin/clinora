@@ -56,10 +56,10 @@ for(const width of [1280,360])test(`inpatient admission, three days, transfer, d
     await page.getByRole('button',{name:I('inpatient.confirm'),exact:true}).click();
     await expect(stay).toContainText(I('inpatient.discharged'));
     await expect(page.getByTestId('inpatient-due')).toHaveText(/400.000/);
-    const pdf=page.waitForResponse(r=>r.url().endsWith('/invoice-pdf'));
-    await page.getByRole('button',{name:I('inpatient.print'),exact:true}).click();
-    const response=await pdf;expect(response.status()).toBe(200);
-    const bytes=Buffer.from((await response.json()).base64,'base64');expect(bytes.subarray(0,5).toString()).toBe('%PDF-');
+    const print=page.getByRole('link',{name:I('inpatient.print'),exact:true});
+    const response=await page.request.get((await print.getAttribute('href'))!);expect(response.status()).toBe(200);expect(response.headers()['content-type']).toBe('application/pdf');
+    const bytes=await response.body();expect(bytes.subarray(0,5).toString()).toBe('%PDF-');
+    await print.click();
     expect(bytes.toString('latin1')).toContain('/MediaBox [0 0 595.28 841.89]');
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
     await mkdir('work/browser-evidence',{recursive:true});await writeFile(`work/browser-evidence/inpatient-${width}.pdf`,bytes);await page.screenshot({path:`work/browser-evidence/inpatient-${width}.png`,fullPage:true});

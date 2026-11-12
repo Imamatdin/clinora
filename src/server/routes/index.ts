@@ -13,3 +13,7 @@ export type { Route } from './types.js';
 
 import './pharmacy.js';
 import './surgery.js';
+import './registration.js';
+import './catalog.js';
+import './doctor.js';
+import './lab.js';

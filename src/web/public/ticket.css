@@ -1,0 +1,14 @@
+/* Queue ticket (server-rendered, task 007). 80 mm thermal paper, readable at 58 mm. */
+@page { size: 80mm auto; margin: 2mm; }
+html, body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; }
+body { max-width: 76mm; }
+.ticket { padding: 3mm 1mm 4mm; border-bottom: 1px dashed #000; text-align: center; break-after: page; page-break-after: always; overflow-wrap: anywhere; }
+.ticket:last-of-type { break-after: auto; page-break-after: auto; }
+.ticket p { margin: 1mm 0; font-size: 14px; line-height: 1.25; }
+.ticket .clinic { font-weight: bold; font-size: 15px; }
+.ticket .point { font-size: 18px; font-weight: bold; }
+.ticket .label { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; }
+.ticket .number { font-size: 56px; font-weight: bold; line-height: 1; margin: 2mm 0; }
+.ticket .patient strong { font-size: 18px; }
+.no-print { display: block; width: 100%; min-height: 48px; font-size: 18px; margin: 0 0 4mm; }
+@media print { .no-print { display: none; } }

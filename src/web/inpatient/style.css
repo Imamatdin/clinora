@@ -5,6 +5,7 @@
 .inpatient input[type=checkbox] {width:24px;height:24px;flex:none}
 .inpatient input:not([type=checkbox]),.inpatient select {display:block;width:100%;min-height:48px;font:inherit;max-width:100%}
 .inpatient button {min-height:48px;font:inherit;white-space:normal;overflow-wrap:anywhere}
+.inpatient .invoice-pdf {display:inline-flex;align-items:center;min-height:48px;padding:10px;border:1px solid #bdcecc;border-radius:6px;color:#244b51}
 .inpatient fieldset {border:0;padding:0;min-width:0}
 .inpatient details {border:1px solid #c6d4db;border-radius:10px;padding:1rem;margin:1rem 0}
 .inpatient summary {cursor:pointer;min-height:48px;font-weight:600}

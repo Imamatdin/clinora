@@ -11,6 +11,5 @@ registerRoutes('inpatient',[
   ...(['transfer','services','caretakers','discharge'] as const).map(action=>({method:'POST' as const,pattern:new RegExp(`^inpatient/${uuid}/${action}$`),roles:inpatient.WARD,
     handle:async(ctx:Parameters<typeof inpatient.admit>[0],[id]:string[],body:()=>Promise<unknown>)=>({body:await ({transfer:inpatient.transfer,services:inpatient.addService,caretakers:inpatient.addCaretaker,discharge:inpatient.discharge}[action])(ctx,id!,await body())})})),
   {method:'GET',pattern:new RegExp(`^inpatient/${uuid}/invoice$`),roles:inpatient.READ,handle:async(ctx,[id])=>({body:await inpatient.invoice(ctx,id!)})},
-  // Existing clinic registry transports JSON. PDF bytes are produced on the server, never on a phone.
-  {method:'GET',pattern:new RegExp(`^inpatient/${uuid}/invoice-pdf$`),roles:inpatient.READ,handle:async(ctx,[id])=>({body:{base64:(await renderInvoice(await inpatient.invoice(ctx,id!))).toString('base64')}})}
+  {method:'GET',pattern:new RegExp(`^inpatient/${uuid}/invoice-pdf$`),roles:inpatient.READ,handle:async(ctx,[id])=>({file:{contentType:'application/pdf',filename:'clinora-inpatient-invoice.pdf',data:await renderInvoice(await inpatient.invoice(ctx,id!))}})}
 ]);

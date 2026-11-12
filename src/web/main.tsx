@@ -10,11 +10,15 @@ import { errorText, setLocale, t, type UiKey } from './i18n/index.js';
 import { modulesFor, plannedFor, type ModuleProps } from './modules.js';
 import { Notebook } from './notebook.js';
 import { AssistantPanel } from './assistant/panel.js';
+import { registerVisitPanel } from './doctor/panels.js';
 import { Staff } from './staff.js';
 import { LockScreen, useIdleLock, type DeviceInfo } from './access/device.js';
 import { Devices, MyAccess } from './access/staff-access.js';
 import { InstallHint, registerServiceWorker } from './access/install.js';
 import './style.css';
+
+// Task 003C assistant inside the task 010 visit screen (one line per visit panel).
+registerVisitPanel({ id: 'assistant', Panel: ({ onChanged, ...p }) => <AssistantPanel {...p} onApproved={onChanged} /> });
 
 type Me = { id: string; name: string; csrf: string; mustChangePassword: boolean; clinics: ClinicMembershipView[]; professionalVerification: { status: string };
   session: { via: 'password' | 'telegram' | 'device'; deviceLabel: string | null; idleMinutes: number | null } };
@@ -198,7 +202,7 @@ function App() {
           <div className="page home compact" data-role="doctor"><h1>{t('home.doctor.title')}</h1><p className="muted">{t('home.doctor.lead')}</p>
             <RoleModules key={`${clinic.id}:doctor`} role="doctor" busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, setDirty }} /><Planned role="doctor" /></div>
           <Notebook clinic={clinic} request={request} dirty={dirty} setDirty={setDirty} guard={guard}
-            visitExtra={(patientId, encounterId) => <AssistantPanel key={encounterId} clinicId={clinic.id} patientId={patientId} encounterId={encounterId} request={request} />} />
+            visitExtra={(patientId, encounterId, refresh) => <AssistantPanel key={encounterId} clinicId={clinic.id} patientId={patientId} encounterId={encounterId} request={request} onApproved={refresh} />} />
         </>}
       </>}
       {clinic && !sections.length && !invite && <main className="page"><p className="empty">{t('staff.noRoles')}</p></main>}

@@ -26,7 +26,7 @@ test('spec example: five bed days plus services = 1,000,000; immutable discharge
   assert.equal(final.value,'1000000');assert.equal(final.due,'1000000');
   assert.deepEqual(await post(`/${g.admission}/discharge`,input),final);
   assert.deepEqual(await get(`/${g.admission}/invoice`),final);
-  const pdf=await get(`/${g.admission}/invoice-pdf`);assert.ok(Buffer.from(pdf.base64,'base64').subarray(0,5).equals(Buffer.from('%PDF-')));
+  const pdf=await client.request(base+`/${g.admission}/invoice-pdf`);assert.equal(pdf.status,200);assert.equal(pdf.headers.get('content-type'),'application/pdf');assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0,5).toString(),'%PDF-');
   await post(`/${g.admission}/services`,{key:key(),serviceId:g.services.other,quantity:1},409);
   await post(`/${g.admission}/transfer`,{key:key(),bedId:g.bed2},409);
   assert.equal((await f.pool.query('SELECT count(*)::int n FROM bed_assignments WHERE admission_id=$1 AND to_at IS NULL',[g.admission])).rows[0].n,0);

@@ -19,13 +19,14 @@ function visitDate(v: VisitView) {
 export function Notebook({ clinic, request, dirty, setDirty, guard, visitExtra }: {
   clinic: NotebookClinic; request: Request; dirty: boolean; setDirty: (d: boolean) => void; guard: (action: () => void) => void;
   /** Task 003C: the doctor assistant panel for the open encounter. */
-  visitExtra?: (patientId: string, encounterId: string) => ReactNode
+  visitExtra?: (patientId: string, encounterId: string, refresh: () => void) => ReactNode
 }) {
   const [patients, setPatients] = useState<PatientView[]>([]), [search, setSearch] = useState('');
   const [patient, setPatient] = useState<PatientView | null>(null), [visits, setVisits] = useState<VisitView[]>([]), [visit, setVisit] = useState<VisitView | null>(null);
   const [note, setNote] = useState<Note>({ ...empty }), [template, setTemplate] = useState('general-note-v1');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [newPatient, setNewPatient] = useState(false), [newVisit, setNewVisit] = useState(false), [precision, setPrecision] = useState('date');
+  const [reason, setReason] = useState('');
   const [conflict, setConflict] = useState(false), [latest, setLatest] = useState<VisitView | null>(null), [inviteLink, setInviteLink] = useState('');
   const base = `/api/clinics/${clinic.id}/patients`;
   const run = async (work: () => Promise<void>) => {
@@ -49,16 +50,27 @@ export function Notebook({ clinic, request, dirty, setDirty, guard, visitExtra }
     }));
   }
   function openVisit(v: VisitView) {
-    guard(() => { setVisit(v); setNote(noteFrom(v)); setTemplate(v.version?.templateId ?? 'general-note-v1'); setDirty(false); setConflict(false); setLatest(null); setNewVisit(false); setNotice(''); setError(''); });
+    guard(() => { setVisit(v); setNote(noteFrom(v)); setReason(''); setTemplate(v.version?.templateId ?? 'general-note-v1'); setDirty(false); setConflict(false); setLatest(null); setNewVisit(false); setNotice(''); setError(''); });
   }
   async function save(e: FormEvent) {
     e.preventDefault(); if (!patient || !visit) return; const current = visit;
     await run(async () => {
-      const result = await request<{ revision: number; version: NonNullable<VisitView['version']> }>(`${base}/${patient.id}/encounters/${current.encounter.id}/draft`, { expectedRevision: current.revision, note, templateId: template }, true);
+      const result = await request<{ revision: number; version: NonNullable<VisitView['version']>; approval: import('../contracts/notebook.js').VisitApproval | null }>(`${base}/${patient.id}/encounters/${current.encounter.id}/draft`,
+        { expectedRevision: current.revision, note, templateId: template, ...(reason.trim() ? { amendmentReason: reason.trim() } : {}) }, true);
       const saved = { ...current, ...result }; setVisit(saved); setVisits(old => old.map(v => v.encounter.id === saved.encounter.id ? saved : v));
-      setDirty(false); setConflict(false); setLatest(null); setNotice(t('notebook.savedNotice', { revision: result.revision }));
+      setDirty(false); setConflict(false); setLatest(null); setReason(''); setNotice(t('notebook.savedNotice', { revision: result.revision }));
     });
   }
+  /** Reload the open visit after another panel (the assistant) approved it, so the timeline shows the approved version. */
+  function refreshVisit(encounterId: string) {
+    if (!patient) return;
+    void request<{ visits: VisitView[] }>(`${base}/${patient.id}`).then(d => {
+      setVisits(d.visits); const v = d.visits.find(x => x.encounter.id === encounterId);
+      if (v) { setVisit(v); setNote(noteFrom(v)); setReason(''); setDirty(false); }
+    }).catch(() => {});
+  }
+  const tagFor = (v: VisitView) => v.approval?.current ? t('notebook.approvedTag', { revision: v.approval.revision })
+    : v.approval ? t('notebook.amendingTag', { revision: v.approval.revision }) : t('notebook.draftTag', { revision: v.revision });
   const assessment = (v: VisitView) => v.version?.fields.find(f => f.key === 'assessment')?.value;
   return <>
     <div className="banners" aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>
@@ -88,7 +100,7 @@ export function Notebook({ clinic, request, dirty, setDirty, guard, visitExtra }
         </form></section> :
       patient ? <><section className="patient-header"><div><p className="eyebrow">{t('notebook.recordEyebrow')}</p><h1>{patient.displayName}</h1><p>{t('notebook.dobLine', { mrn: patient.mrn ?? t('notebook.noMrn'), dob: patient.dateOfBirth ?? t('notebook.unrecorded') })}</p></div><button disabled={busy} onClick={() => guard(() => { setDirty(false); setNewVisit(true); setVisit(null); setError(''); })}>{t('notebook.newEncounter')}</button></section>
         <div className="notebook"><section className="timeline" aria-label={t('notebook.history')}><h2>{t('notebook.history')}</h2><p className="fine">{t('notebook.historyNote')}</p>
-          {visits.map(v => <button className={`visit-row ${v.encounter.id === visit?.encounter.id ? 'selected' : ''}`} disabled={busy} key={v.encounter.id} onClick={() => openVisit(v)}><strong>{visitDate(v)}</strong><span>{v.encounter.specialty} · {v.encounter.location.label}</span><span>{v.clinicianName}</span><span className="draft-tag">{t('notebook.draftTag', { revision: v.revision })}</span>{assessment(v) && <span className="assessment-preview">{String(assessment(v))}</span>}</button>)}
+          {visits.map(v => <button className={`visit-row ${v.encounter.id === visit?.encounter.id ? 'selected' : ''}`} disabled={busy} key={v.encounter.id} onClick={() => openVisit(v)}><strong>{visitDate(v)}</strong><span>{v.encounter.specialty} · {v.encounter.location.label}</span><span>{v.clinicianName}</span><span className="draft-tag">{tagFor(v)}</span>{assessment(v) && <span className="assessment-preview">{String(assessment(v))}</span>}</button>)}
           {!visits.length && <p className="empty">{t('notebook.noVisits')}</p>}</section>
         <section className="editor">{newVisit ? <><p className="eyebrow">{t('notebook.newConsultation')}</p><h2>{t('notebook.startEncounter')}</h2>
           <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); let o: unknown;
@@ -104,12 +116,14 @@ export function Notebook({ clinic, request, dirty, setDirty, guard, visitExtra }
             <label>{t('notebook.specialty')}<input name="specialty" defaultValue={t('notebook.specialtyDefault')} required maxLength={100} /></label>
             <button className="primary" disabled={busy}>{busy ? t('notebook.creating') : t('notebook.createEncounter')}</button>
           </form></> :
-        visit ? <><div className="section-heading"><div><p className="eyebrow">{t('notebook.noteEyebrow')}</p><h2>{visitDate(visit)}</h2></div><span className="draft-tag">{t('notebook.unapproved')}</span></div>
+        visit ? <><div className="section-heading"><div><p className="eyebrow">{t('notebook.noteEyebrow')}</p><h2>{visitDate(visit)}</h2></div><span className="draft-tag">{visit.approval ? tagFor(visit) : t('notebook.unapproved')}</span></div>
           <p className="fine">{visit.encounter.location.label} · {visit.encounter.specialty} · {visit.clinicianName}</p>
-          {visitExtra?.(patient.id, visit.encounter.id)}
+          {visitExtra?.(patient.id, visit.encounter.id, () => refreshVisit(visit.encounter.id))}
           <form onSubmit={save}><label>{t('notebook.template')}<input value={template} required maxLength={100} disabled={busy} onChange={e => { setTemplate(e.target.value); setDirty(true); setNotice(''); }} /></label>
             {(Object.keys(empty) as (keyof Note)[]).map(key => <label key={key}>{fieldLabel(key)}<textarea id={`note-${key}`} aria-label={fieldLabel(key)} value={note[key]} maxLength={16000} rows={key === 'reported' ? 4 : 3} disabled={busy} placeholder={t('notebook.notRecorded')} onChange={e => { const value = e.target.value; setNote(old => ({ ...old, [key]: value })); setDirty(true); setNotice(''); }} /></label>)}
-            <div className="savebar"><p role="status">{busy ? t('notebook.saving') : dirty ? t('notebook.unsaved') : visit.revision ? t('notebook.savedRevision', { revision: visit.revision }) : t('notebook.emptyNote')}</p><button className="primary" disabled={busy || (!dirty && visit.revision > 0)}>{busy ? t('notebook.saving') : t('notebook.saveDraft')}</button></div>
+            {visit.approval && <label>{t('notebook.amendReason')}<input value={reason} maxLength={500} required={visit.approval.current} disabled={busy}
+              onChange={e => { setReason(e.target.value); setDirty(true); setNotice(''); }} />{visit.approval.current && <span className="fine">{t('notebook.amendHint')}</span>}</label>}
+            <div className="savebar"><p role="status">{busy ? t('notebook.saving') : dirty ? t('notebook.unsaved') : visit.revision ? t('notebook.savedRevision', { revision: visit.revision }) : t('notebook.emptyNote')}</p><button className="primary" disabled={busy || (!dirty && visit.revision > 0) || (!!visit.approval?.current && !reason.trim())}>{busy ? t('notebook.saving') : t('notebook.saveDraft')}</button></div>
           </form>
           {conflict && <div className="conflict"><h3>{t('notebook.conflictTitle')}</h3><p>{t('notebook.conflictLead')}</p>
             <button disabled={busy} onClick={() => void run(async () => { const d = await request<{ visits: VisitView[] }>(`${base}/${patient.id}`); const v = d.visits.find(x => x.encounter.id === visit.encounter.id); if (v) setLatest(v); })}>{t('notebook.loadLatest')}</button>

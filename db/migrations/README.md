@@ -18,3 +18,6 @@ clinic-qualified foreign keys, append-only and status-transition triggers, and t
 indexes. Existing patients get `patient_no` in creation order per clinic; inserts that omit
 `patient_no`/`full_name` (notebook, demo) are filled by trigger from the same counter. Feature
 tasks add their own `0NN_<task>_<what>.sql`; never edit an applied migration.
+
+Task 005 adds `016_catalog_import.sql`: is_active on districts/mahallas/room_types, 1C-code unique indexes for re-import,
+`catalog_doctors` (1C doctors, linked to staff by an administrator) and staged import batches (catalog rows only).

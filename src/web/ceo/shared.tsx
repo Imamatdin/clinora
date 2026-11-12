@@ -1,0 +1,32 @@
+import { useState,useSyncExternalStore } from 'react';
+import type { Download } from '../../modules/reports/exports.js';
+import { ceo } from '../i18n/ceo.uz-Cyrl.js';
+import { ceoUzLatn } from '../i18n/ceo.uz-Latn.js';
+import { ceoRu } from '../i18n/ceo.ru.js';
+export type Key=keyof typeof ceo;
+const dictionaries={'uz-Cyrl':ceo,'uz-Latn':ceoUzLatn,ru:ceoRu};
+type Locale=keyof typeof dictionaries;
+let locale:Locale='uz-Cyrl';const listeners=new Set<()=>void>();
+export const t=(key:Key)=>dictionaries[locale][key];
+const subscribe=(fn:()=>void)=>{listeners.add(fn);return()=>{listeners.delete(fn);};};
+const snapshot=()=>locale;
+export function useReportLocale(){return useSyncExternalStore(subscribe,snapshot);}
+export function Language(){const value=useReportLocale();return <label className="ceo-language">{t('ceo.language')}<select aria-label={t('ceo.language')} value={value} onChange={e=>{locale=e.target.value as Locale;for(const fn of [...listeners])fn();}}><option value="uz-Cyrl">{t('ceo.langCyrl')}</option><option value="uz-Latn">{t('ceo.langLatn')}</option><option value="ru">{t('ceo.langRu')}</option></select></label>;}
+export const money=(value:string|bigint)=>BigInt(value).toLocaleString('ru-RU');
+export const metric=(key:string)=>t(`ceo.${key}` as Key);
+export function saveFile(file:Download) {
+  const raw=atob(file.base64),bytes=Uint8Array.from(raw,c=>c.charCodeAt(0));
+  const url=URL.createObjectURL(new Blob([bytes],{type:file.mime})),a=document.createElement('a');
+  a.href=url;a.download=file.name;a.hidden=true;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+export function Dates({from,to,onChange,onSubmit,busy}:{from:string;to:string;onChange:(from:string,to:string)=>void;onSubmit:()=>void;busy:boolean}) {
+  return <form className="ceo-dates" onSubmit={e=>{e.preventDefault();onSubmit();}}>
+    <label>{t('ceo.from')}<input type="date" required max={to} value={from} onChange={e=>onChange(e.target.value,to)} /></label>
+    <label>{t('ceo.to')}<input type="date" required min={from} value={to} onChange={e=>onChange(from,e.target.value)} /></label>
+    <button className="ceo-primary" disabled={busy}>{t('ceo.show')}</button>
+  </form>;
+}
+export function Confirm({text,label=text,onConfirm,busy}:{text:string;label?:string;onConfirm:()=>void;busy:boolean}) {
+  const [open,setOpen]=useState(false);
+  return <>{!open?<button className="ceo-primary" disabled={busy} onClick={()=>setOpen(true)}>{label}</button>:<div className="ceo-confirm" role="group" aria-label={text}><p>{text}</p><button className="ceo-primary" disabled={busy} onClick={()=>{setOpen(false);onConfirm();}}>{t('ceo.confirm')}</button><button disabled={busy} onClick={()=>setOpen(false)}>{t('ceo.cancel')}</button></div>}</>;
+}

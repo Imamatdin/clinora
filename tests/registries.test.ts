@@ -24,6 +24,6 @@ test('web module registry: placeholders cover every role and a registered module
 
 test('each role lands on its own main screen (the first registered module for that role)', () => {
   const landing = Object.fromEntries(ROLES.map(r => [r, modulesFor(r)[0]?.id ?? null]));
-  assert.deepEqual(landing, { ceo: 'cashier', administrator: 'cashier', registrar: 'registration', doctor: 'doctor',
+  assert.deepEqual(landing, { ceo: 'dashboard', administrator: 'cashier', registrar: 'registration', doctor: 'doctor',
     laboratory: 'lab', cashier: 'cashier', inpatient: 'inpatient', pharmacy: 'pharmacy' });
 });

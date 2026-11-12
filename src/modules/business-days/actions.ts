@@ -3,6 +3,8 @@ import type pg from 'pg';
 import type { BusinessDayView, CurrentDayView } from '../../contracts/clinic.js';
 import { DomainError } from '../identity/access.js';
 import { recordAudit, type ClinicContext } from '../../server/roles.js';
+import { computeReport } from '../reports/actions.js';
+import { records } from '../reports/records.js';
 import { onBusinessDayOpen } from '../inpatient/actions.js';
 
 /*
@@ -39,14 +41,20 @@ export async function openDay(ctx: ClinicContext): Promise<BusinessDayView> {
   return view((await ctx.tx.query(`${SELECT} WHERE d.id=$1`, [id])).rows[0]);
 }
 
-/** Closes an open day. close_snapshot is an empty placeholder until increment C8 fills it. */
+/** Lock the day before reading its ledgers; shift/payment writers take the same lock. */
 export async function closeDay(ctx: ClinicContext, dayId: string): Promise<BusinessDayView> {
-  const updated = (await ctx.tx.query(`UPDATE business_days SET status='closed', closed_by=$3, closed_at=now(), close_snapshot='{}'::jsonb
-    WHERE clinic_id=$1 AND id=$2 AND status='open' RETURNING id`, [ctx.clinicId, dayId, ctx.actorId])).rows[0];
+  const day = (await ctx.tx.query('SELECT * FROM business_days WHERE clinic_id=$1 AND id=$2 FOR UPDATE',[ctx.clinicId,dayId])).rows[0];
+  if (!day) return fail('NOT_FOUND');
+  if (day.status !== 'open') return fail('INVALID_TRANSITION');
+  if ((await ctx.tx.query("SELECT 1 FROM cash_shifts WHERE clinic_id=$1 AND business_day_id=$2 AND status='open'",[ctx.clinicId,dayId])).rowCount) return fail('INVALID_TRANSITION');
+  const snapshot=computeReport(await records(ctx),{from:day.business_date,to:day.business_date});
+  const updated = (await ctx.tx.query(`UPDATE business_days SET status='closed', closed_by=$3, closed_at=now(), close_snapshot=$4::jsonb
+    WHERE clinic_id=$1 AND id=$2 AND status='open' RETURNING id`, [ctx.clinicId, dayId, ctx.actorId, JSON.stringify(snapshot)])).rows[0];
   if (!updated) {
     const exists = (await ctx.tx.query('SELECT 1 FROM business_days WHERE clinic_id=$1 AND id=$2', [ctx.clinicId, dayId])).rows[0];
     return fail(exists ? 'INVALID_TRANSITION' : 'NOT_FOUND');
   }
   await recordAudit(ctx.tx, ctx.actorId, ctx.clinicId, 'business_day.closed', dayId);
+  await ctx.tx.query('INSERT INTO report_notices(id,clinic_id,business_day_id,totals) VALUES($1,$2,$3,$4)',[randomUUID(),ctx.clinicId,dayId,JSON.stringify({collected:snapshot.totals.collected,refunds:snapshot.totals.refunds,cashOuts:snapshot.totals.cashOuts})]);
   return view((await ctx.tx.query(`${SELECT} WHERE d.id=$1`, [dayId])).rows[0]);
 }

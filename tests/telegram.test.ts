@@ -25,7 +25,7 @@ test('notice templates accept only small integers, never patient fields', () => 
 
 test('every rendered notice is fixed text plus one button into the app, in all three languages', () => {
   for (const id of Object.keys(NOTICE_TEMPLATES) as NoticeTemplate[]) for (const locale of BOT_LOCALES) {
-    const params = ('count' in (NOTICE_TEMPLATES[id].params as unknown as { shape: object }).shape ? { count: 7 } : {}) as never;
+    const params = (id==='day.closed'?{collected:'15000000',refunds:'50000',cashOuts:'20000'}:'count' in (NOTICE_TEMPLATES[id].params as unknown as { shape: object }).shape ? { count: 7 } : {}) as never;
     const message = renderNotice(id, params, locale, APP);
     assert.deepEqual(Object.keys(message).sort(), ['reply_markup', 'text']);
     assert.ok(message.text.length > 10 && !/\{\w+\}/.test(message.text), `${id}/${locale} filled`);

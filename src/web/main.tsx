@@ -17,6 +17,7 @@ import { Devices, MyAccess } from './access/staff-access.js';
 import { InstallHint, registerServiceWorker } from './access/install.js';
 import { clearOutbox, lockOutbox } from './registration/outbox.js';
 import './style.css';
+import './ceo/style.css';
 
 // Task 003C assistant inside the task 010 visit screen (one line per visit panel).
 registerVisitPanel({ id: 'assistant', Panel: ({ onChanged, ...p }) => <AssistantPanel {...p} onApproved={onChanged} /> });
@@ -29,7 +30,7 @@ const sectionLabel = (s: Section) => s === 'staff' ? t('nav.staff') : t(`role.${
 /** Registered feature screens for one role (src/web/modules.ts). Renders nothing until a feature registers. */
 function RoleModules({ role, busy, guard, props }: { role: Role; busy: boolean; guard: (action: () => void) => void; props: ModuleProps }) {
   const modules = modulesFor(role);
-  const [current, setCurrent] = useState('');
+  const [current, setCurrent] = useState(props.reportDayId ? 'reports' : '');
   if (!modules.length) return null;
   const active = modules.find(m => m.id === current) ?? modules[0]!;
   return <section className="role-modules">
@@ -43,6 +44,7 @@ function Planned({ role }: { role: Role }) {
 }
 
 function App() {
+  const [reportDayId] = useState(() => new URLSearchParams(location.search).get('report'));
   const [me, setMe] = useState<Me | null>(null), [loading, setLoading] = useState(true), [mode, setMode] = useState<'login' | 'register'>('login');
   const [clinicId, setClinicId] = useState(''), [section, setSection] = useState<Section | ''>('');
   const [day, setDay] = useState<CurrentDayView | null>(null);
@@ -206,10 +208,10 @@ function App() {
       {!showMe && clinic && active && active !== 'staff' && <>
         {active !== 'doctor' && <main className="page home" data-role={active}>
           <h1>{t(`home.${active}.title` as UiKey)}</h1><p className="muted">{t(`home.${active}.lead` as UiKey)}</p>
-          {(active === 'ceo' || active === 'administrator') && <DayPanel day={day} busy={busy}
+          {(active === 'ceo' || active === 'administrator') && <DayPanel day={day} busy={busy} compact={active==='ceo'}
             onOpen={() => void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/open`, {}); setNotice(t('day.openedNotice')); } finally { await refreshDay().catch(() => {}); } })}
             onClose={(id, date) => { if (confirm(t('day.closeConfirm', { date }))) void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/${id}/close`, {}); setNotice(t('day.closedNotice')); } finally { await refreshDay().catch(() => {}); } }); }} />}
-          <RoleModules key={`${clinic.id}:${active}`} role={active} busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, offlineDeviceId: onDevice ? me.session.deviceId : null, setDirty }} />
+          <RoleModules key={`${clinic.id}:${active}`} role={active} busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, offlineDeviceId: onDevice ? me.session.deviceId : null, setDirty, reportDayId }} />
           <Planned role={active} />
         </main>}
         {active === 'doctor' && <>

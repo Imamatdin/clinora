@@ -11,10 +11,10 @@ export function DayPill({ day }: { day: CurrentDayView | null }) {
 }
 
 /** Open or close the business day. Shown only to CEO and administrator; the server enforces it regardless. */
-export function DayPanel({ day, busy, onOpen, onClose }: { day: CurrentDayView | null; busy: boolean; onOpen: () => void; onClose: (id: string, date: string) => void }) {
+export function DayPanel({ day, busy, onOpen, onClose,compact=false }: { day: CurrentDayView | null; busy: boolean; onOpen: () => void; onClose: (id: string, date: string) => void;compact?:boolean }) {
   if (!day) return null;
   const open = day.openDay, stale = open && open.businessDate !== day.today;
-  return <section className="panel day-panel" aria-labelledby="day-heading">
+  const panel=<section className="panel day-panel" aria-labelledby="day-heading">
     <h2 id="day-heading">{t('day.label')}</h2>
     <p className="day-state"><DayPill day={day} /></p>
     {stale && <p className="notice">{t('day.staleOpen', { date: formatDate(open.businessDate) })}</p>}
@@ -27,4 +27,5 @@ export function DayPanel({ day, busy, onOpen, onClose }: { day: CurrentDayView |
       <p>{t('day.todayClosed')}</p>
     </> : <button className="primary big" disabled={busy} onClick={onOpen}>{t('day.openButton')}</button>}
   </section>;
+  return compact?<details className="ceo-day-control"><summary>{t('day.label')} <DayPill day={day}/></summary>{panel}</details>:panel;
 }

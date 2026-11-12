@@ -1,5 +1,8 @@
 /** Task 004 strings: Telegram Mini App, shared clinic computers, PIN, installed app. Uzbek (Cyrillic). */
 export const access = {
+  'access.loginLockedUntil': 'Кириш вақтинча қулфланган. {time} да қайта урининг ёки администраторга мурожаат қилинг.',
+  'access.unlockLogin': 'Кириш қулфини очиш',
+  'access.loginUnlocked': 'Кириш қулфи очилди.',
   'access.tg.signingIn': 'Telegram орқали кирилмоқда…',
   'access.tg.blockedTitle': 'Администраторга мурожаат қилинг',
   'access.tg.blockedLead': 'Бу Telegram ҳисоби Clinora тизимига боғланмаган ёки кириш ёпилган. Клиника администраторидан таклиф ҳаволасини сўранг.',

@@ -110,7 +110,7 @@ export const ERROR_STATUS = {
   PASSWORD_CHANGE_REQUIRED: 403, ALREADY_EXISTS: 409
 } as const;
 export type ErrorCode = keyof typeof ERROR_STATUS;
-export const ApiError = z.object({ error: z.object({ code: z.enum(Object.keys(ERROR_STATUS) as [ErrorCode, ...ErrorCode[]]), message: z.string(), requestId: Id }).strict() }).strict();
+export const ApiError = z.object({ error: z.object({ code: z.enum(Object.keys(ERROR_STATUS) as [ErrorCode, ...ErrorCode[]]), message: z.string(), requestId: Id, unlockAt: z.iso.datetime().optional() }).strict() }).strict();
 export type Principal = z.infer<typeof Principal>;
 export type Membership = z.infer<typeof Membership>;
 export type Patient = z.infer<typeof Patient>;

@@ -1,4 +1,4 @@
-export class ApiFailure extends Error { constructor(public code: string) { super(code); } }
+export class ApiFailure extends Error { constructor(public code: string, public unlockAt?: string) { super(code); } }
 
 export type Request = <T>(path: string, body?: unknown, idempotent?: boolean) => Promise<T>;
 
@@ -23,7 +23,7 @@ export function createRequest(csrf: () => string): Request {
       response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) });
     } catch { throw new ApiFailure('SERVICE_UNAVAILABLE'); }
     const value = await response.json().catch(() => null);
-    if (!response.ok) throw new ApiFailure(value?.error?.code ?? 'SERVICE_UNAVAILABLE');
+    if (!response.ok) throw new ApiFailure(value?.error?.code ?? 'SERVICE_UNAVAILABLE', value?.error?.unlockAt);
     if (idempotent) retry = null;
     return value as T;
   };

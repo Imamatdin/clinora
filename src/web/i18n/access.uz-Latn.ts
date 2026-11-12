@@ -2,6 +2,9 @@ import type { AccessKey } from './access.uz-Cyrl.js';
 
 /** Task 004 strings. Uzbek (Latin). Same keys as access.uz-Cyrl.ts, enforced by the type. */
 export const accessUzLatn: Record<AccessKey, string> = {
+  'access.loginLockedUntil': 'Kirish vaqtincha qulflangan. {time} da qayta urining yoki administratorga murojaat qiling.',
+  'access.unlockLogin': 'Kirish qulfini ochish',
+  'access.loginUnlocked': 'Kirish qulfi ochildi.',
   'access.tg.signingIn': 'Telegram orqali kirilmoqda…',
   'access.tg.blockedTitle': 'Administratorga murojaat qiling',
   'access.tg.blockedLead': 'Bu Telegram hisobi Clinora tizimiga bogʻlanmagan yoki kirish yopilgan. Klinika administratoridan taklif havolasini soʻrang.',

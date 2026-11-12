@@ -143,3 +143,31 @@ test('Mini App: linked staff sign in with Telegram theme and back button; unlink
     await stranger.close(); await context.close();
   } finally { await f.close(); }
 });
+
+test('password lock shows unlock time and the staff manager can unlock it', async ({ page }) => {
+  const f = await processFixture();
+  try {
+    const staff = await member(f, 'login.locked', 'Синтетик Қулф', ['doctor']);
+    for (let i = 0; i < 10; i++) await page.request.post(f.origin + '/api/auth/login', {
+      headers: { Origin: f.origin }, data: { identifier: 'login.locked', password: 'wrong' }
+    });
+    await page.goto(f.origin);
+    await page.getByLabel(T('auth.identifier'), { exact: true }).fill('login.locked');
+    await page.getByLabel(T('auth.password'), { exact: true }).fill(staff.password);
+    await page.getByRole('button', { name: T('auth.signIn'), exact: true }).click();
+    const locked = (await f.pool.query('SELECT locked_until FROM password_login_limits WHERE locked_until IS NOT NULL')).rows[0].locked_until as Date;
+    const time = locked.toLocaleTimeString('uz-Cyrl', { hour: '2-digit', minute: '2-digit', hour12: false });
+    await expect(page.getByRole('alert')).toHaveText(T('access.loginLockedUntil', { time }));
+    await page.getByLabel(T('auth.identifier'), { exact: true }).fill('owner@example.test');
+    await page.getByLabel(T('auth.password'), { exact: true }).fill(f.password);
+    await page.getByRole('button', { name: T('auth.signIn'), exact: true }).click();
+    await page.getByRole('navigation', { name: T('app.navigation') }).getByRole('button', { name: T('nav.staff'), exact: true }).click();
+    const row = page.locator('.staff-list > li').filter({ hasText: 'Синтетик Қулф' });
+    await row.getByRole('button', { name: T('staff.manage'), exact: true }).click();
+    await row.getByRole('button', { name: T('access.unlockLogin'), exact: true }).click();
+    await expect(row.getByRole('status')).toHaveText(T('access.loginUnlocked'));
+    expect((await f.pool.query("SELECT actor_id FROM audit_events WHERE action='login.unlocked' AND resource_id=$1", [staff.id])).rows[0].actor_id).toBe(f.owner.userId);
+    const response = await page.request.post(f.origin + '/api/auth/login', { headers: { Origin: f.origin }, data: { identifier: 'login.locked', password: staff.password } });
+    expect(response.status()).toBe(200);
+  } finally { await f.close(); }
+});

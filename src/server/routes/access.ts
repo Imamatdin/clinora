@@ -1,3 +1,4 @@
+import { unlockLogin } from '../../modules/login/actions.js';
 import { EmptyInput } from '../../contracts/clinic.js';
 import { MANAGERS, ROLES } from '../../modules/identity/roles.js';
 import { listDevices, myAccess, revokeDevice, staffAccess, unlockPin } from '../../modules/devices/actions.js';
@@ -10,6 +11,8 @@ import { parse, uuid } from './types.js';
  * server/access.ts because they need the bot name or must set cookies and end the current session.
  */
 registerRoutes('access', [
+  { method: 'POST', pattern: new RegExp(`^staff/${uuid}/login-unlock$`), roles: MANAGERS,
+    handle: async (ctx, [user], body) => { parse(EmptyInput, await body()); return { body: await unlockLogin(ctx, user!) }; } },
   { method: 'GET', pattern: /^staff\/access$/, roles: MANAGERS, handle: async ctx => ({ body: await staffAccess(ctx) }) },
   { method: 'POST', pattern: new RegExp(`^staff/${uuid}/telegram-unlink$`), roles: MANAGERS,
     handle: async (ctx, [user], body) => { parse(EmptyInput, await body()); await manageableMember(ctx, user!); return { body: await unlink(ctx, user!) }; } },

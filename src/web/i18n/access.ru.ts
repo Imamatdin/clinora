@@ -2,6 +2,9 @@ import type { AccessKey } from './access.uz-Cyrl.js';
 
 /** Task 004 strings. Russian. Same keys as access.uz-Cyrl.ts, enforced by the type. */
 export const accessRu: Record<AccessKey, string> = {
+  'access.loginLockedUntil': 'Вход временно заблокирован. Повторите в {time} или обратитесь к администратору.',
+  'access.unlockLogin': 'Разблокировать вход',
+  'access.loginUnlocked': 'Вход разблокирован.',
   'access.tg.signingIn': 'Вход через Telegram…',
   'access.tg.blockedTitle': 'Обратитесь к администратору',
   'access.tg.blockedLead': 'Этот аккаунт Telegram не привязан к Clinora или доступ закрыт. Попросите у администратора клиники ссылку-приглашение.',

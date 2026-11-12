@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { digest } from '../../src/server/security.js';
 import { once } from 'node:events';
 import { createApp } from '../../src/server/app.js';
 import { databaseFixture } from './fixture.js';
@@ -42,13 +43,15 @@ test('deployed settings: readiness tracks migrations, cookies are host-only and 
   assert.doesNotMatch(cookie, /domain=/i, 'host-only cookie: never shared with other clinoraa.uz hosts');
   assert.equal(login.headers.get('strict-transport-security'), 'max-age=31536000');
 
-  // 40 attempts per IP per 15 minutes. Rotating a forged left-hand entry must not reset the counter.
+  // 300 failures per IP per 15 minutes. Seed the first 299 to keep this proxy test fast.
+  await db.pool.query("INSERT INTO login_limits(key,attempts,reset_at) VALUES($1,299,now()+interval '15 minutes')", [digest('password-ip:203.0.113.9')]);
+  // Rotating a forged left-hand entry must not reset the real client's counter.
   let limited = 0;
-  for (let i = 0; i < 41; i++) {
+  for (let i = 0; i < 2; i++) {
     const r = await post({ email: `nobody${i}@example.test`, password: 'Wrong-password-1' }, `198.51.100.${i}, 203.0.113.9`);
     if (r.status === 429) limited++;
   }
-  assert.equal(limited, 1, 'the 41st attempt from the same real client is limited despite forged prefixes');
+  assert.equal(limited, 1, 'the 301st failed attempt from the same real client is limited despite forged prefixes');
   const other = await post({ email: 'nobody-else@example.test', password: 'Wrong-password-1' }, '203.0.113.10');
   assert.equal(other.status, 401, 'a different real client is unaffected');
 });

@@ -29,7 +29,7 @@ export function useRegistrationOutbox(owner: string | null, base: string, reques
           setSynced(history);
           setOffline(false);
         } catch (e) {
-          if (e instanceof ApiFailure && e.code === 'UNAUTHENTICATED') { await clearOutbox(); setSynced([]); }
+          if (e instanceof ApiFailure && e.code === 'UNAUTHENTICATED') setSynced([]);
           else setOffline(true);
           return;
         }
@@ -44,7 +44,8 @@ export function useRegistrationOutbox(owner: string | null, base: string, reques
             setSynced(old => [...old.filter(row => row.code !== code), { ...result, code }]); setOffline(false);
           } catch (e) {
             const code = e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE';
-            if (code === 'UNAUTHENTICATED' || code === 'FORBIDDEN') { await clearOutbox(); setItems([]); setSynced([]); return; }
+            if (code === 'UNAUTHENTICATED') { setSynced([]); return; }
+            if (code === 'FORBIDDEN') { await clearOutbox(true); setItems([]); setSynced([]); return; }
             if (code === 'SERVICE_UNAVAILABLE') { setOffline(true); break; }
             await changeEntry(owner, entry.id, row => ({ ...row, error: code })); break;
           }

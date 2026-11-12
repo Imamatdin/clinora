@@ -12,7 +12,7 @@ const channel = typeof window === 'undefined' || typeof BroadcastChannel === 'un
 const changed = () => window.dispatchEvent(new Event('registration-outbox'));
 channel?.addEventListener('message', e => {
   changed();
-  if (e.data === 'clear') window.dispatchEvent(new Event('registration-session-ended'));
+  if (e.data === 'clear' || e.data === 'lock') window.dispatchEvent(new Event('registration-session-ended'));
   if (e.data?.identity !== undefined) window.dispatchEvent(new CustomEvent('registration-session-identity', { detail: e.data.identity }));
 });
 
@@ -44,6 +44,10 @@ async function update<T>(work: (state: State | undefined) => { state?: State; re
 export async function clearOutbox(endSession = false) {
   await update(state => ({ state: { owner: '', counter: state?.counter ?? 0, entries: [] }, result: undefined })); changed(); channel?.postMessage(endSession ? 'clear' : 'change');
   if (endSession) window.dispatchEvent(new Event('registration-session-ended'));
+}
+/** An expired session hides queued records until PIN reauthentication; it is not device revocation. */
+export function lockOutbox() {
+  channel?.postMessage('lock'); window.dispatchEvent(new Event('registration-session-ended'));
 }
 /** Called for every successful /auth/me, including tabs that never open registration. */
 export async function checkOutboxUser(user: { id: string; session: { via: string; deviceId?: string | null } }) {

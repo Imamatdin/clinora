@@ -181,3 +181,26 @@ test('failed requests detect offline without an offline event; inactive service 
     expect((await f.pool.query('SELECT count(*)::int n FROM visits WHERE business_day_id=$1', [nextDay])).rows[0].n).toBe(1);
   } finally { await f.close(); }
 });
+
+test('a long outage locks an expired session but the same registrar recovers queued work with their PIN', async ({ page }) => {
+  const f = await processFixture();
+  try {
+    const g = await seedRegistration(f.pool, f.owner.clinicId, f.owner.userId, f.password, 'expiry016');
+    await openDay(f.pool, f.owner.clinicId, f.owner.userId);
+    await f.pool.query('INSERT INTO account_pins(account_id,pin_hash) VALUES($1,$2)', [g.registrar, await passwordHash('2580')]);
+    const deviceId = await enrolled(page, f, g.registrar);
+    await page.context().setOffline(true);
+    await registerOffline(page, 'Синтетик Узоқ Узилиш');
+    await f.pool.query("UPDATE sessions SET last_seen_at=now()-interval '11 minutes' WHERE device_id=$1", [deviceId]);
+    await page.context().setOffline(false);
+    await expect(page.getByRole('heading', { name: T('access.device.title'), exact: true })).toBeVisible();
+    expect((await stored(page)).entries).toHaveLength(1);
+    await expect(page.getByText('Синтетик Узоқ Узилиш', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Синтетик Регистратор', exact: true }).click();
+    await page.getByLabel(T('access.device.pin'), { exact: true }).fill('2580');
+    await page.getByRole('button', { name: T('access.device.unlock'), exact: true }).click();
+    await expect(page.getByText(pending(0), { exact: true })).toBeVisible();
+    expect((await stored(page)).entries).toEqual([]);
+    expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(1);
+  } finally { await f.close(); }
+});

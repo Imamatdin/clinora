@@ -15,6 +15,7 @@ import { Staff } from './staff.js';
 import { LockScreen, useIdleLock, type DeviceInfo } from './access/device.js';
 import { Devices, MyAccess } from './access/staff-access.js';
 import { InstallHint, registerServiceWorker } from './access/install.js';
+import { clearOutbox, lockOutbox } from './registration/outbox.js';
 import './style.css';
 
 // Task 003C assistant inside the task 010 visit screen (one line per visit panel).
@@ -87,7 +88,11 @@ function App() {
   }
   /** Shared PC: end this person's session and return to the name list. */
   async function lock(notice = '') {
-    try { await request('/api/auth/logout', {}); } catch { /* the server may already have ended it */ }
+    try {
+      // Start the request with its CSRF proof, then hide data immediately. Idle locking permits
+      // same-person PIN recovery; explicitly choosing "Switch user" destroys queued records.
+      await Promise.all([request('/api/auth/logout', {}), notice ? Promise.resolve(lockOutbox()) : clearOutbox(true)]);
+    } catch { /* the server may already have ended it */ }
     setMe(null); csrf.current = ''; setDirty(false); setSection(''); setDay(null); setShowMe(false); setPasswordOnDevice(false);
     setError(''); setNotice(notice); await refreshDevice();
   }
@@ -144,7 +149,7 @@ function App() {
     if (f.get('newPassword') !== f.get('repeat')) { setError(t('password.mismatch')); return; }
     await run(async () => { await request('/api/auth/password', { currentPassword: f.get('currentPassword'), newPassword: f.get('newPassword') }); await refreshMe(); setNotice(t('password.saved')); });
   }
-  const signOut = () => guard(() => void run(async () => { await request('/api/auth/logout', {}); setMe(null); csrf.current = ''; setDirty(false); setClinicId(''); setSection(''); setDay(null); setShowMe(false); await refreshDevice(); }));
+  const signOut = () => guard(() => void run(async () => { await Promise.all([request('/api/auth/logout', {}), clearOutbox(true)]); setMe(null); csrf.current = ''; setDirty(false); setClinicId(''); setSection(''); setDay(null); setShowMe(false); await refreshDevice(); }));
   const onDevice = me?.session?.via === 'device', inTelegram = me?.session?.via === 'telegram' || telegramActive;
   const banners = <div className="banners" aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>;
 

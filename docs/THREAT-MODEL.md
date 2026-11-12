@@ -52,3 +52,16 @@ and the later approval/export/audio/Telegram/integration boundaries. PostgreSQL
 credentials in CI are disposable test-service fixtures, not application defaults.
 Browser test credentials are generated in memory. Only synthetic UI screenshots
 are retained; no authentication trace or patient dataset is uploaded.
+
+## Task 006 update — 12 November 2026 (staging deployment package)
+
+The runtime is no longer loopback-only when `HOST=0.0.0.0` (container image). New controls:
+`TRUST_PROXY_HOPS` reads only the proxy-appended last `X-Forwarded-For` entry (forged entries
+ignored, invalid values fall back to the TCP peer); HSTS on HTTPS deployments; startup refuses
+staging/production without HTTPS origin, secure cookies and a database; host-only session cookie
+(no `Domain`); allowlisted JSON access logs with identifiers stripped from routes; secrets only in
+Secret Manager; gitleaks (repository) and trivy (image layers) block deploys; keyless WIF deploy
+identity limited to this repository's `main`; demo seeding refuses `APP_ENV=production`.
+Open risk: the per-IP login limit (40 attempts / 15 min, successful attempts included) applies to a
+whole clinic behind one public IP once client IPs are resolved correctly; C9 requires per-account
+keying. See `docs/DEPLOY.md`.

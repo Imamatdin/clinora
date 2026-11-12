@@ -5,6 +5,16 @@ import { join, extname } from 'node:path';
 import { ERROR_STATUS, type ErrorCode } from '../contracts/index.js';
 import { api, type ApiConfig } from './notebook.js';
 import { DomainError } from '../modules/identity/access.js';
+import { migrationsCurrent } from './database.js';
+
+// One structured line per request. Only method, a de-identified route shape, status and timing:
+// no query strings, bodies, cookies, headers, client addresses or record identifiers.
+export type AccessLog = { requestId: string; method: string; route: string; status: number; durationMs: number };
+export type AppOptions = { log?: (entry: AccessLog) => void };
+export const routeShape = (path: string) => path.slice(0, 200)
+  .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ':id')
+  .replace(/\/[0-9]+(?=\/|$)/g, '/:n')
+  .replace(/[^a-zA-Z0-9/_.:-]/g, '?');
 
 const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
@@ -16,7 +26,7 @@ const PUBLIC_FILES = ['sw.js', 'manifest.webmanifest', 'icons/icon-192.png', 'ic
  */
 export const CSP = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors https://web.telegram.org";
 
-export async function createApp(webDirectory?: string, config?: ApiConfig) {
+export async function createApp(webDirectory?: string, config?: ApiConfig, options: AppOptions = {}) {
   // Serve only built index and generated assets. Never expose source, env, data, or work/.
   const files = new Map<string, { body: Buffer; contentType: string }>();
   if (webDirectory) {
@@ -31,10 +41,15 @@ export async function createApp(webDirectory?: string, config?: ApiConfig) {
     }
   }
   const server = createServer(async (req, res) => {
-    const requestId = randomUUID();
+    const requestId = randomUUID(), started = process.hrtime.bigint();
+    if (options.log) res.on('finish', () => options.log!({ requestId, method: (req.method ?? '').slice(0, 10), route: routeShape((req.url ?? '/').split('?')[0]!),
+      status: res.statusCode, durationMs: Number((process.hrtime.bigint() - started) / 1000000n) }));
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('Cache-Control', 'no-store');
+    // HTTPS deployments only (secure cookies imply HTTPS origin). No includeSubDomains: other
+    // clinoraa.uz hosts are not ours to pin. No preload: that is a separate, sticky decision.
+    if (config?.secureCookies) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
     res.setHeader('Content-Security-Policy', CSP);
     const json = (status: number, value: unknown) => {
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -42,7 +57,19 @@ export async function createApp(webDirectory?: string, config?: ApiConfig) {
     };
     const fail = (code: ErrorCode) => json(ERROR_STATUS[code], { error: { code, message: code, requestId } });
     const path = (req.url ?? '/').split('?')[0]!;
-    if (path === '/api/health' && ['GET', 'HEAD'].includes(req.method ?? '')) {
+    const probe = ['GET', 'HEAD'].includes(req.method ?? '');
+    if (path === '/healthz' && probe) {
+      json(200, { status: 'ok' }); // Process is up. Deliberately no database call (liveness).
+    } else if (path === '/readyz' && probe) {
+      // Startup probe: database reachable and every migration in this build applied.
+      // A failing new revision never receives traffic; the previous revision keeps serving.
+      try {
+        if (!config) { json(503, { status: 'not_ready', reason: 'no_database' }); return; }
+        await config.pool.query('SELECT 1');
+        if (!await migrationsCurrent(config.pool)) { json(503, { status: 'not_ready', reason: 'migrations_pending' }); return; }
+        json(200, { status: 'ready' });
+      } catch { json(503, { status: 'not_ready', reason: 'database_unreachable' }); }
+    } else if (path === '/api/health' && ['GET', 'HEAD'].includes(req.method ?? '')) {
       try {
         if (config) await config.pool.query('SELECT 1');
         json(200, { service: 'clinora', increment: config ? 1 : 0, status: 'ok', clinicalStorage: config ? 'postgresql' : 'not_implemented', authentication: config ? 'server_sessions' : 'not_implemented', integrations: 'unavailable', telegram: config?.telegram ? 'configured' : 'not_configured' });

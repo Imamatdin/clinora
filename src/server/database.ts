@@ -17,13 +17,30 @@ export async function transaction<T>(pool: pg.Pool, fn: (tx: Tx) => Promise<T>):
   catch (error) { await tx.query('ROLLBACK').catch(() => {}); throw error; }
   finally { tx.release(); }
 }
+async function migrationFiles(): Promise<{ name: string; sql: string; checksum: string }[]> {
+  const files = [];
+  for (const name of (await readdir('db/migrations')).filter(n => /^\d+.*\.sql$/.test(n)).sort()) {
+    const sql = await readFile('db/migrations/' + name, 'utf8');
+    files.push({ name, sql, checksum: createHash('sha256').update(sql).digest('hex') });
+  }
+  return files;
+}
+// Ready means every migration shipped in this build is applied with the same checksum.
+// Extra applied migrations are allowed: the previous revision keeps serving while a newer
+// (backward-compatible) migration has already run ahead of the traffic shift.
+export async function migrationsCurrent(pool: pg.Pool): Promise<boolean> {
+  let rows: pg.QueryResultRow[];
+  try { rows = (await pool.query('SELECT name,checksum FROM schema_migrations')).rows; }
+  catch (error) { if ((error as { code?: string }).code === '42P01') return false; throw error; } // Fresh database: nothing applied.
+  const applied = new Map(rows.map(r => [r.name as string, r.checksum as string]));
+  return (await migrationFiles()).every(f => applied.get(f.name) === f.checksum);
+}
 export async function migrate(pool: pg.Pool) {
+  const files = await migrationFiles();
   await transaction(pool, async tx => {
     await tx.query("SELECT pg_advisory_xact_lock(18732002)");
     await tx.query('CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())');
-    for (const name of (await readdir('db/migrations')).filter(n => /^\d+.*\.sql$/.test(n)).sort()) {
-      const sql = await readFile('db/migrations/' + name, 'utf8');
-      const checksum = createHash('sha256').update(sql).digest('hex');
+    for (const { name, sql, checksum } of files) {
       const old = (await tx.query('SELECT checksum FROM schema_migrations WHERE name=$1', [name])).rows[0];
       if (old) { if (old.checksum !== checksum) throw new Error('Applied migration changed'); continue; }
       await tx.query(sql);

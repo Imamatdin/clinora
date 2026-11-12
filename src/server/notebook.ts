@@ -14,6 +14,7 @@ import { clinicRoute } from './clinic-routes.js';
 import type { TelegramConfig } from '../modules/telegram/api.js';
 import { createSession, deviceFromRequest, publicAccessRoute, readCookie, sessionAccessRoute, sessionCookie, webhookRoute, type SessionVia } from './access.js';
 import { DEVICE_IDLE_MINUTES } from '../modules/devices/actions.js';
+import { clientIp } from './client-ip.js';
 
 const fail = (code: ConstructorParameters<typeof DomainError>[0]): never => { throw new DomainError(code); };
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => { const result = schema.safeParse(value); return result.success ? result.data : fail('INVALID_INPUT'); };
@@ -21,7 +22,7 @@ const iso = (value: Date) => value.toISOString();
 type Actor = { userId: string; sessionId: string; email: string | null; login: string | null; phone: string | null; name: string; csrf: string; verification: unknown; mustChangePassword: boolean; principal: Principal;
   via: SessionVia; deviceClinicId: string | null; deviceLabel: string | null };
 type Access = { actor: Actor; member: Membership; owner: boolean };
-export type ApiConfig = { pool: pg.Pool; origin: string; secureCookies: boolean; telegram?: TelegramConfig | undefined };
+export type ApiConfig = { pool: pg.Pool; origin: string; secureCookies: boolean; telegram?: TelegramConfig | undefined; trustProxyHops?: number };
 export type ApiResult = { status?: number; body: unknown; cookie?: string | string[] };
 const jsonBody = async (req: IncomingMessage): Promise<unknown> => {
   if (req.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') return fail('INVALID_INPUT');
@@ -114,7 +115,7 @@ async function idempotent(tx: Tx, access: Access, operation: string, key: unknow
   return result;
 }
 async function throttle(pool: pg.Pool, identity: string, ip: string) {
-  // Server socket address only; no trust in client X-Forwarded-For headers.
+  // TCP peer, or the proxy-appended X-Forwarded-For entry when TRUST_PROXY_HOPS is set (client-ip.ts).
   await transaction(pool, async tx => {
     for (const [key, limit] of [[digest('ip:' + ip), 40], [digest('id:' + identity), 8]] as const) {
       const row = (await tx.query(`INSERT INTO login_limits(key,attempts,reset_at) VALUES($1,1,now()+interval '15 minutes')
@@ -138,7 +139,7 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
   if (publicAccess) return publicAccess;
   if (path === '/api/auth/register' && method === 'POST') {
     const input = parse(SignupInput, await jsonBody(req));
-    await throttle(config.pool, input.email.toLowerCase(), req.socket.remoteAddress ?? 'unknown');
+    await throttle(config.pool, input.email.toLowerCase(), clientIp(req, config.trustProxyHops));
     const hash = await passwordHash(input.password);
     await config.pool.query('INSERT INTO accounts(id,email,display_name,password_hash) VALUES($1,$2,$3,$4) ON CONFLICT(email) DO NOTHING', [randomUUID(), input.email.toLowerCase(), input.displayName, hash]);
     return { status: 202, body: { message: 'If this address is available, an unprivileged account has been created. Sign in to continue.' } };
@@ -147,7 +148,7 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
     const input = parse(LoginInput, await jsonBody(req));
     const who = identifierKind('identifier' in input ? input.identifier : input.email);
     // Unparseable identifiers are still throttled and still pay the KDF, like an unknown account.
-    await throttle(config.pool, who ? `${who.column}:${who.value}` : 'invalid', req.socket.remoteAddress ?? 'unknown');
+    await throttle(config.pool, who ? `${who.column}:${who.value}` : 'invalid', clientIp(req, config.trustProxyHops));
     const account = who ? (await config.pool.query(`SELECT * FROM accounts WHERE ${who.column}=$1`, [who.value])).rows[0] : undefined;
     const matches = await passwordMatches(input.password, account?.password_hash ?? dummyHash);
     if (!matches || !account || account.status !== 'active') return fail('UNAUTHENTICATED');
@@ -177,7 +178,7 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
       return { body: { ok: true }, cookie: `clinora_session=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0${config.secureCookies ? '; Secure' : ''}` };
     }
     if (path === '/api/auth/password' && method === 'POST') {
-      await throttle(config.pool, `password:${actor.userId}`, req.socket.remoteAddress ?? 'unknown');
+      await throttle(config.pool, `password:${actor.userId}`, clientIp(req, config.trustProxyHops));
       const input = parse(PasswordChangeInput, await jsonBody(req));
       const account = (await tx.query('SELECT password_hash FROM accounts WHERE id=$1 FOR UPDATE', [actor.userId])).rows[0];
       if (!account || !await passwordMatches(input.currentPassword, account.password_hash)) return fail('FORBIDDEN');

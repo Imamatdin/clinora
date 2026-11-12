@@ -55,7 +55,19 @@ test('network offline: two patients route, print provisional tickets, sync once,
     await openDay(f.pool, f.owner.clinicId, f.owner.userId);
     await enrolled(page, f, g.registrar);
     await page.setViewportSize({ width: 360, height: 800 });
+    await expect(page.getByRole('button', { name: T('registration.offline.sync'), exact: true })).toBeEnabled();
+    // A successful response already in flight must not erase the offline event that follows it.
+    let release!: () => void, arrived!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { arrived = resolve; });
+    await page.route('**/registration/offline/history', async route => {
+      const response = await route.fetch(); arrived(); await held; await route.fulfill({ response });
+    });
+    await page.getByRole('button', { name: T('registration.offline.sync'), exact: true }).click();
+    await started;
     await page.context().setOffline(true);
+    const staleResponse = page.waitForResponse(r => r.url().endsWith('/registration/offline/history'));
+    release(); await staleResponse; await page.unroute('**/registration/offline/history');
     await expect(page.getByText(T('registration.offline.banner'), { exact: true })).toBeVisible();
     const first = await registerOffline(page, 'Синтетик Офлайн Бир');
     await page.getByRole('button', { name: T('registration.nextPatient'), exact: true }).click();

@@ -67,7 +67,7 @@ export async function offlineHistory(ctx: ClinicContext) {
   const rows = (await ctx.tx.query(`SELECT response FROM idempotency_records
     WHERE clinic_id=$1 AND actor_id=$2 AND operation='registration.offline' AND response ? 'code'
       AND created_at>now()-interval '2 days' ORDER BY created_at DESC LIMIT 200`, [ctx.clinicId, ctx.actorId])).rows;
-  return rows.reverse().map(({ response: r }) => ({ code: r.code, visitId: r.visitId, tickets: r.tickets }));
+  return rows.reverse().map(({ response: r }) => ({ code: r.code, visitId: r.visitId, businessDate: r.businessDate, tickets: r.tickets }));
 }
 export const CallNextInput = z.object({ queuePointId: id.optional(), idempotencyKey: Key }).strict();
 export const TicketStatusInput = z.object({ status: QueueTicketStatus, idempotencyKey: Key }).strict();

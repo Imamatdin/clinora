@@ -28,7 +28,7 @@ test('enrolled-device replay is atomic, day-bound, idempotent and checks current
     const result = await one.json(); assert.deepEqual(await two.json(), result);
     assert.equal(result.code, a.provisionalCode);
     const history = await (await req(path + '/history')).json();
-    assert.deepEqual(history, [{ code: result.code, visitId: result.visitId, tickets: result.tickets }]);
+    assert.deepEqual(history, [{ code: result.code, visitId: result.visitId, businessDate: result.businessDate, tickets: result.tickets }]);
     assert.equal('patientNo' in history[0]!, false);
     assert.equal((await f.pool.query('SELECT count(*)::int n FROM patients')).rows[0].n, 1);
     assert.equal((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n, 1);

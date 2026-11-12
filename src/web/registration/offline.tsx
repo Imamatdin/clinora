@@ -4,7 +4,7 @@ import { ApiFailure, type Request } from '../api.js';
 import { changeEntry, clearOutbox, openOutbox, readOutbox, type OfflineEntry } from './outbox.js';
 import { pickName, type Locale, type Names, type translator } from './i18n.js';
 
-export type Synced = { code: string; visitId: string; tickets: { id: string; number: number; names: Names }[] };
+export type Synced = { code: string; visitId: string; businessDate: string; tickets: { id: string; number: number; names: Names }[] };
 export function useRegistrationOutbox(owner: string | null, base: string, request: Request) {
   const [items, setItems] = useState<OfflineEntry[]>([]), [synced, setSynced] = useState<Synced[]>([]);
   const [offline, setOffline] = useState(!navigator.onLine), [syncing, setSyncing] = useState(false);
@@ -27,7 +27,7 @@ export function useRegistrationOutbox(owner: string | null, base: string, reques
           const history = await request<Synced[]>(`${base}/offline/history`);
           if (!alive.current || latestOwner.current !== owner) return;
           setSynced(history);
-          setOffline(false);
+          setOffline(!navigator.onLine);
         } catch (e) {
           if (e instanceof ApiFailure && e.code === 'UNAUTHENTICATED') setSynced([]);
           else setOffline(true);
@@ -41,7 +41,7 @@ export function useRegistrationOutbox(owner: string | null, base: string, reques
             const result = await request<Omit<Synced, 'code'>>(`${base}/offline`, { ...payload, provisionalCode: code, idempotencyKey: id });
             await changeEntry(owner, id, () => null);
             if (!alive.current || latestOwner.current !== owner) return;
-            setSynced(old => [...old.filter(row => row.code !== code), { ...result, code }]); setOffline(false);
+            setSynced(old => [...old.filter(row => row.code !== code), { ...result, code }]); setOffline(!navigator.onLine);
           } catch (e) {
             const code = e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE';
             if (code === 'UNAUTHENTICATED') { setSynced([]); return; }
@@ -57,7 +57,7 @@ export function useRegistrationOutbox(owner: string | null, base: string, reques
   useEffect(() => {
     alive.current = true;
     if (owner) void openOutbox(owner).then(setItems).then(() => latestSync.current());
-    const online = () => { setOffline(false); void latestSync.current(); };
+    const online = () => { setOffline(!navigator.onLine); void latestSync.current(); };
     const offline = () => setOffline(true);
     const changed = () => { void refresh(); };
     window.addEventListener('online', online); window.addEventListener('offline', offline);
@@ -112,7 +112,7 @@ export function OfflineStatus({ owner, base, request, locale, t, items, synced, 
         {row.error !== 'ALREADY_EXISTS' && row.error !== 'INVALID_TRANSITION' && <button onClick={() => void run(() => onRoute(row))}>{t('registration.offline.reroute')}</button>}
       </div>}
     </li>)}</ul>
-    <ul className="offline-synced">{synced.map(row => <li key={row.code}><strong>{row.code}</strong> → {row.tickets.map(ticket => `${pickName(ticket.names, locale)}: ${ticket.number}`).join(' · ')}
+    <ul className="offline-synced">{synced.map(row => <li key={row.code}><strong>{row.code}</strong> · {row.businessDate} → {row.tickets.map(ticket => `${pickName(ticket.names, locale)}: ${ticket.number}`).join(' · ')}
       <a href={`${base}/visits/${row.visitId}/tickets`} target="_blank" rel="noopener">{t('registration.printAgain')}</a></li>)}</ul>
   </aside>;
 }

@@ -47,7 +47,7 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
   const locked = useRef(false);
 
   async function loadOptions() {
-    try { setOptions(await request<Options>(`${base}/options`)); outbox.setOffline(false); }
+    try { setOptions(await request<Options>(`${base}/options`)); outbox.setOffline(!navigator.onLine); }
     catch (e) { if (e instanceof ApiFailure && e.code === 'SERVICE_UNAVAILABLE') outbox.setOffline(true); throw e; }
   }
   async function run(work: () => Promise<void>) {

@@ -47,7 +47,7 @@ test('receipt replay, last-unit concurrency, price snapshot, atomic dispense and
   const movements=(await f.pool.query('SELECT qty,unit_cost_uzs FROM stock_movements WHERE service_id=$1 ORDER BY qty',[ids.medicine])).rows;
   assert.equal(movements.length,2);assert.equal(movements[0].qty,-1);assert.equal(movements[1].unit_cost_uzs,'9007199254740993');
   const input={visitId:ids.visit,serviceId:ids.medicine,qty:1,overrideReason:'Synthetic approved shortage',idempotencyKey:key()};
-  const first=await client.request(url('pharmacy/dispense'),input);assert.equal(first.status,201);const result=await first.json();
+  const [first,parallel]=await Promise.all([client.request(url('pharmacy/dispense'),input),client.request(url('pharmacy/dispense'),input)]);assert.equal(first.status,201);assert.equal(parallel.status,201);const result=await first.json();assert.deepEqual(await parallel.json(),result);
   assert.deepEqual(await (await client.request(url('pharmacy/dispense'),input)).json(),result);
   assert.equal((await client.request(url('pharmacy/dispense'),{...input,qty:2})).status,409);
   const row=(await f.pool.query('SELECT * FROM charge_lines WHERE id=$1',[result.chargeLineId])).rows[0];assert.equal(row.unit_price_uzs,'15000');assert.equal(row.status,'completed');
@@ -81,7 +81,7 @@ test('a service without a price cannot consume stock or create an orphan charge'
   assert.equal((await f.pool.query('SELECT sum(qty)::text n FROM stock_movements WHERE service_id=$1',[service])).rows[0].n,'1');
   assert.equal((await f.pool.query('SELECT count(*)::int n FROM charge_lines WHERE service_id=$1',[service])).rows[0].n,0);
 });
-test('doctor dispersion is assigned-patient only and cached responses do not bypass revoked assignments',async()=>{
+test('doctor dispensing is assigned-patient only and cached responses do not bypass revoked assignments',async()=>{
   const actor=key(),c=f.owner.clinicId,u=f.owner.userId;
   await f.pool.query("INSERT INTO accounts(id,email,display_name,password_hash) VALUES($1,'doctor.task012@example.test','Synthetic doctor',$2)",[actor,await passwordHash(f.password)]);
   await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,status,granted_by) VALUES($1,$2,$3,'active',$4)",[key(),c,actor,u]);
@@ -103,6 +103,19 @@ test('surgery charges join the patient bill, replay once, reject foreign notes a
   assert.equal((await client.request(url('surgery'),{...input,documentId:key(),idempotencyKey:key()})).status,404);
   assert.equal((await client.request(url('surgery'),{...input,admissionId:key(),idempotencyKey:key()})).status,404);
   assert.equal((await f.pool.query('SELECT count(*)::int n FROM surgeries')).rows[0].n,1);
+});
+test('inpatient surgery links the matching admission and notebook document without copying the note',async()=>{
+  const visit=key(),admission=key(),department=key(),encounter=key(),document=key(),c=f.owner.clinicId,u=f.owner.userId;
+  await f.pool.query("INSERT INTO departments(id,clinic_id,name_uz_cyrl) VALUES($1,$2,'Синтетик жарроҳлик')",[department,c]);
+  await f.pool.query("INSERT INTO visits(id,clinic_id,patient_id,business_day_id,type,created_by,created_at) VALUES($1,$2,$3,$4,'inpatient',$5,now()-interval '1 hour')",[visit,c,ids.patient,ids.day,u]);
+  await f.pool.query('INSERT INTO admissions(id,clinic_id,visit_id,department_id,attending_user_id,admitted_at) VALUES($1,$2,$3,$4,$5,now())',[admission,c,visit,department,u]);
+  await f.pool.query("INSERT INTO encounters(id,clinic_id,patient_id,clinician_id,data,visit_id) VALUES($1,$2,$3,$4,'{}',$5)",[encounter,c,ids.patient,u,visit]);
+  await f.pool.query('INSERT INTO documents(id,clinic_id,patient_id,encounter_id) VALUES($1,$2,$3,$4)',[document,c,ids.patient,encounter]);
+  const options=await (await client.request(url('surgery/options'))).json();assert.ok(options.notes.some((n:{id:string})=>n.id===document));
+  const input={visitId:visit,admissionId:admission,documentId:document,serviceId:ids.operation,surgeonId:u,performedAt:new Date().toISOString(),idempotencyKey:key()};
+  const response=await client.request(url('surgery'),input);assert.equal(response.status,201);const result=await response.json();
+  const row=(await f.pool.query('SELECT * FROM surgeries WHERE id=$1',[result.id])).rows[0];assert.equal(row.document_id,document);assert.equal(row.admission_id,admission);
+  assert.equal((await client.request(url('surgery'),{...input,visitId:ids.visit,idempotencyKey:key()})).status,404);
 });
 test('closed business day rejects new dispense and surgery without creating either record',async()=>{
   await f.pool.query("UPDATE business_days SET status='closed',closed_by=$2,closed_at=now(),close_snapshot='{}' WHERE id=$1",[ids.day,f.owner.userId]);

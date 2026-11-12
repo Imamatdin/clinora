@@ -19,12 +19,12 @@ function Surgery({clinic,request,setDirty}:ModuleProps) {
   }
   return <section><h2>{t('surgery.title')}</h2><label>{t('pharmacy.language')}<select aria-label={t('pharmacy.language')} value={locale} onChange={e=>setLocale(e.target.value as Locale)}>{languages.map(l=><option key={l.id} value={l.id}>{l.label}</option>)}</select></label>
     {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
-    {!options?<p>{t('pharmacy.loading')}</p>:!options.services.length||!options.visits.length||!options.surgeons.length?<p>{t('pharmacy.empty')}</p>:<form onSubmit={submit} onChange={()=>{key.current=crypto.randomUUID();setDirty(true);}}>
+    {!options?<p>{t('pharmacy.loading')}</p>:!options.services.length||!options.visits.length||!options.surgeons.length?<p>{t('pharmacy.empty')}</p>:<form onSubmit={submit} onChange={()=>{key.current=crypto.randomUUID();setDirty(true);}}><fieldset disabled={busy} style={{border:0,padding:0,margin:0,minWidth:0}}>
       {(['visit','surgeon','service'] as const).map((name)=><label key={name}>{t(name==='visit'?'pharmacy.visit':`surgery.${name}`)}<select aria-label={t(name==='visit'?'pharmacy.visit':`surgery.${name}`)} name={name} required onChange={name==='visit'?e=>setVisit(e.target.value):undefined}>{options[name==='visit'?'visits':name==='surgeon'?'surgeons':'services'].map(v=><option key={v.id} value={v.id}>{v.name}</option>)}</select></label>)}
       <label>{t('surgery.time')}<input name="time" type="datetime-local" required /></label>
       <label>{t('surgery.note')}<select aria-label={t('surgery.note')} name="note" key={visit}><option value="">—</option>{options.notes.filter(n=>n.visit_id===visit).map(n=><option key={n.id} value={n.id}>{new Date(n.created_at).toLocaleString(locale)}</option>)}</select></label>
       <button disabled={busy}>{t('surgery.save')}</button>
-    </form>}
+    </fieldset></form>}
   </section>;
 }
 export const surgeryModule:WebModule={id:'surgery',roles:['ceo','administrator','doctor','inpatient'],label:'surgery.title',Screen:Surgery};

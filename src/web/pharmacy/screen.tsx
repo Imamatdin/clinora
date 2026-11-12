@@ -32,7 +32,7 @@ export function Pharmacy({ clinic, request, setDirty }:ModuleProps) {
     <button disabled={busy} onClick={()=>{setBusy(true);load().catch(()=>setError(errorText('SERVICE_UNAVAILABLE'))).finally(()=>setBusy(false));}}>{t('pharmacy.refresh')}</button>
     {!busy&&!items.length&&<p>{t('pharmacy.empty')}</p>}
     <h3>{t('pharmacy.low')}</h3><ul>{items.filter(i=>BigInt(i.on_hand)<=BigInt(i.threshold)).map(i=><li key={i.id}>{i.name}: {i.on_hand} {i.unit}</li>)}</ul>
-    <form onSubmit={submit} onChange={()=>{key.current=crypto.randomUUID();setDirty(true);}}>
+    <form onSubmit={submit} onChange={()=>{key.current=crypto.randomUUID();setDirty(true);}}><fieldset disabled={busy} style={{border:0,padding:0,margin:0,minWidth:0}}>
       <label>{t('pharmacy.item')}<select aria-label={t('pharmacy.item')} required value={item} onChange={e=>setItem(e.target.value)}>{items.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select></label>
       {selected&&<p>{t('pharmacy.onHand')}: {selected.on_hand} {selected.unit}</p>}
       <label>{t('pharmacy.title')}<select aria-label={t('pharmacy.title')} value={mode} onChange={e=>setMode(e.target.value as typeof mode)}>{(['receipt','dispense','adjust','threshold'] as const).map(m=><option key={m} value={m}>{t(`pharmacy.${m}`)}</option>)}</select></label>
@@ -42,7 +42,7 @@ export function Pharmacy({ clinic, request, setDirty }:ModuleProps) {
       {['receipt','adjust'].includes(mode)&&<label>{t('pharmacy.note')}<input name="note" required={mode==='adjust'} maxLength={1000}/></label>}
       {['dispense','adjust'].includes(mode)&&clinic.roles.some(r=>['ceo','administrator'].includes(r))&&<label>{t('pharmacy.override')}<input name="override" maxLength={1000}/></label>}
       <button disabled={busy||!item}>{t('pharmacy.save')}</button>
-    </form>
+    </fieldset></form>
     <h3>{t('pharmacy.history')}</h3><ul>{moves.map(m=><li key={m.id}>{new Date(m.created_at).toLocaleString(locale)} — {t(`pharmacy.${m.reason}Reason`)}: {m.qty}{m.note&&` — ${m.note}`}</li>)}</ul>
   </section>;
 }

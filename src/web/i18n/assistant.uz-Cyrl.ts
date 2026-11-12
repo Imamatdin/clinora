@@ -75,6 +75,7 @@ export const assistant = {
   'assistant.speaker_patient': 'Бемор',
   'assistant.speaker_unknown': 'Номаълум',
   'assistant.loading': 'Юкланмоқда…',
+  'assistant.staleApproval': 'Қабул ёзуви ёки қоралама очилгандан кейин ўзгарди (масалан, қўлда сақланди). Ҳеч нарса тасдиқланмади. Янгиланди — кўриб чиқиб, қайта тасдиқланг.',
   'assistant.stale': 'Қоралама бошқа жойда ўзгарди. Янгиланди — қайта кўриб чиқинг.'
 } as const;
 export type AssistantKey = keyof typeof assistant;

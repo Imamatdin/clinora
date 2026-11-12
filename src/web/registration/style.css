@@ -51,3 +51,5 @@
   .offline-print .ticket { break-after: page; text-align: center; }
   .offline-print .number { font-size: 28px; font-weight: bold; overflow-wrap: anywhere; }
 }
+.offline-waiting { margin: 8px 16px; }
+.offline-waiting p { overflow-wrap: anywhere; }

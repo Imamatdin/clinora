@@ -61,5 +61,19 @@ test('administrator imports a synthetic 1C dump in the browser, previews, commit
     expect(history).toEqual(['150000', '175000']);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: 'work/browser-evidence/catalog-list-360.png', fullPage: true });
+
+    // Task 019: the administrator adds an ultrasound service point for a service group, then closes it.
+    await page.getByRole('tab', { name: C('catalog.tab.points'), exact: true }).click();
+    await page.getByRole('button', { name: C('catalog.points.new'), exact: true }).click();
+    const group = (await f.pool.query('SELECT name_uz_cyrl FROM service_groups WHERE clinic_id=$1 AND is_active ORDER BY name_uz_cyrl LIMIT 1', [c])).rows[0].name_uz_cyrl;
+    await page.getByRole('combobox', { name: C('catalog.form.group'), exact: true }).selectOption({ label: group });
+    await page.getByLabel(C('catalog.form.nameUzCyrl'), { exact: true }).fill('УЗИ хонаси');
+    await page.locator('.catalog-panel').getByRole('button', { name: C('catalog.save'), exact: true }).click();
+    const point = page.locator('.catalog-items > li', { hasText: 'УЗИ хонаси' });
+    await expect(point).toContainText(C('catalog.points.kind.service'));
+    await point.getByRole('button', { name: C('catalog.deactivate'), exact: true }).click();
+    await expect(point).toContainText(C('catalog.inactive'));
+    expect((await f.pool.query("SELECT kind, is_active FROM queue_points WHERE clinic_id=$1 AND name_uz_cyrl='УЗИ хонаси'", [c])).rows).toEqual([{ kind: 'service', is_active: false }]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   } finally { await f.close(); }
 });

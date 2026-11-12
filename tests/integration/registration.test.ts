@@ -177,6 +177,34 @@ test('doctor queue: own tickets only, call next, missed call, in progress, compl
   assert.equal((await doctorA.request(url(`patients/${p.id}`))).status, 404);
 });
 
+test('call next after assignment revocation: active ticket and replay disclose no patient (task 019)', async () => {
+  const p = await register();
+  const v = await json(await visit(p.id, [{ queuePointId: g.pointA, serviceIds: [] }]));
+  const ticket = v.tickets[0];
+  // Reach this patient's ticket at doctor A's point, cancelling anyone called before it.
+  let called: { id: string } | null = null, callKey = '';
+  for (let i = 0; i < 20 && called?.id !== ticket.id; i++) {
+    if (called) assert.equal((await owner.request(url(`queue/tickets/${called.id}/status`), { status: 'cancelled', idempotencyKey: key() })).status, 200);
+    callKey = key();
+    called = (await json(await doctorA.request(url('queue/call-next'), { idempotencyKey: callKey }))).ticket;
+  }
+  assert.equal(called?.id, ticket.id);
+  await f.pool.query('DELETE FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3', [f.owner.clinicId, p.id, g.doctorA]);
+  const replayed = await doctorA.request(url('queue/call-next'), { idempotencyKey: callKey });
+  assert.equal(replayed.status, 200);
+  const replayText = await replayed.text();
+  assert.deepEqual(JSON.parse(replayText), { ticket: null, alreadyActive: false }, 'replay of the original call hides the patient');
+  assert.ok(!replayText.includes(p.fullName));
+  const fresh = await doctorA.request(url('queue/call-next'), { idempotencyKey: key() });
+  const freshText = await fresh.text();
+  assert.deepEqual(JSON.parse(freshText), { ticket: null, alreadyActive: true }, 'the active slot is held, but nothing is disclosed');
+  assert.ok(!freshText.includes(p.fullName) && !freshText.includes(p.id));
+  // An administrator still sees and resolves the ticket.
+  const managerView = await json(await owner.request(url('queue/call-next'), { queuePointId: g.pointA, idempotencyKey: key() }));
+  assert.equal(managerView.ticket.id, ticket.id); assert.equal(managerView.alreadyActive, true);
+  assert.equal((await owner.request(url(`queue/tickets/${ticket.id}/status`), { status: 'cancelled', idempotencyKey: key() })).status, 200);
+});
+
 test('charge lines keep the price in force at creation; later catalog changes do not touch them', async () => {
   const p = await register();
   const first = await json(await visit(p.id, [{ queuePointId: g.pointA, serviceIds: [g.consultA] }]));

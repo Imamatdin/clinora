@@ -63,7 +63,7 @@ test('import and catalog writes: 403 for non-administrators, 404 for another cli
   const some = randomUUID();
   const writes: [string, unknown][] = [['catalog/imports', {}], [`catalog/imports/${some}/rows`, {}], [`catalog/imports/${some}/commit`, {}],
     [`catalog/imports/${some}/discard`, {}], ['catalog/items', {}], ['catalog/active', {}], ['catalog/prices', {}], ['catalog/doctor-link', {}],
-    ['catalog/doctor-services', {}], ['catalog/imports', undefined], [`catalog/imports/${some}`, undefined]];
+    ['catalog/doctor-services', {}], ['catalog/queue-points', {}], ['catalog/queue-points/active', {}], ['catalog/imports', undefined], [`catalog/imports/${some}`, undefined]];
   for (const [path, body] of writes) {
     assert.equal((await ceo.request(url(path), body)).status, 403, `ceo ${path}`);
     assert.equal((await cashier.request(url(path), body)).status, 403, `cashier ${path}`);
@@ -111,8 +111,9 @@ test('synthetic .dt imports through preview and one commit; re-import changes no
   const after = await snapshot();
   const again = await stage(admin, await dtRows());
   const p2 = await preview(again);
-  for (const [object, c] of Object.entries(p2.plan.objects) as [string, any][]) assert.equal(c.new + c.changed + c.pricesNew, 0, object);
-  await commit(again);
+  assert.equal(p2.plan, null); assert.equal(p2.alreadyImported.batchId, batch, 'task 019: the same file is reported as already imported');
+  const second = await commit(again);
+  assert.equal(second.status, 'already_imported');
   assert.deepEqual(await snapshot(), after, 'second import of the same file changes nothing');
 });
 
@@ -137,6 +138,26 @@ test('a changed price creates history; priceAt reads the price in force at the s
   const lab = (await f.pool.query("SELECT p.effective_from FROM service_prices p JOIN services s ON s.id=p.service_id WHERE s.clinic_id=$1 AND s.code_1c='Анализ/A01'", [f.owner.clinicId])).rows;
   assert.equal(lab.length, 1);
   assert.ok(new Date(lab[0].effective_from).getTime() <= t1.getTime());
+});
+
+test('a manual price set after an import survives re-importing a file whose 1C price did not change (task 019)', async () => {
+  const lastPrice = async () => (await f.pool.query('SELECT price_uzs::text p, import_batch_id FROM service_prices WHERE clinic_id=$1 AND service_id=$2 ORDER BY effective_from DESC LIMIT 1', [f.owner.clinicId, ids.uzi])).rows[0];
+  // The last import set UZI to 175 000 (previous test); the administrator then sets 180 000 by hand.
+  assert.equal((await lastPrice()).p, '175000'); assert.ok((await lastPrice()).import_batch_id, 'imported rows carry their batch');
+  await ok(await admin.request(url('catalog/prices'), { serviceId: ids.uzi, priceUzs: '180000', idempotencyKey: key() }), 201);
+  assert.equal((await lastPrice()).import_batch_id, null, 'a manual price has no import provenance');
+  // A changed export where UZI is still 175 000 but the consultation moved: only the consultation changes.
+  const batch = await stage(admin, await dtRows({ uzi: '175000', consult: '110000' }));
+  const p = await preview(batch);
+  assert.ok(!p.alreadyImported);
+  assert.equal(p.plan.objects.service.pricesNew, 1, 'only the price that changed in 1C');
+  await commit(batch);
+  assert.equal((await lastPrice()).p, '180000', 'the manual price survives');
+  // When 1C really changes the UZI price, the import applies it.
+  const later = await stage(admin, await dtRows({ uzi: '190000', consult: '110000' }));
+  assert.equal((await preview(later)).plan.objects.service.pricesNew, 1);
+  await commit(later);
+  assert.equal((await lastPrice()).p, '190000');
 });
 
 test('dated import price rows retain timezone, conflict and retry rules', async () => {
@@ -176,7 +197,15 @@ test('spreadsheet rows match by name, resolve parents by name and share the same
   assert.equal(p.plan.rejected[0].reason, 'UNKNOWN_DEPARTMENT');
   await commit(batch);
   const again = await stage(admin, rows, 'csv');
-  assert.deepEqual((await preview(again)).plan.objects.service, { new: 0, changed: 0, unchanged: 1, rejected: 1, pricesNew: 0 });
+  assert.ok((await preview(again)).alreadyImported, 'same spreadsheet, same rows: already imported');
+  // Same file bytes but another column mapping is a different import, planned against the catalog.
+  const remapped = rowsFromTable(csv, 'service', { ...guessMapping(csv[0]!) }, { headerRow: true, kind: 'diagnostic', source: 'list-2.csv' });
+  const sha = createHash('sha256').update(JSON.stringify(rows)).digest('hex');
+  const b2 = await ok(await admin.request(url('catalog/imports'), { source: 'csv', contentSha256: sha, totalRows: remapped.length, idempotencyKey: key() }), 201);
+  await ok(await admin.request(url(`catalog/imports/${b2.id}/rows`), { offset: 0, rows: remapped }));
+  const p2 = await preview(b2.id);
+  assert.equal(p2.alreadyImported, null);
+  assert.deepEqual(p2.plan.objects.service, { new: 0, changed: 0, unchanged: 1, rejected: 1, pricesNew: 0 });
 });
 
 test('search finds a service by its Cyrillic, Latin or Russian name', async () => {
@@ -229,6 +258,46 @@ test('manual edit, deactivate and dated price; doctor linked to a staff account'
   assert.equal(access, 0, 'linking grants no patient access');
   const opts = await ok(await admin.request(url('catalog/options')));
   assert.ok(opts.doctors.some((d: any) => d.userId === ids.doctor) && !opts.doctors.some((d: any) => d.userId === ids.cashier));
+});
+
+test('linking a doctor opens their queue point; deactivating or unlinking closes it; service points are managed here (task 019)', async () => {
+  const points = async (userId: string) => (await f.pool.query("SELECT id, is_active FROM queue_points WHERE clinic_id=$1 AND kind='doctor' AND user_id=$2 ORDER BY id", [f.owner.clinicId, userId])).rows;
+  const offered = async (userId: string) => {
+    const pointIds = new Set((await points(userId)).map(p => p.id));
+    return (await ok(await admin.request(url('registration/options')))).points.some((p: any) => pointIds.has(p.id));
+  };
+  ids.doctor2 = await member('doctor2.c019@example.test', ['doctor'], 'Синтетик Янги Шифокор');
+  const entry = await ok(await admin.request(url('catalog/items'), { list: 'doctor', nameUzCyrl: 'Синтетик Янги Шифокор', nameUzLatn: null, nameRu: null, code: null, specialty: 'Невролог', idempotencyKey: key() }));
+  assert.deepEqual(await points(ids.doctor2), [], 'no point before linking');
+  await ok(await admin.request(url('catalog/doctor-link'), { catalogDoctorId: entry.id, userId: ids.doctor2, idempotencyKey: key() }));
+  const [point] = await points(ids.doctor2);
+  assert.ok(point?.is_active, 'linking creates an active queue point');
+  assert.ok(await offered(ids.doctor2), 'registration offers the new doctor');
+  await ok(await admin.request(url('catalog/active'), { list: 'doctor', id: entry.id, active: false, idempotencyKey: key() }));
+  assert.deepEqual(await points(ids.doctor2), [{ id: point.id, is_active: false }], 'deactivating the doctor closes the point');
+  assert.equal(await offered(ids.doctor2), false);
+  await ok(await admin.request(url('catalog/active'), { list: 'doctor', id: entry.id, active: true, idempotencyKey: key() }));
+  assert.deepEqual(await points(ids.doctor2), [{ id: point.id, is_active: true }], 'reactivating reuses the same point');
+  await ok(await admin.request(url('catalog/doctor-link'), { catalogDoctorId: entry.id, userId: null, idempotencyKey: key() }));
+  assert.deepEqual(await points(ids.doctor2), [{ id: point.id, is_active: false }], 'unlinking closes the point');
+
+  // Service points (e.g. ultrasound) for a service group.
+  const group = (await f.pool.query('SELECT id FROM service_groups WHERE clinic_id=$1 AND is_active LIMIT 1', [f.owner.clinicId])).rows[0].id;
+  const body = { kind: 'service', refId: group, nameUzCyrl: 'УЗИ хонаси (синтетик)', nameUzLatn: 'UZI xonasi', nameRu: null };
+  assert.equal((await ceo.request(url('catalog/queue-points'), { ...body, idempotencyKey: key() })).status, 403);
+  const k = key();
+  const sp = await ok(await admin.request(url('catalog/queue-points'), { ...body, idempotencyKey: k }));
+  assert.equal((await ok(await admin.request(url('catalog/queue-points'), { ...body, idempotencyKey: k }))).id, sp.id, 'double submit creates one point');
+  assert.equal(sp.kind, 'service'); assert.equal(sp.refId, group); assert.equal(sp.active, true);
+  assert.ok((await ok(await ceo.request(url('catalog/queue-points')))).some((p: any) => p.id === sp.id), 'the CEO reads the list');
+  assert.equal((await cashier.request(url('catalog/queue-points'))).status, 403);
+  assert.equal((await foreign.request(url('catalog/queue-points'))).status, 404);
+  assert.equal((await admin.request(url('catalog/queue-points'), { ...body, refId: randomUUID(), idempotencyKey: key() })).status, 404, 'unknown group');
+  const renamed = await ok(await admin.request(url('catalog/queue-points'), { ...body, id: sp.id, nameUzCyrl: 'УЗИ 2-хона', idempotencyKey: key() }));
+  assert.equal(renamed.names.uzCyrl, 'УЗИ 2-хона');
+  assert.equal((await ok(await admin.request(url('catalog/queue-points/active'), { id: sp.id, active: false, idempotencyKey: key() }))).active, false);
+  assert.equal((await admin.request(url('catalog/queue-points/active'), { id: point.id, active: true, idempotencyKey: key() })).status, 409, 'doctor points follow the doctor link');
+  assert.equal((await admin.request(url('catalog/queue-points'), { ...body, id: point.id, idempotencyKey: key() })).status, 409);
 });
 
 test('TypeScript fold equals SQL registration_fold', async () => {

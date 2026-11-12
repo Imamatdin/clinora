@@ -3,7 +3,8 @@ import type pg from 'pg';
 import { z } from 'zod';
 import { DocumentVersion, type Membership, type Principal } from '../../contracts/index.js';
 import { requireApprovableVersion } from '../documents/policy.js';
-import { latestApproval } from '../documents/approvals.js';
+import { currentVersion, latestApproval } from '../documents/approvals.js';
+import { RX_KEY, parsePrescription } from '../doctor/actions.js';
 import { DomainError } from '../identity/access.js';
 import { transaction, type Tx } from '../../server/database.js';
 import { recordAudit, requireRole } from '../../server/roles.js';
@@ -94,10 +95,13 @@ export async function draftView(tx: Tx, actor: Actor, clinicId: string, patientI
     WHERE clinic_id=$1 AND encounter_id=$2 AND patient_id=$3 ORDER BY created_at DESC LIMIT 20`, [clinicId, encounterId, patientId])).rows;
   const lastRun = (await tx.query(`SELECT provider,model,simulated,status,error_code "errorCode",accepted_count "acceptedCount",rejected_count "rejectedCount",latency_ms "latencyMs",created_at "createdAt"
     FROM assistant_extraction_runs WHERE draft_id=$1 ORDER BY created_at DESC LIMIT 1`, [draft.id])).rows[0] ?? null;
+  const docRow = (await tx.query('SELECT current_revision FROM documents WHERE clinic_id=$1 AND patient_id=$2 AND encounter_id=$3', [clinicId, patientId, encounterId])).rows[0];
   const approval = (await tx.query(`SELECT p.id,p.version_id "versionId",p.revision,p.approved_at "approvedAt",a.display_name "approvedBy"
     FROM assistant_approvals p JOIN accounts a ON a.id=p.approved_by WHERE p.draft_id=$1`, [draft.id])).rows[0] ?? null;
   return {
     formId: draft.form_id, draft: { id: draft.id, revision: draft.revision, status: draft.status }, approval,
+    // Task 019: approval must name the visit note revision the doctor saw, so a manual save in between is caught.
+    documentRevision: (docRow?.current_revision ?? 0) as number,
     fields: FIELD_KEYS.map(key => {
       const f = fields.get(key), h = held.find(x => x.field_key === key && (!f || x.created_at > f.created_at));
       return { key, fieldRevision: f?.field_revision ?? 0, value: f?.value ?? null, category: f?.category ?? null, status: f?.status ?? 'empty',
@@ -148,7 +152,10 @@ export async function fieldAction(tx: Tx, actor: Actor, clinicId: string, patien
 
 // ---------- Approval ----------
 
-export const ApproveInput = z.object({ expectedDraftRevision: z.number().int().min(0), fieldRevisions: z.record(z.string(), z.number().int().min(0)) }).strict();
+export const ApproveInput = z.object({ expectedDraftRevision: z.number().int().min(0), expectedDocumentRevision: z.number().int().min(0),
+  fieldRevisions: z.record(z.string(), z.number().int().min(0)) }).strict();
+/** Document field keys the assistant writes. Every other field of the current note (manual notebook fields, rx.lines) is carried forward. */
+const ASSISTANT_OWNED = (key: string) => key.startsWith('gp.');
 export async function approve(tx: Tx, actor: Actor, clinicId: string, patientId: string, encounterId: string, input: z.infer<typeof ApproveInput>) {
   if (!actor.sessionId || !actor.expiresAt) return fail('UNAUTHENTICATED'); // Approval needs the verified session as its Principal.
   const access = await doctorAccess(tx, actor, clinicId, patientId);
@@ -169,11 +176,21 @@ export async function approve(tx: Tx, actor: Actor, clinicId: string, patientId:
   if (!doc) return fail('NOT_FOUND');
   // Task 010: once the note is approved (e.g. in the doctor workspace) it changes only through an explicit amendment.
   if (await latestApproval(tx, doc.id)) return fail('INVALID_TRANSITION');
+  // Task 019: a manual save of the visit note after the doctor loaded the draft makes this approval stale.
+  if (doc.current_revision !== input.expectedDocumentRevision) return fail('STALE_VERSION');
+  const current = await currentVersion(tx, doc);
   const evidenceIds = [...new Set([...fields.values()].flatMap(f => f.evidence))];
   const seg = new Map((await tx.query('SELECT id,start_ms,end_ms FROM assistant_segments WHERE id = ANY($1) AND clinic_id=$2 AND patient_id=$3 AND encounter_id=$4', [evidenceIds, clinicId, patientId, encounterId])).rows.map(r => [r.id, r]));
   const now = new Date().toISOString(), revision = doc.current_revision + 1;
+  // Fields the assistant does not own are kept as saved. Approval confirms the doctor's own unconfirmed entries,
+  // exactly as approving in the doctor workspace would; anything uncertain, conflicting or AI-proposed blocks it.
+  const carried = (current?.fields ?? []).filter(f => !ASSISTANT_OWNED(f.key));
+  if (carried.some(f => f.unresolvedConflict !== null || f.status === 'uncertain' || (f.status === 'proposed' && f.origin !== 'clinician'))) return fail('INVALID_TRANSITION');
+  if (carried.some(f => f.key === RX_KEY) && !parsePrescription(carried).length) return fail('INVALID_INPUT');
+  const carriedConfirmed = carried.map(f => f.status === 'proposed' ? { ...f, status: 'clinician_confirmed' as const, editedBy: f.editedBy ?? actor.userId, revision } : f);
   const docCategory = (c: Category) => c === 'not_examined' ? 'observed' : c;
   const clinicalFields = [] as unknown[];
+  clinicalFields.push(...carriedConfirmed);
   for (const key of FIELD_KEYS) {
     const f = fields.get(key);
     if (!f || f.status === 'cleared' || (f.value === null && f.category !== 'not_examined')) continue;

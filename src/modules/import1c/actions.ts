@@ -58,6 +58,21 @@ export async function addRows(ctx: ClinicContext, batchId: string, raw: z.input<
   return { received: await received(ctx, b.id), totalRows: b.total_rows };
 }
 
+/** Canonical hash of the staged rows in sequence order (JSONB normalises key order and spacing). */
+async function rowsHash(ctx: ClinicContext, b: Batch): Promise<string> {
+  return (await ctx.tx.query(`SELECT encode(sha256(convert_to(coalesce(jsonb_agg(row ORDER BY seq)::text, '[]'), 'UTF8')), 'hex') h
+    FROM import_batch_rows WHERE clinic_id=$1 AND batch_id=$2`, [ctx.clinicId, b.id])).rows[0].h;
+}
+/**
+ * Task 019: an earlier committed batch of the same file with the same rows. A .dt yields the same rows from the same
+ * bytes, so a .dt committed before row hashes were stored still counts; a spreadsheet must also match its rows (mapping).
+ */
+async function alreadyImported(ctx: ClinicContext, b: Batch, hash: string): Promise<{ batchId: string; at: string } | null> {
+  const row = (await ctx.tx.query(`SELECT id, finished_at FROM import_batches WHERE clinic_id=$1 AND status='committed' AND id<>$2 AND content_sha256=$3 AND source=$4
+      AND (rows_sha256=$5 OR (rows_sha256 IS NULL AND source='dt')) ORDER BY finished_at DESC LIMIT 1`, [ctx.clinicId, b.id, b.content_sha256, b.source, hash])).rows[0];
+  return row ? { batchId: row.id, at: new Date(row.finished_at).toISOString() } : null;
+}
+
 async function stagedRows(ctx: ClinicContext, b: Batch): Promise<{ seq: number; row: ParsedImportRow }[]> {
   const rows = (await ctx.tx.query('SELECT seq,row FROM import_batch_rows WHERE clinic_id=$1 AND batch_id=$2 ORDER BY seq', [ctx.clinicId, b.id])).rows;
   if (rows.length !== b.total_rows) fail('INVALID_TRANSITION');
@@ -80,7 +95,9 @@ export async function preview(ctx: ClinicContext, batchId: string) {
   ctx = await authorize(ctx, IMPORTERS);
   const b = await loadBatch(ctx, batchId);
   const got = await received(ctx, b.id);
-  if (b.status !== 'staging' || got !== b.total_rows) return { batch: batchView(b, got), plan: null };
+  if (b.status !== 'staging' || got !== b.total_rows) return { batch: batchView(b, got), plan: null, alreadyImported: null };
+  const duplicate = await alreadyImported(ctx, b, await rowsHash(ctx, b));
+  if (duplicate) return { batch: batchView(b, got), plan: null, alreadyImported: duplicate };
   const plan = await buildPlan(ctx.tx, ctx.clinicId, await stagedRows(ctx, b));
   const samples: Record<string, ReturnType<typeof rowView>[]> = {};
   const rank = { new: 0, changed: 1, unchanged: 2, rejected: 3 } as const;
@@ -90,7 +107,7 @@ export async function preview(ctx: ClinicContext, batchId: string) {
     if (list.length < 5) list.push(rowView(r));
   }
   const rejected = plan.rows.filter(r => r.outcome === 'rejected');
-  return { batch: batchView(b, got), plan: { ...summarize(plan), samples, rejected: rejected.slice(0, 300).map(rowView), rejectedTotal: rejected.length } };
+  return { batch: batchView(b, got), plan: { ...summarize(plan), samples, rejected: rejected.slice(0, 300).map(rowView), rejectedTotal: rejected.length }, alreadyImported: null };
 }
 
 /**
@@ -105,11 +122,21 @@ export async function commit(ctx: ClinicContext, batchId: string, raw: z.input<t
     await ctx.tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', ['catalog-import:' + ctx.clinicId]);
     const b = await loadBatch(ctx, batchId, true);
     if (b.status !== 'staging') fail('INVALID_TRANSITION');
-    const plan = await buildPlan(ctx.tx, ctx.clinicId, await stagedRows(ctx, b));
-    await applyPlan(ctx.tx, ctx.clinicId, ctx.actorId, plan);
+    const staged = await stagedRows(ctx, b), hash = await rowsHash(ctx, b);
+    const duplicate = await alreadyImported(ctx, b, hash);
+    if (duplicate) {
+      // The same file was committed before: nothing is applied, the batch is closed as a duplicate.
+      await ctx.tx.query("UPDATE import_batches SET status='discarded', duplicate_of=$3, rows_sha256=$4, finished_by=$5, finished_at=now() WHERE clinic_id=$1 AND id=$2",
+        [ctx.clinicId, b.id, duplicate.batchId, hash, ctx.actorId]);
+      await ctx.tx.query('DELETE FROM import_batch_rows WHERE clinic_id=$1 AND batch_id=$2', [ctx.clinicId, b.id]);
+      await withAudit(ctx.tx, ctx, 'catalog.import_duplicate', b.id, { duplicateOf: duplicate.batchId });
+      return { batchId: b.id, status: 'already_imported', alreadyImported: duplicate, summary: summarize({ rows: [], inserts: [], updates: [], prices: [] }) };
+    }
+    const plan = await buildPlan(ctx.tx, ctx.clinicId, staged);
+    await applyPlan(ctx.tx, ctx.clinicId, ctx.actorId, plan, b.id);
     const summary = summarize(plan);
-    await ctx.tx.query("UPDATE import_batches SET status='committed', summary=$3, finished_by=$4, finished_at=now() WHERE clinic_id=$1 AND id=$2",
-      [ctx.clinicId, b.id, JSON.stringify(summary), ctx.actorId]);
+    await ctx.tx.query("UPDATE import_batches SET status='committed', summary=$3, rows_sha256=$5, finished_by=$4, finished_at=now() WHERE clinic_id=$1 AND id=$2",
+      [ctx.clinicId, b.id, JSON.stringify(summary), ctx.actorId, hash]);
     await ctx.tx.query('DELETE FROM import_batch_rows WHERE clinic_id=$1 AND batch_id=$2', [ctx.clinicId, b.id]);
     await withAudit(ctx.tx, ctx, 'catalog.import_committed', b.id, { inserts: summary.inserts, updates: summary.updates, pricesNew: summary.pricesNew });
     return { batchId: b.id, status: 'committed', summary };

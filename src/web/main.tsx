@@ -15,7 +15,8 @@ import { Staff } from './staff.js';
 import { LockScreen, useIdleLock, type DeviceInfo } from './access/device.js';
 import { Devices, MyAccess } from './access/staff-access.js';
 import { InstallHint, registerServiceWorker } from './access/install.js';
-import { clearOutbox, lockOutbox } from './registration/outbox.js';
+import { lockOutbox } from './registration/outbox.js';
+import { OfflineWaiting } from './registration/waiting.js';
 import './style.css';
 import './ceo/style.css';
 
@@ -91,9 +92,9 @@ function App() {
   /** Shared PC: end this person's session and return to the name list. */
   async function lock(notice = '') {
     try {
-      // Start the request with its CSRF proof, then hide data immediately. Idle locking permits
-      // same-person PIN recovery; explicitly choosing "Switch user" destroys queued records.
-      await Promise.all([request('/api/auth/logout', {}), notice ? Promise.resolve(lockOutbox()) : clearOutbox(true)]);
+      // Start the request with its CSRF proof, then hide data immediately. Queued offline
+      // registrations stay locked to their owner and sync at that person's next sign-in (task 020).
+      await Promise.all([request('/api/auth/logout', {}), Promise.resolve(lockOutbox())]);
     } catch { /* the server may already have ended it */ }
     setMe(null); csrf.current = ''; setDirty(false); setSection(''); setDay(null); setShowMe(false); setPasswordOnDevice(false);
     setError(''); setNotice(notice); await refreshDevice();
@@ -151,9 +152,9 @@ function App() {
     if (f.get('newPassword') !== f.get('repeat')) { setError(t('password.mismatch')); return; }
     await run(async () => { await request('/api/auth/password', { currentPassword: f.get('currentPassword'), newPassword: f.get('newPassword') }); await refreshMe(); setNotice(t('password.saved')); });
   }
-  const signOut = () => guard(() => void run(async () => { await Promise.all([request('/api/auth/logout', {}), clearOutbox(true)]); setMe(null); csrf.current = ''; setDirty(false); setClinicId(''); setSection(''); setDay(null); setShowMe(false); await refreshDevice(); }));
+  const signOut = () => guard(() => void run(async () => { await Promise.all([request('/api/auth/logout', {}), Promise.resolve(lockOutbox())]); setMe(null); csrf.current = ''; setDirty(false); setClinicId(''); setSection(''); setDay(null); setShowMe(false); await refreshDevice(); }));
   const onDevice = me?.session?.via === 'device', inTelegram = me?.session?.via === 'telegram' || telegramActive;
-  const banners = <div className="banners" aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>;
+  const banners = <div className="banners" aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}<OfflineWaiting me={me} /></div>;
 
   if (loading) return <main className="auth"><p role="status">{t('app.loading')}</p></main>;
   return <div className="app">
@@ -171,8 +172,8 @@ function App() {
       {tgState === 'signing' || tgState === '' ? <p role="status">{t('access.tg.signingIn')}</p> : tgState === 'blocked' ? <><h1>{t('access.tg.blockedTitle')}</h1><p>{t('access.tg.blockedLead')}</p></>
         : tgState === 'unavailable' ? <><h1>{t('access.tg.blockedTitle')}</h1><p>{t('access.tg.telegramUnavailable')}</p></> : <><h1>{t('access.tg.reopenTitle')}</h1><p>{t('access.tg.reopenLead')}</p></>}
     </main> :
-    !me && device?.enrolled && !passwordOnDevice ? <LockScreen device={device} request={request} notice={notice} onPassword={() => { setPasswordOnDevice(true); setNotice(''); }}
-      onUnlocked={async () => { setNotice(''); await refreshMe(); }} /> :
+    !me && device?.enrolled && !passwordOnDevice ? <><OfflineWaiting me={null} /><LockScreen device={device} request={request} notice={notice} onPassword={() => { setPasswordOnDevice(true); setNotice(''); }}
+      onUnlocked={async () => { setNotice(''); await refreshMe(); }} /></> :
     !me ? <main className="auth"><p className="eyebrow">{t('auth.eyebrow')}</p><h1>{mode === 'login' ? t('auth.welcome') : t('auth.createTitle')}</h1><p className="muted">{t('auth.lead')}</p>
       <form onSubmit={signIn}>
         {mode === 'login'

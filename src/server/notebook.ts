@@ -231,7 +231,7 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
     const clinic = parts[2]!;
     // Offline replay is limited to a currently enrolled shared PC, never a phone/password session.
     if (parts[3] === 'registration' && parts[4] === 'offline' && actor.via !== 'device') return fail('FORBIDDEN');
-    const routed = await clinicRoute(tx, actor.userId, clinic, parts.slice(3).join('/'), method, req, jsonBody, actor.deviceId ? `device:${actor.deviceId}` : `account:${actor.userId}`);
+    const routed = await clinicRoute(tx, actor.userId, clinic, parts.slice(3).join('/'), method, req, jsonBody, actor.via === 'device' ? actor.deviceId : null, actor.deviceId ? `device:${actor.deviceId}` : `account:${actor.userId}`);
     if (routed) return routed;
     const access = await accessFor(tx, actor, clinic);
     if (parts[3] === 'invitations' && parts.length === 4 && method === 'POST') {

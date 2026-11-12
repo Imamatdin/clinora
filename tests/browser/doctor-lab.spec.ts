@@ -58,8 +58,30 @@ for (const width of [360, 1280]) test(`doctor and lab complete one visit at ${wi
     await dr.getByLabel(T('doctor.rx.duration'), { exact: true }).fill('5 кун');
     await dr.getByRole('button', { name: T('doctor.save'), exact: true }).click();
     await expect(dr.getByRole('status').filter({ hasText: T('doctor.saved', { revision: 1 }) }).first()).toBeVisible();
+    // Task 019: Back with unsaved notes asks save, discard or stay.
+    // By id: once the textarea holds saved text, its wrapping label no longer matches exactly.
+    const reported = dr.locator('#dr-note-reported');
+    const back = dr.getByRole('button', { name: T('doctor.back'), exact: true });
+    const leave = page.getByRole('alertdialog', { name: T('doctor.leaveTitle') });
+    await reported.fill('Синтетик: иситма, йўтал, бош оғриғи');
+    await back.click();
+    await expect(leave).toBeVisible();
+    await leave.getByRole('button', { name: T('doctor.leaveStay'), exact: true }).click();
+    await expect(leave).toBeHidden();
+    await expect(reported).toHaveValue('Синтетик: иситма, йўтал, бош оғриғи');
+    await back.click();
+    await leave.getByRole('button', { name: T('doctor.leaveSave'), exact: true }).click();
+    await expect(dr.getByRole('button', { name: T('doctor.open'), exact: true })).toBeVisible();
+    await dr.getByRole('button', { name: T('doctor.open'), exact: true }).click();
+    await expect(reported).toHaveValue('Синтетик: иситма, йўтал, бош оғриғи');
+    await reported.fill('ташланадиган матн');
+    await back.click();
+    await leave.getByRole('button', { name: T('doctor.leaveDiscard'), exact: true }).click();
+    await dr.getByRole('button', { name: T('doctor.open'), exact: true }).click();
+    await expect(reported).toHaveValue('Синтетик: иситма, йўтал, бош оғриғи');
+    await expect(dr.getByRole('status').filter({ hasText: T('doctor.saved', { revision: 2 }) }).first()).toBeVisible();
     await dr.getByRole('button', { name: T('doctor.approve'), exact: true }).click();
-    await expect(dr.getByText(T('doctor.approvedTag', { revision: 2 }), { exact: true })).toBeVisible();
+    await expect(dr.getByText(T('doctor.approvedTag', { revision: 3 }), { exact: true })).toBeVisible();
     const pdfHref = await dr.getByRole('link', { name: T('doctor.pdf'), exact: true }).getAttribute('href');
     const pdf = await page.evaluate(async href => { const r = await fetch(href!); return { status: r.status, type: r.headers.get('content-type') }; }, pdfHref);
     expect(pdf).toEqual({ status: 200, type: 'application/pdf' });

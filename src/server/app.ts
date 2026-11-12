@@ -84,9 +84,13 @@ export async function createApp(webDirectory?: string, config?: ApiConfig, optio
       try {
         const result = await api(req, config);
         if (result.cookie) res.setHeader('Set-Cookie', result.cookie);
-        if (typeof result.html === 'string') { // Server-rendered print pages (queue tickets); same CSP as everything else.
+        if (result.html !== undefined) { // Server-rendered print pages (queue tickets); same CSP as everything else.
           res.writeHead(result.status ?? 200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(req.method === 'HEAD' ? undefined : result.html);
+        } else if (result.file !== undefined) { // Server-rendered files (prescription PDF).
+          res.writeHead(200, { 'Content-Type': result.file.contentType, 'Content-Length': result.file.data.length,
+            'Content-Disposition': `inline; filename="${result.file.filename.replace(/[^a-zA-Z0-9._-]/g, '')}"` });
+          res.end(req.method === 'HEAD' ? undefined : result.file.data);
         } else json(result.status ?? 200, result.body);
       } catch (error) {
         if (error instanceof LoginLimited) {

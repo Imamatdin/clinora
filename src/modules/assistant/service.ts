@@ -3,6 +3,7 @@ import type pg from 'pg';
 import { z } from 'zod';
 import { DocumentVersion, type Membership, type Principal } from '../../contracts/index.js';
 import { requireApprovableVersion } from '../documents/policy.js';
+import { latestApproval } from '../documents/approvals.js';
 import { DomainError } from '../identity/access.js';
 import { transaction, type Tx } from '../../server/database.js';
 import { recordAudit, requireRole } from '../../server/roles.js';
@@ -174,6 +175,8 @@ export async function approve(tx: Tx, actor: Actor, clinicId: string, patientId:
   if ([...fields.values()].some(f => f.status === 'proposed')) return fail('INVALID_TRANSITION');
   const doc = (await tx.query('SELECT * FROM documents WHERE clinic_id=$1 AND patient_id=$2 AND encounter_id=$3 FOR UPDATE', [clinicId, patientId, encounterId])).rows[0];
   if (!doc) return fail('NOT_FOUND');
+  // Task 010: once the note is approved (e.g. in the doctor workspace) it changes only through an explicit amendment.
+  if (await latestApproval(tx, doc.id)) return fail('INVALID_TRANSITION');
   const evidenceIds = [...new Set([...fields.values()].flatMap(f => f.evidence))];
   const seg = new Map((await tx.query('SELECT id,start_ms,end_ms FROM assistant_segments WHERE id = ANY($1) AND clinic_id=$2 AND patient_id=$3 AND encounter_id=$4', [evidenceIds, clinicId, patientId, encounterId])).rows.map(r => [r.id, r]));
   const now = new Date().toISOString(), revision = doc.current_revision + 1;

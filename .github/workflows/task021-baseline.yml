@@ -1,0 +1,26 @@
+name: Task 021 regression baseline
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.9
+        env:
+          POSTGRES_USER: clinora_test
+          POSTGRES_PASSWORD: ci-synthetic-only
+          POSTGRES_DB: clinora_test
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U clinora_test -d clinora_test" --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://clinora_test:ci-synthetic-only@127.0.0.1:5432/clinora_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: node --import tsx --test tests/reports.test.ts tests/integration/task021.test.ts

@@ -12,7 +12,7 @@ for(const width of [360,1280]) test(`pharmacy receipt, dispense and surgery reac
     await f.pool.query("INSERT INTO visits(id,clinic_id,patient_id,business_day_id,type,created_by,created_at) VALUES($1,$2,$3,$4,'outpatient',$5,now()-interval '1 hour')",[visit,c,patient,day,u]);
     await f.pool.query("INSERT INTO services(id,clinic_id,kind,name_uz_cyrl,track_stock) VALUES($1,$2,'medicine','Синтетик дори',true),($3,$2,'surgery','Синтетик операция',false)",[medicine,c,operation]);
     for(const s of [medicine,operation]) await f.pool.query("INSERT INTO service_prices(id,clinic_id,service_id,price_uzs,effective_from,set_by) VALUES($1,$2,$3,15000,'2026-01-01',$4)",[randomUUID(),c,s,u]);
-    await f.pool.query('INSERT INTO doctor_profiles(clinic_id,user_id) VALUES($1,$2)',[c,u]);
+    await f.pool.query("INSERT INTO doctor_profiles(clinic_id,user_id,specialty_uz_cyrl) VALUES($1,$2,'Синтетик жарроҳ')",[c,u]);
     await page.setViewportSize({width,height:900});await page.goto(f.origin);
     await page.getByLabel(T('auth.identifier'),{exact:true}).fill('owner@example.test');await page.getByLabel(T('auth.password'),{exact:true}).fill(f.password);
     await page.getByRole('button',{name:T('auth.signIn'),exact:true}).click();

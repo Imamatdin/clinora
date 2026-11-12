@@ -135,7 +135,8 @@ test('queued data survives reload, is removed on user switch, and revoked device
     await expect(page.getByText(pending(1), { exact: true })).toBeVisible();
     await page.getByRole('banner').getByRole('button', { name: T('access.device.switchUser'), exact: true }).click();
     await expect(page.getByRole('heading', { name: T('access.device.title'), exact: true })).toBeVisible();
-    expect((await f.pool.query('SELECT count(*)::int n FROM sessions WHERE user_id=$1', [g.registrar])).rows[0].n).toBe(0);
+    // Local locking is immediate; the logout transaction may still be finishing on the server.
+    await expect.poll(async () => (await f.pool.query('SELECT count(*)::int n FROM sessions WHERE user_id=$1', [g.registrar])).rows[0].n).toBe(0);
     expect((await stored(page)).entries).toEqual([]);
     await page.getByRole('button', { name: 'Синтетик Невролог', exact: true }).click();
     await page.getByLabel(T('access.device.pin'), { exact: true }).fill('1397');

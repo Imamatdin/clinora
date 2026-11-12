@@ -63,5 +63,8 @@ for(const width of [1280,360])test(`inpatient admission, three days, transfer, d
     expect(bytes.toString('latin1')).toContain('/MediaBox [0 0 595.28 841.89]');
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
     await mkdir('work/browser-evidence',{recursive:true});await writeFile(`work/browser-evidence/inpatient-${width}.pdf`,bytes);await page.screenshot({path:`work/browser-evidence/inpatient-${width}.png`,fullPage:true});
+    // A failed refresh must not leave another/stale invoice displayed beneath the selected stay.
+    await page.route('**/inpatient/*/invoice',r=>r.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'SERVICE_UNAVAILABLE'}})}));
+    await stay.click();await expect(page.locator('.inpatient [role=alert]')).toBeVisible();await expect(page.getByTestId('inpatient-due')).toHaveCount(0);
   }finally{await f.close();}
 });

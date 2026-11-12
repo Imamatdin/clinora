@@ -44,10 +44,10 @@ function Screen({clinic,request,myId,setDirty}:ModuleProps) {
         <label>{t('inpatient.expected')}<input name="expected" type="date" min={data.today}/></label><button>{t('inpatient.admit')}</button>
       </fieldset></form></details>}
       <label><input type="checkbox" checked={mine} onChange={e=>setMine(e.target.checked)}/>{t('inpatient.myPatients')}</label>
-      <section className="stays">{stays.length===0?<p>{t('inpatient.empty')}</p>:stays.map(a=><button disabled={busy} key={a.id} aria-pressed={selected===a.id} onClick={()=>void run(async()=>{setSelected(a.id);setConfirm(false);setBill(await request<InvoiceView>(`${base}/${a.id}/invoice`));})}>
+      <section className="stays">{stays.length===0?<p>{t('inpatient.empty')}</p>:stays.map(a=><button disabled={busy} key={a.id} aria-pressed={selected===a.id} onClick={()=>void run(async()=>{setSelected(a.id);setBill(null);setConfirm(false);setDirty(false);setBill(await request<InvoiceView>(`${base}/${a.id}/invoice`));})}>
         {a.patient} · {a.room} {a.bed} · {a.attending} · {t(a.status==='admitted'?'inpatient.admitted':'inpatient.discharged')}
       </button>)}</section>
-      {active&&<section className="stay-detail"><h3>{active.patient}</h3>
+      {active&&<section key={active.id} className="stay-detail"><h3>{active.patient}</h3>
         {bill&&<div><h4>{t('inpatient.invoice')}</h4>{bill.lines.map(l=><p key={l.id}>{l.name} · {l.quantity} × {amount(l.price)} = {amount(l.value)} {t('inpatient.uzs')}</p>)}
           <dl>{(['value','discount','payable','paid','due'] as const).map(k=><div key={k}><dt>{t(`inpatient.${k}`)}</dt><dd data-testid={`inpatient-${k}`}>{BigInt(bill[k]).toLocaleString('ru-RU')} {t('inpatient.uzs')}</dd></div>)}</dl>
           <a className="invoice-pdf" href={`${base}/${selected}/invoice-pdf`} target="_blank" rel="noopener noreferrer">{t('inpatient.print')}</a>

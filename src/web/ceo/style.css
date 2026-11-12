@@ -17,6 +17,9 @@ body:has(.ceo-workspace){background:#f2efe8;color:#302934}
 .ceo-workspace label{font-size:16px;font-weight:500;gap:8px}
 .ceo-workspace .ceo-primary{background:var(--plum);color:#fff;border-color:var(--plum)}
 .ceo-workspace .ceo-primary:hover:not(:disabled){background:#382535;color:#fff}
+.ceo-language{max-width:240px;margin:0 0 18px}
+.page.home[data-role="ceo"]:has(.ceo-workspace)>.day-panel{max-width:none;display:flex;align-items:center;flex-wrap:wrap;gap:12px 20px;padding:16px 20px;background:#fbf9f5;border-color:#d9d2cb;border-radius:10px}
+.page.home[data-role="ceo"]:has(.ceo-workspace)>.day-panel h2{font-size:16px;margin:0}.page.home[data-role="ceo"]:has(.ceo-workspace)>.day-panel>button{margin-left:auto;min-height:48px;padding:10px 20px;font-size:16px}.page.home[data-role="ceo"]:has(.ceo-workspace)>.day-panel>p.fine:last-child{width:100%;font-size:14px;color:#71656d}
 .ceo-heading{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:8px 0 24px}
 .ceo-heading h2{font-size:clamp(26px,3vw,38px);line-height:1.2;font-weight:650;letter-spacing:-.03em;margin:5px 0 12px}
 .ceo-heading p{margin:0;color:#71656d;max-width:720px}

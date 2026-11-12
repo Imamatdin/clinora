@@ -4,10 +4,10 @@ import type { Report } from '../../modules/reports/actions.js';
 import type { Download } from '../../modules/reports/exports.js';
 import { ReportView } from '../ceo/dashboard.js';
 import { t,saveFile,Language,useReportLocale } from '../ceo/shared.js';
-export function CashReport({clinic,request,day}:ModuleProps) {
+export function CashReport({clinic,request,day,reportDayId}:ModuleProps) {
   useReportLocale();
   const [report,setReport]=useState<Report|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(false);
-  const [id,setId]=useState(()=>new URLSearchParams(location.search).get('report')??day?.day?.id??day?.openDay?.id??'');
+  const [id,setId]=useState(()=>reportDayId??day?.day?.id??day?.openDay?.id??'');
   const [days,setDays]=useState<{id:string;business_date:string;status:string}[]>([]);
   useEffect(()=>{let active=true;void request<typeof days>(`/api/clinics/${clinic.id}/reports/days`).then(v=>{if(active){setDays(v);setId(old=>old||v[0]?.id||'');}}).catch(()=>{if(active)setError(true);});return()=>{active=false;};},[clinic.id,day?.day?.status]);
   useEffect(()=>{if(!id)return;let active=true;setBusy(true);setError(false);setReport(null);void request<Report>(`/api/clinics/${clinic.id}/reports/days/${id}`).then(v=>{if(active)setReport(v);}).catch(()=>{if(active)setError(true);}).finally(()=>{if(active)setBusy(false);});return()=>{active=false;};},[id,clinic.id,day?.day?.status]);

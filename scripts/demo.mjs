@@ -1,4 +1,5 @@
-// Synthetic demonstration clinic: one staff member per role, one fictional patient routed to the doctor.
+// Synthetic demonstration clinic: one staff member per role (ten doctors), the full catalog shape from
+// scripts/demo-catalog.ts, and one fictional patient routed to the first doctor.
 // Every login shares DEMO_PASSWORD, which is supplied privately and never printed.
 import { randomUUID } from 'node:crypto';
 import { makePool, migrate, transaction } from '../src/server/database.ts';
@@ -6,6 +7,7 @@ import { passwordHash } from '../src/server/security.ts';
 import { Password } from '../src/contracts/notebook.ts';
 import { Encounter } from '../src/contracts/index.ts';
 import { Login, ROLES } from '../src/modules/identity/roles.ts';
+import { DOCTORS, seedDemoCatalog } from './demo-catalog.ts';
 
 if(process.env.NODE_ENV==='production'||process.env.ALLOW_SYNTHETIC_DEMO!=='true')throw new Error('Synthetic setup requires ALLOW_SYNTHETIC_DEMO=true and is forbidden in production');
 for(const key of ['DATABASE_URL','DEMO_PASSWORD'])if(!process.env[key])throw new Error(`${key} required; no default credentials`);
@@ -15,10 +17,11 @@ if(!['127.0.0.1','localhost','::1'].includes(target.hostname)||!['/clinora_local
 const prefix=process.env.DEMO_LOGIN_PREFIX??'demo';
 const staff=[
   ['ceo','Синтетик Раҳбар'],['administrator','Синтетик Администратор'],['registrar','Синтетик Регистратор'],
-  ['doctor','Синтетик Шифокор'],['laboratory','Синтетик Лаборант'],['cashier','Синтетик Кассир'],['inpatient','Синтетик Стационар ходими']
+  ['doctor',DOCTORS[0][1]],['laboratory','Синтетик Лаборант'],['cashier','Синтетик Кассир'],['inpatient','Синтетик Стационар ходими']
 ];
 if(staff.map(s=>s[0]).join()!==ROLES.join())throw new Error('Demo must cover every role');
 const pool=makePool(process.env.DATABASE_URL);
+let catalog;
 try{
   await migrate(pool);
   const hash=await passwordHash(process.env.DEMO_PASSWORD);
@@ -34,6 +37,15 @@ try{
       await tx.query('INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,$3,$4)',[clinicId,id,role,granter]);
       await tx.query("INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,'synthetic.staff',$2)",[randomUUID(),id,clinicId]);
     }
+    // Nine more doctors (ten in total), each with a profile, services, split rule and queue point.
+    const doctorIds=[ids.doctor];
+    for(let i=2;i<=DOCTORS.length;i++){
+      const id=randomUUID(),login=Login.parse(`${prefix}.doctor${i}`);doctorIds.push(id);
+      await tx.query('INSERT INTO accounts(id,login,display_name,password_hash,managed_by_clinic_id) VALUES($1,$2,$3,$4,$5)',[id,login,DOCTORS[i-1][1],hash,clinicId]);
+      await tx.query("INSERT INTO memberships(id,clinic_id,user_id,role,is_owner,clinical_access,patient_scope,status,granted_by) VALUES($1,$2,$3,'clinician',false,true,'assigned','active',$4)",[randomUUID(),clinicId,id,ids.ceo]);
+      await tx.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'doctor',$3)",[clinicId,id,ids.ceo]);
+    }
+    catalog=await seedDemoCatalog(tx,clinicId,ids.ceo,doctorIds);
     const doctor=ids.doctor,patient=randomUUID();
     await tx.query('INSERT INTO patients(id,clinic_id,display_name,mrn,provenance) VALUES($1,$2,$3,$4,$5)',[patient,clinicId,'Fictional Samira — demo only','SYN-DEMO-001',{source:'manual',externalReference:null}]);
     await tx.query('INSERT INTO patient_assignments(clinic_id,patient_id,user_id) VALUES($1,$2,$3)',[clinicId,patient,doctor]);
@@ -47,4 +59,5 @@ try{
     return (await tx.query('SELECT login FROM accounts WHERE managed_by_clinic_id=$1 ORDER BY login',[clinicId])).rows.map(r=>r.login);
   });
   console.log(`Synthetic clinic provisioned with one login per role: ${logins.join(', ')}. Password not printed.`);
+  console.log(`Synthetic catalog: ${JSON.stringify(catalog)}.`);
 }finally{await pool.end();}

@@ -44,3 +44,16 @@ test('uz-Cyrl dictionary entries are non-empty and Cyrillic where they are prose
     if (!['app.brand', 'auth.email', 'app.title'].includes(key) && /\p{L}{3,}/u.test(value)) assert.match(value, /\p{Script=Cyrillic}/u, key);
   }
 });
+
+test('per-feature dictionaries merge without collisions and feature keys carry their prefix', async () => {
+  const { UZ_CYRL_PARTS } = await import('../src/web/i18n/uz-Cyrl.js');
+  const seen = new Map<string, string>();
+  for (const [part, dict] of Object.entries(UZ_CYRL_PARTS)) {
+    for (const key of Object.keys(dict)) {
+      assert.ok(!seen.has(key), `${key} defined by ${seen.get(key)} and ${part}`);
+      seen.set(key, part);
+      if (part !== 'core') assert.ok(key.startsWith(part + '.'), `${part} key ${key} must start with "${part}."`);
+    }
+  }
+  assert.equal(Object.keys(uzCyrl).length, seen.size);
+});

@@ -24,10 +24,12 @@ test('021: three inpatient days and caretaker dates reconcile even with real cre
   const {f,call}=await setup(t),g=await inpatientGraph(f,3);
   await f.pool.query('INSERT INTO caretakers(id,clinic_id,admission_id,full_name,from_date,daily_service_id) VALUES($1,$2,$3,$4,$5,$6)',[id(),g.clinic,g.admission,'Synthetic Caretaker',g.start,g.services.caretaker]);
   const through=new Date(Date.parse(g.today)-86400000).toISOString().slice(0,10);
-  await call('/inpatient/daily',{key:id(),through});
-  // Task 020 may change created_at; reporting must be independent of that change.
-  await f.pool.query('UPDATE charge_lines SET created_at=now() WHERE clinic_id=$1',[g.clinic]);
   const dates=[0,1,2].map(i=>new Date(Date.parse(g.start)+i*86400000).toISOString().slice(0,10));
+  const caretaker=(await f.pool.query('SELECT id FROM caretakers WHERE admission_id=$1',[g.admission])).rows[0].id;
+  for(const date of dates)for(const kind of ['bed','caretaker'] as const){
+    const line=id();await f.pool.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,source,created_by) VALUES($1,$2,$3,$4,1,$5,'inpatient',$6)`,[line,g.clinic,g.visit,g.services[kind],kind==='bed'?'100000':'50000',g.actor]);
+    await f.pool.query(kind==='bed'?'INSERT INTO bed_day_charges(clinic_id,admission_id,charge_date,charge_line_id) VALUES($1,$2,$3,$4)':'INSERT INTO caretaker_day_charges(clinic_id,caretaker_id,charge_date,charge_line_id) VALUES($1,$2,$3,$4)',[g.clinic,kind==='bed'?g.admission:caretaker,date,line]);
+  }
   const daily=[];for(const date of dates)daily.push(await call('/reports/dashboard',{from:date,to:date}));
   assert.deepEqual(daily.map(r=>r.totals.value),['150000','150000','150000']);
   const range=await call('/reports/dashboard',{from:g.start,to:through});
@@ -96,10 +98,10 @@ test('021: cashier day report and print expose only own shifts and clinic day to
   const shift=await call('/cashier/shifts',{deskId:g.desk,opening:'100'},201);
   await call(`/cashier/visits/${g.visit}/payments`,{shiftId:shift.id,amount:'123',method:'cash',key:id()},201);
   await call(`/cashier/shifts/${shift.id}/close`,{counted:'223'});
-  const other=id();await f.pool.query(`INSERT INTO cash_shifts(id,clinic_id,cash_desk_id,business_day_id,cashier_user_id,opening_cash_uzs,status,closed_at,counted_cash_uzs) VALUES($1,$2,$3,$4,$5,999,'closed',now(),999)`,[other,f.owner.clinicId,g.desk,g.day,f.owner.userId]);
-  // Distinct account owned shift; no other-clinic membership is needed to check filtering.
-  await f.pool.query('UPDATE cash_shifts SET cashier_user_id=$2 WHERE id=$1',[other,f.other.userId]);
+  await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,status,granted_by) VALUES($1,$2,$3,'active',$4)",[id(),f.owner.clinicId,f.other.userId,f.owner.userId]);
+  const other=id();await f.pool.query(`INSERT INTO cash_shifts(id,clinic_id,cash_desk_id,business_day_id,cashier_user_id,opening_cash_uzs,status,closed_at,counted_cash_uzs,close_report) VALUES($1,$2,$3,$4,$5,999,'closed',now(),999,'{}')`,[other,f.owner.clinicId,g.desk,g.day,f.other.userId]);
   await f.pool.query("DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2 AND role<>'cashier'",[f.owner.clinicId,f.owner.userId]);
+  await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'cashier',$2) ON CONFLICT DO NOTHING",[f.owner.clinicId,f.owner.userId]);
   for(const closed of [false,true]){
     if(closed){await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'ceo',$2)",[f.owner.clinicId,f.owner.userId]);await call(`/business-days/${g.day}/close`,{});await f.pool.query("DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2 AND role='ceo'",[f.owner.clinicId,f.owner.userId]);}
     const report=await call(`/reports/days/${g.day}`);assert.deepEqual(report.totals,{collected:'123'});assert.deepEqual(report.details,{});assert.deepEqual(report.doctors,[]);assert.deepEqual(report.departments,[]);assert.deepEqual(report.cashShifts.map((s:any)=>s.id),[shift.id]);assert.doesNotMatch(JSON.stringify(report),/Aliyev|1000000/);
@@ -133,4 +135,28 @@ test('021: vulnerable fflate dependency is upgraded before import regressions ru
 
 test('021: cashier handoff is present in five lines',()=>{
   assert.equal(readFileSync('docs/HANDOFF-TASK-009','utf8').trim().split(/\r?\n/).length,5);
+});
+
+test('021: future rule replacement succeeds while current rules remain immutable',async t=>{
+  const {f,call}=await setup(t);const date=(await call('/payroll/rules')).today;
+  const tomorrow=new Date(Date.parse(date)+86400000).toISOString().slice(0,10);
+  const rule={userId:f.owner.userId,shareBp:5000,basis:'billed',discountBearer:'proportional',categories:['consultation'],effectiveFrom:tomorrow};
+  const a=await call('/payroll/rules',rule,201),b=await call('/payroll/rules',{...rule,shareBp:8000},201);
+  assert.equal(a.id,b.id);assert.equal(b.doctor_share_bp,8000);
+  await call('/payroll/rules',{...rule,effectiveFrom:date},201);await call('/payroll/rules',{...rule,effectiveFrom:date,shareBp:1000},409);
+});
+test('021: discount void stores PIN approver separately from audited requesting cashier',async t=>{
+  const {f,call}=await setup(t),g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
+  await call(`/cashier/visits/${g.visit}/discount`,{kind:'fixed',amount:'10',reason:'Synthetic'});
+  const discount=(await f.pool.query('SELECT id FROM discounts WHERE clinic_id=$1',[f.owner.clinicId])).rows[0].id;
+  await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,status,granted_by) VALUES($1,$2,$3,'active',$4)",[id(),f.owner.clinicId,f.other.userId,f.owner.userId]);
+  await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'administrator',$3)",[f.owner.clinicId,f.other.userId,f.owner.userId]);
+  await transaction(f.pool,tx=>setOwnPin(tx,f.other.userId,'4826'));
+  await f.pool.query("DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2 AND role<>'cashier'",[f.owner.clinicId,f.owner.userId]);
+  await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'cashier',$2) ON CONFLICT DO NOTHING",[f.owner.clinicId,f.owner.userId]);
+  const payload={discountId:discount,reason:'Synthetic void'};
+  const approval=await call('/cashier/approvals',{approverId:f.other.userId,pin:'4826',visitId:g.visit,operation:'void',payload});
+  await call(`/cashier/visits/${g.visit}/void`,{...payload,approvalId:approval.approvalId});
+  assert.equal((await f.pool.query('SELECT voided_by FROM discounts WHERE id=$1',[discount])).rows[0].voided_by,f.other.userId);
+  assert.equal((await f.pool.query("SELECT actor_id FROM audit_events WHERE clinic_id=$1 AND action='cashier.discount_voided'",[f.owner.clinicId])).rows[0].actor_id,f.owner.userId);
 });

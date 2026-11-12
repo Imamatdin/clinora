@@ -16,6 +16,8 @@ for(const width of [360,1280]) test(`pharmacy receipt, dispense and surgery reac
     await page.setViewportSize({width,height:900});await page.goto(f.origin);
     await page.getByLabel(T('auth.identifier'),{exact:true}).fill('owner@example.test');await page.getByLabel(T('auth.password'),{exact:true}).fill(f.password);
     await page.getByRole('button',{name:T('auth.signIn'),exact:true}).click();
+    // Several modules can share a role's home now (cashier merged first); open pharmacy explicitly.
+    await page.getByRole('button',{name:T('pharmacy.title'),exact:true}).click();
     const screen=page.locator('section').filter({has:page.getByRole('heading',{name:T('pharmacy.title'),exact:true})}).last();
     await expect(screen.getByLabel(T('pharmacy.item'),{exact:true})).toBeVisible();
     await screen.locator('input[name="qty"]').fill('3');await screen.getByLabel(T('pharmacy.cost'),{exact:true}).fill('10000');await screen.getByLabel(T('pharmacy.supplier'),{exact:true}).fill('Synthetic supplier');

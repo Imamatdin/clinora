@@ -5,6 +5,8 @@ import { access } from './access.uz-Cyrl.js';
 import { assistant } from './assistant.uz-Cyrl.js';
 import { cashier } from './cashier.uz-Cyrl.js';
 import { registration } from './registration.uz-Cyrl.js';
+import { doctor } from './doctor.uz-Cyrl.js';
+import { lab } from './lab.uz-Cyrl.js';
 
 /**
  * Uzbek (Cyrillic) dictionary, merged from per-feature parts. Each feature keeps its strings in
@@ -19,6 +21,7 @@ export const UZ_CYRL_PARTS = {
   assistant,
   cashier,
   registration,
+  doctor, lab,
 } as const;
 
 type Parts = typeof UZ_CYRL_PARTS;

@@ -1,7 +1,7 @@
 # Task 019: review fixes, access and records (003C, 004, 005, 007, 010)
 
 Assigned to: Claude Code or Codex (builder). Review: the other model. Planner: 13 November 2026.
-Base: `main`. Branch: `task-019-fixes`. Parallel with 020 and 021. Migration, if needed: `019_*.sql`.
+Base: `main`. Branch: `task-019-fixes`. Parallel with 020 and 021. Migration, if needed: `020_*.sql` (019 is taken by task 015).
 Source: Codex review of merged `main` at `6fa5e1a` (findings quoted below). Each fix gets a regression test that fails before the fix.
 
 1. **P1 Assistant approval drops manual notes and prescriptions** (`src/modules/assistant/service.ts:184-197`). Approval must start from the current document version, carry forward every notebook field and `rx.lines` the assistant did not change, and require the expected document revision so an intervening manual save is rejected as stale with a clear message.

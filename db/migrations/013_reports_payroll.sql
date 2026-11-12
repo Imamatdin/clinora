@@ -5,7 +5,7 @@ ALTER TABLE payroll_lines DROP CONSTRAINT payroll_lines_clinic_funded_uzs_check;
 ALTER TABLE payroll_lines ADD CONSTRAINT payroll_components_balance CHECK (entitlement_uzs=from_receipts_uzs+clinic_funded_uzs);
 ALTER TABLE payroll_periods ADD COLUMN daily_snapshot jsonb;
 
--- A committed close freezes all day-owned financial inputs. The same day lock serializes
+-- A committed close freezes day-owned cash inputs. The same day lock serializes
 -- shift creation/payment with close, including writes from future feature modules.
 CREATE FUNCTION reports_open_day() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE day_id uuid; state text;
@@ -24,8 +24,8 @@ CREATE TRIGGER reports_shift_day BEFORE INSERT ON cash_shifts FOR EACH ROW EXECU
 CREATE TRIGGER reports_payment_day BEFORE INSERT ON payments FOR EACH ROW EXECUTE FUNCTION reports_open_day();
 CREATE TRIGGER reports_out_day BEFORE INSERT ON cash_outs FOR EACH ROW EXECUTE FUNCTION reports_open_day();
 CREATE TRIGGER reports_visit_day BEFORE INSERT ON visits FOR EACH ROW EXECUTE FUNCTION reports_open_day();
-CREATE TRIGGER reports_charge_day BEFORE INSERT OR UPDATE ON charge_lines FOR EACH ROW EXECUTE FUNCTION reports_open_day();
-CREATE TRIGGER reports_discount_day BEFORE INSERT OR UPDATE ON discounts FOR EACH ROW EXECUTE FUNCTION reports_open_day();
+-- Charges and discount corrections can accrue to a visit on later days (e.g. inpatient stays).
+-- Their timestamps reconstruct as-of totals; the stored close snapshot is never rewritten.
 
 CREATE TABLE report_notices (
   id uuid PRIMARY KEY,clinic_id uuid NOT NULL REFERENCES clinics(id),business_day_id uuid NOT NULL,

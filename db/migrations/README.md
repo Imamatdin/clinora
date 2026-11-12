@@ -12,3 +12,9 @@ numbers within a clinic, scoped idempotency results and audit events. Clinical
 approval, audio/AI and integration persistence are reserved for later tasks.
 New migrations run only against explicitly selected local/test databases until a
 separate production rollout is authorized.
+
+Task 008 adds `010_core_schema.sql`: every core table from `docs/DATA-MODEL.md` with
+clinic-qualified foreign keys, append-only and status-transition triggers, and the minimum
+indexes. Existing patients get `patient_no` in creation order per clinic; inserts that omit
+`patient_no`/`full_name` (notebook, demo) are filled by trigger from the same counter. Feature
+tasks add their own `0NN_<task>_<what>.sql`; never edit an applied migration.

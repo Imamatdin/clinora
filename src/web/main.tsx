@@ -5,26 +5,29 @@ import { MANAGERS, ROLES, type Role } from '../modules/identity/roles.js';
 import { ApiFailure, createRequest } from './api.js';
 import { DayPanel, DayPill } from './day.js';
 import { errorText, setLocale, t, type UiKey } from './i18n/index.js';
+import { modulesFor, plannedFor, type ModuleProps } from './modules.js';
 import { Notebook } from './notebook.js';
 import { Staff } from './staff.js';
 import './style.css';
 
 type Me = { id: string; name: string; csrf: string; mustChangePassword: boolean; clinics: ClinicMembershipView[]; professionalVerification: { status: string } };
 type Section = Role | 'staff';
-/** Placeholder modules per role, filled by later increments (C3-C10). Labels only; nothing here is functional. */
-const PLANNED: Record<Role, UiKey[]> = {
-  ceo: ['module.dashboard', 'module.reports', 'module.payroll', 'module.export'],
-  administrator: ['module.catalog', 'module.departments', 'module.queueMonitor'],
-  registrar: ['module.registration', 'module.patientSearch', 'module.tickets'],
-  doctor: ['module.myQueue', 'module.prescription'],
-  laboratory: ['module.labOrders', 'module.labConfirm'],
-  cashier: ['module.payments', 'module.discounts', 'module.receipts', 'module.cashReport'],
-  inpatient: ['module.admissions', 'module.beds', 'module.bedCharges']
-};
 const sectionLabel = (s: Section) => s === 'staff' ? t('nav.staff') : t(`role.${s}` as UiKey);
 
+/** Registered feature screens for one role (src/web/modules.ts). Renders nothing until a feature registers. */
+function RoleModules({ role, busy, guard, props }: { role: Role; busy: boolean; guard: (action: () => void) => void; props: ModuleProps }) {
+  const modules = modulesFor(role);
+  const [current, setCurrent] = useState('');
+  if (!modules.length) return null;
+  const active = modules.find(m => m.id === current) ?? modules[0]!;
+  return <section className="role-modules">
+    {modules.length > 1 && <nav className="sections" aria-label={t('app.navigation')}>{modules.map(m => <button key={m.id} className={m === active ? 'current' : ''} aria-current={m === active ? 'page' : undefined} disabled={busy} onClick={() => guard(() => { props.setDirty(false); setCurrent(m.id); })}>{t(m.label)}</button>)}</nav>}
+    <active.Screen {...props} />
+  </section>;
+}
+
 function Planned({ role }: { role: Role }) {
-  return <ul className="planned">{PLANNED[role].map(key => <li key={key} aria-disabled="true"><span>{t(key)}</span><small>{t('app.comingSoon')}</small></li>)}</ul>;
+  return <ul className="planned">{plannedFor(role).map(key => <li key={key} aria-disabled="true"><span>{t(key)}</span><small>{t('app.comingSoon')}</small></li>)}</ul>;
 }
 
 function App() {
@@ -136,10 +139,12 @@ function App() {
           {(active === 'ceo' || active === 'administrator') && <DayPanel day={day} busy={busy}
             onOpen={() => void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/open`, {}); setNotice(t('day.openedNotice')); } finally { await refreshDay().catch(() => {}); } })}
             onClose={(id, date) => { if (confirm(t('day.closeConfirm', { date }))) void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/${id}/close`, {}); setNotice(t('day.closedNotice')); } finally { await refreshDay().catch(() => {}); } }); }} />}
+          <RoleModules key={`${clinic.id}:${active}`} role={active} busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, setDirty }} />
           <Planned role={active} />
         </main>}
         {active === 'doctor' && <>
-          <div className="page home compact" data-role="doctor"><h1>{t('home.doctor.title')}</h1><p className="muted">{t('home.doctor.lead')}</p><Planned role="doctor" /></div>
+          <div className="page home compact" data-role="doctor"><h1>{t('home.doctor.title')}</h1><p className="muted">{t('home.doctor.lead')}</p>
+            <RoleModules key={`${clinic.id}:doctor`} role="doctor" busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, setDirty }} /><Planned role="doctor" /></div>
           <Notebook clinic={clinic} request={request} dirty={dirty} setDirty={setDirty} guard={guard} />
         </>}
       </>}

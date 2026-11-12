@@ -8,15 +8,14 @@ Read first: `docs/1C-BASELINE.md` (especially "Inner format (observed)"), `src/m
 The catalog import reads Gʻofurov klinikasi's real `.dt` dumps. Task 005's preview, validation, commit and Excel/CSV path stay as they are; only the reader changes.
 
 ## Build
-1. Replace the assumed layout with a decoder for the observed binary tagged serialization: table definitions (field names, type letters, sizes) and rows (tags `0x82`, `0x9a`, `0x97`, `0xe2`, `0x8b`, `0x8f`, flags). Unknown tags stop the reader with a precise diagnostic (offset, tag, preceding table name), never a guess.
-2. Resolve configuration object names to physical tables through the dump's `DBNames` mapping (metadata UUID to `ReferenceNN`), so the reader finds МУОЛАЖА, БУЛИМ, ВРАЧЛАР, МИХИЛАР, Анализ, ЛАБАРАТОРИЯ, ХоналарТипи, Туман, МФЙ, Дорилар, Товары, Расходлар by name.
-3. Map fields: `Code`, `Description` and the configuration fields holding the three names; find where prices live (numeric `FldNN` on the catalog or an information register) and document the evidence.
-4. Allowlist only: rows of any table not on the list are skipped without decoding their values (patients, documents, registers other than a price register).
-5. Keep a synthetic fixture generator that writes this real binary format, and test the decoder against it, including unknown-tag and truncated-file cases.
-6. Diagnostics mode for the planner's real-file runs: counts per object, field list per object, 5 sample rows per catalog object, price evidence. Never prints rows of non-allowlisted tables.
+1. Port `scripts/reference/dt_reference.py` (verified on both real files) into `src/modules/import1c/dt.ts`, replacing the assumed layout. Keep it streaming-friendly enough for the browser (the real files inflate to 4-5 MB); unknown tags stop with offset and tag.
+2. Resolve objects by name through `Params/DBNames` and the `Config` files exactly as the reference does; never decode values of БЕМОРЛАР or Каровчи (skip their data lists) and never emit ВРАЧЛАР ПАРОЛ or Телефон.
+3. Map to `ImportRow` per the table in `docs/1C-BASELINE.md` "Catalog mapping": services from МУОЛАЖА (price Fld54, department Fld55, MXIK Fld86), lab tests from Анализ items (price Fld317, reference range Fld316; groups become service groups), departments, doctors (name and role flags only), room types with daily bed price, districts, mahallas, medicines, goods, expense types. Store the MXIK code on services through a new migration (`services.mxik_code text`), shown in the catalog screen.
+4. Synthetic fixture generator writing this exact binary format (schema, DBNames, Config names and attributes, data rows), including a patient table with marker text that must never appear in output.
+5. Keep task 005's Excel/CSV path, preview, validation and commit unchanged.
 
 ## Process
-Push candidate readers early. Ask Imamatdin to tell the planner the commit; the planner runs `scripts/inspect-1c-dump.ts` on the real files and returns the diagnostics. Iterate until both real files read.
+The planner reruns the reader on the real files for every candidate commit and reports counts. Expected counts (12.07 file): 56 services, 77 lab tests, 9 departments, 15 doctors, 3 room types, 31 districts, 5 mahallas, 5 medicines, 1 expense type.
 
 ## Acceptance
-Both real files produce non-zero counts for at least departments, doctors, services and lab tests, with prices for services, verified by the planner's run; synthetic-format tests pass in CI; the existing 005 tests still pass. Handoff at most 60 lines.
+Planner's real-file run matches the expected counts with prices; synthetic tests pass in CI; patient marker never appears; existing 005 tests pass. Handoff at most 60 lines.

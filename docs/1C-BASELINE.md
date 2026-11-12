@@ -43,14 +43,33 @@ Format: 8-byte header `1CIBDmpF`, then a raw deflate stream (zlib, wbits -15, fr
 - Pharmacy stock and surgery exist in the current system and are needed on day one (decided 12 Nov), so C10 is in the go-live scope.
 - The import feature the CEO asked for ("a clinic uploads its 1C data and the base builds itself") can read this configuration's `.dt` directly. Other clinics running different 1C configurations need their own mapping or an Excel export.
 
-## Inner format (observed on the real dumps, 12 November 2026)
+## Inner format (verified on both real dumps, 12 November 2026)
 
-Task 005's reader assumed a text bracket layout and stops with `UNRECOGNIZED_LAYOUT` on both real files (inflated sizes 4.58 MB and 3.83 MB, dump version "3"). What the planner observed by inspecting the real files (structure only):
+Fully decoded by the planner; reference implementation: `scripts/reference/dt_reference.py` (run it on a real file for a safe summary). Both real files parse end to end with no unknown tags.
 
-- The inflated stream is a binary tagged serialization of the infobase's physical tables, not the configuration's object names. Tables are 1C's physical tables: `ReferenceNN` (catalogs), `DocumentNN` and `DocumentNN_VTxx` (documents and their table parts), `AccumRgNN`, `InfoRgNN`, `EnumNN`, plus system tables (`Params`, `Config`, `DBNames` mapping).
-- Table definitions come first (offsets up to about 3.14 MB in the 12.07 file): each field as a name token followed by a type letter and size, for example `ID` R (reference, 16 bytes), `Version`, `Marked` L (boolean), `PredefinedID`, `ParentID` R, `Folder` L, `Code` N or S, `Description` S(150), then configuration fields `Fld50`, `Fld51`... Indexes follow (`ByParentCode`, `ByDescr`, ...). Observed type letters after tag `0xcb`: `N` number, `S` string, `R` reference, `L` boolean, `B` binary, `V` version, `D`/`T` dates likely.
-- Row data follows. Value tags observed: `0x82` field separator; `0x9a <len>` short ASCII/binary string (length byte), used for codes and Latin names; `0x97 <len>` UTF-16LE string with a character count, used for Cyrillic and Russian names; `0xe2` followed by 16 bytes, a reference (GUID-like); `0x8b <n>` small integer; `0x8f` numeric with length (likely decimals such as prices); `0xfa`/`0xda <len>` name tokens in definitions; `0xa1`/`0xa2`/`0x81` flags.
-- A service row looks like: record number string, reference id, parent reference (16 zero bytes when empty), flags, small integer, `Code` (for example `10902002002000003`), name in Uzbek Cyrillic (UTF-16), name in Uzbek Latin (ASCII here), name in Russian (UTF-16).
-- Mapping from configuration objects (Справочник.МУОЛАЖА and so on) to `ReferenceNN` lives in the `DBNames` data (metadata UUID to table number); the configuration object names appear as UTF-16 strings in the metadata region together with their UUIDs. Prices are most likely in `FldNN` numeric fields of МУОЛАЖА/Анализ or in an information register; to be confirmed.
+- File: `1CIBDmpF`, version byte `3`, raw deflate (wbits -15) from byte 9.
+- Stream: binary form of 1C bracket notation. Each byte carries flags 0x20 close-list, 0x80 comma, 0x40 open-list (applied in that order) and a base tag (`byte & 0x1F`): 0x01-0x0A digits, 0x0B u8, 0x0D u16 LE, 0x0F u32 LE, 0x11 i64, 0x15 GUID(16), 0x17 UTF-16LE string with 1-byte char count (0x18 2-byte, 0x19 8-byte), 0x1A bytes/ASCII with 1-byte length (0x1B, 0x1C), 0x16 no-quote flag, 0x0C/0x0E/0x10 negatives. Source of the tag table: Infostart article "Формат файлов выгрузки DT" (infostart.ru/1c/articles/1865138).
+- Top level: `CompatibilityMode`, flags, folders `Config` (282 metadata files, deflated bracket text, named by metadata UUID), `Params` (includes `DBNames`), `Files`, `Users`, `DataBase`.
+- `Params/DBNames` (deflated text): `{uuid,"Reference",45}`, `{uuid,"Fld",54}`... maps metadata UUIDs to physical tables and fields. Config file `<uuid>` of a catalog holds its name as `{0,0,<uuid>},"МУОЛАЖА"` and attributes as `<attr-uuid>},"НАРХИ",{1,"ru",...`.
+- `DataBase[0]` = schema (table descriptors: name, type, number, parent, fields with type code/length, subtables, indexes). Data lists follow in schema order, each table followed by its subtables. A row is a flat list of `flag, value` pairs (flag 1 = value, 0 = NULL); `V` (record version) fields are not stored. `Folder` = 0 marks a group row.
 
-Task 018 implements the real reader against these findings. The planner runs every candidate reader on the real files locally and reports counts and samples (no patient data) back to the builder, because the real files never leave Imamatdin's machine and the planner's workspace.
+### Catalog mapping (Gʻofurov klinikasi configuration)
+
+| 1C object | Table | Rows (12.07 / Гофуров) | Fields to import |
+| --- | --- | --- | --- |
+| МУОЛАЖА (services) | Reference45 | 56 / 52 | Description = name, Fld54 НАРХИ = price UZS, Fld55 БУЛИМ = department ref, Fld86 МИХИ = MXIK code, Fld221 УлБир = unit code |
+| Анализ (lab tests) | Reference297 | 96 (77 items) / 63 (46) | Description = name (groups have Folder 0), Fld317 Цена = price, Fld316 Норма = reference range, Fld328 МИХИ |
+| БУЛИМ (departments) | Reference40 | 9 / 7 | Description, Fld43 ВРАЧЛАР |
+| ВРАЧЛАР (doctors) | Reference31 | 15 / 13 | Description = name; Fld32 Кабул, Fld33 Стационар, Fld35 Лабаратория, Fld36 УЗИ = role flags. Never import Fld340 ПАРОЛ or Fld357 Телефон |
+| МИХИЛАР (MXIK tax classifier, not specialty groups) | Reference44 | 156 / 156 | Description = MXIK code, Fld50/51/52 names uz-Cyrl/uz-Latn/ru, Fld53 unit code |
+| ХоналарТипи (room types) | Reference247 | 3 / 3 | Description, Fld248 КунликЁтокПули = daily bed price |
+| Туман, МФЙ | Reference295/296 | 31, 5 / 26, 5 | Description |
+| Дорилар (medicines) | Reference198 | 5 / 0 | Description, Fld358 Овкат |
+| Товары (goods) | Reference266 | 0 / 0 | Fld280 СотувНархи sale price, Fld291 КиримНархи purchase price |
+| Расходлар (expense types) | Reference333 | 1 / 1 | Description |
+| Мумкун | Reference341 | 5 / 5 | Description only (a short list, likely permission or option names) |
+| БЕМОРЛАР, Каровчи | Reference46/245 | 210, 3 / 86, 3 | never decoded or imported |
+
+### Compliance flag found in the dump
+
+The configuration stores MXIK (ИКПУ) codes on every service and has ОнлайнКасса and Инкасса catalogs with Z-report numbers. The clinic issues fiscal receipts through an online cash register today. Clinora's cashier prints non-fiscal receipts. Before go-live: ask the clinic which fiscal device or virtual cash register they use, and keep it running alongside Clinora (or integrate it as a follow-up task). Services must carry their MXIK code.

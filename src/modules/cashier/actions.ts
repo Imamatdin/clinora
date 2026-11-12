@@ -121,9 +121,10 @@ export async function pay(c:ClinicContext,visitId:string,input:z.infer<typeof Pa
  const old=(await c.tx.query('SELECT * FROM payments WHERE clinic_id=$1 AND idempotency_key=$2',[c.clinicId,input.key])).rows[0];
  const refund='paymentId' in input;
  if(old){if(old.visit_id!==visitId||old.cash_shift_id!==input.shiftId||old.amount_uzs!==input.amount||old.kind!==(refund?'refund':'payment')||(refund?old.refund_of!==input.paymentId:old.method!==input.method))return fail('INVALID_INPUT');return (await c.tx.query('SELECT * FROM receipts WHERE clinic_id=$1 AND payment_id=$2',[c.clinicId,old.id])).rows[0];}
+ if(refund)await authorization(c,'refund',visitId,input,approvalId);
  await visit(c,visitId);const s=await shift(c,input.shiftId);const before=await bill(c,visitId);const amount=uzs(input.amount);
  let method:string, allocations:{id:string;amount:bigint}[]=[];
- if(refund){await authorization(c,'refund',visitId,input,approvalId);
+ if(refund){
  const original=before.payments.find(p=>p.id===input.paymentId&&p.kind==='payment');if(!original)return fail('NOT_FOUND');method=original.method;
  const returned=before.payments.filter(p=>p.refund_of===original.id).reduce((sum,p)=>sum+BigInt(p.amount_uzs),0n);
  if(amount>BigInt(original.amount_uzs)-returned)return fail('INVALID_INPUT');

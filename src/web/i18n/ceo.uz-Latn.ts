@@ -20,6 +20,6 @@ export const ceoUzLatn:Record<keyof typeof ceo,string>={
   'ceo.earned':'Hisoblangan haq','ceo.receipts':'Tushumdan','ceo.funded':'Klinika hisobidan','ceo.finalize':'Davrni tasdiqlash','ceo.finalConfirm':'Bu davr ish haqini tasdiqlaysizmi? Saqlangan natijalarni oʻzgartirib boʻlmaydi.',
   'ceo.final':'Tasdiqlangan · oʻzgarmas','ceo.draft':'Dastlabki hisob','ceo.noRule':'Bu shifokor uchun qoida hali belgilanmagan.','ceo.payrollError':'Hisoblanmadi. Har bir shifokor uchun amal qiluvchi qoida borligini tekshiring. Tasdiqlash faqat yopilgan, kelajakda boʻlmagan kunlar uchun mumkin.',
   'ceo.ruleError':'Qoida saqlanmadi. Ulush 0–100% boʻlishi, sana oʻtmishda yoki tasdiqlangan davrda boʻlmasligi va shu sanada boshqa qoida boʻlmasligi kerak.',
-  'ceo.ruleNote':'Yangi qoida orqa sana bilan qoʻllanmaydi. Har bir xizmat uchun tashrif kunida amal qilgan qoida saqlanadi.','ceo.periodNote':'Tasdiqlangan kunlar uchun saqlangan hisob ishlatiladi. Qaytarishlar keyingi davrda manfiy tuzatish sifatida hisoblanadi.',
+  'ceo.ruleNote':'Yangi qoida orqa sana bilan qoʻllanmaydi. Har bir xizmat uchun u qayd etilgan kuni amal qilgan qoida saqlanadi.','ceo.periodNote':'Tasdiqlangan kunlar uchun saqlangan hisob ishlatiladi. Qaytarishlar keyingi davrda manfiy tuzatish sifatida hisoblanadi.',
   'ceo.consultation':'Qabul','ceo.procedure':'Muolaja','ceo.diagnostic':'Tashxis','ceo.bed':'Oʻrin-kun','ceo.surgery':'Jarrohlik','ceo.medicine':'Dori','ceo.good':'Tovar','ceo.caretaker':'Hamroh','ceo.other':'Boshqa','ceo.language':'Hisobot tili'
 };

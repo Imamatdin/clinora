@@ -30,7 +30,7 @@ Downloads return `{name,mime,base64}` through the authenticated JSON client. PDF
 
 ## Payroll and notifications
 
-The existing billing library remains the sole share calculator. A charge uses the rule effective on its visit's business date. Missing rules block a calculation instead of inventing a split. Period earnings are changes in cumulative entitlement; later receipts do not pay a billed entitlement twice, and later refunds carry signed corrections forward.
+The existing billing library remains the sole share calculator. A charge uses the rule effective on its recorded local date, including later services on an ongoing visit. Missing rules block a calculation instead of inventing a split. Period earnings are changes in cumulative entitlement; later receipts do not pay a billed entitlement twice, and later refunds carry signed corrections forward.
 
 Finalization writes append-only `payroll_lines` and a daily accrual snapshot. Arbitrary subperiods use frozen daily accruals for finalized dates and live accruals elsewhere. Overlapping final periods are rejected. The final-period API never returns the full internal daily snapshot to a doctor.
 

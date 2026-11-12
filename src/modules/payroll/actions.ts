@@ -34,7 +34,8 @@ function at(data:Records,until:string,doctor?:string,affected?:Set<string>) {
   const visits=affected?[...affected].map(id=>indexRecords(data).visits.get(id)!).filter(Boolean):data.visits;
   for(const v of visits.filter(v=>v.date<=until)) for(const l of invoiceAt(data,v,until)) {
     if(!l.doctorId || (doctor && l.doctorId!==doctor))continue;
-    const rule=data.rules.find(r=>r.user_id===l.doctorId && r.effective_from<=v.date);
+    const serviceDate=localDate(indexRecords(data).charges.get(l.id)!.created_at,data.clinic.timezone);
+    const rule=data.rules.find(r=>r.user_id===l.doctorId && r.effective_from<=serviceDate);
     if(!rule && l.status!=='cancelled') return fail('INVALID_TRANSITION');
     if(!rule)continue;
     const share=calculateDoctorShares([l],l.doctorId,{doctorShareBp:rule.doctor_share_bp,basis:rule.basis,discountBearer:rule.discount_bearer,categories:rule.categories})[0];

@@ -24,6 +24,11 @@ test('billed entitlement is not paid twice when receipts arrive; refunded cash i
   assert.equal(a.entitlement_uzs,500000n);assert.equal(b.entitlement_uzs,0n);assert.equal(b.from_receipts_uzs,-200000n);assert.equal(b.clinic_funded_uzs,200000n);
   const r=computeReport(d,{from:'2026-11-11',to:'2026-11-11'});assert.equal(r.totals.collected,'0');assert.equal(r.totals.refunds,'200000');assert.equal(r.totals.net,'-200000');assert.equal(r.doctors[0]!.amount,'-200000');
 });
+test('a later service on an ongoing visit uses the rule effective when that service is recorded',()=>{
+  const d=data();d.rules.unshift({...d.rules[0],id:'new-rule',doctor_share_bp:8000,basis:'billed',effective_from:'2026-11-12'});
+  d.charges.push({...d.charges[0],id:'later-service',created_at:'2026-11-12T08:00:00Z',unit_price_uzs:'100000'});
+  const lines=computePayroll(d,{from:'2026-11-12',to:'2026-11-12'});assert.equal(lines.length,1);assert.equal(lines[0]!.rule_id,'new-rule');assert.equal(lines[0]!.entitlement_uzs,80000n);
+});
 test('exports preserve arbitrary precision, escape XML and neutralize CSV formulas',()=>{
   assert.match(csv([['=HYPERLINK("bad")','+123','@SUM(A1)','-1']]),/"'=HYPERLINK/);
   const out=unzipSync(xlsx([['<&>','9007199254740993','=1+1']]));const sheet=strFromU8(out['xl/worksheets/sheet1.xml']!);

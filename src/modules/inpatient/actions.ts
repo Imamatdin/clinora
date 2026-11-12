@@ -18,7 +18,9 @@ async function guard(ctx:ClinicContext, roles:readonly ('ceo'|'administrator'|'i
   ctx.roles=(await requireRole(ctx.tx,ctx.actorId,ctx.clinicId,roles)).roles;
 }
 async function clock(ctx:ClinicContext) {
-  return (await ctx.tx.query("SELECT timezone,(now() AT TIME ZONE timezone)::date::text today,now() instant FROM clinics WHERE id=$1",[ctx.clinicId])).rows[0]!;
+  // Transaction start may precede a wait for another transfer. Use the clock after acquiring
+  // our locks so assignment intervals cannot run backwards under concurrent requests.
+  return (await ctx.tx.query("WITH t AS MATERIALIZED (SELECT clock_timestamp() instant) SELECT timezone,(instant AT TIME ZONE timezone)::date::text today,instant FROM clinics CROSS JOIN t WHERE id=$1",[ctx.clinicId])).rows[0]!;
 }
 async function retry<T>(ctx:ClinicContext,key:string,payload:unknown,fn:()=>Promise<T>):Promise<T> {
   const old=(await ctx.tx.query('SELECT payload=$4::jsonb matches,result FROM inpatient_requests WHERE clinic_id=$1 AND actor_id=$2 AND key=$3',[ctx.clinicId,ctx.actorId,key,json(payload)])).rows[0];
@@ -159,28 +161,27 @@ async function accrue(ctx:ClinicContext,id:string,through:string,discharge=false
       ORDER BY ba.from_at,ba.id LIMIT 1`,[ctx.clinicId,id,day.start,day.finish])).rows[0];
     if(!bed)return fail('INVALID_TRANSITION');
     const at=new Date(Math.max(day.start.valueOf(),bed.from_at.valueOf()));
-    if(billable&&!(await ctx.tx.query('SELECT 1 FROM bed_day_charges WHERE admission_id=$1 AND charge_date=$2',[id,day.date])).rowCount) {
-      const charge=await line(ctx,a.visit_id,bed.bed_service_id,1,at,'bed_day');
+    let quantity=Number(billable);
+    if(isLast) {
+      // The current date is never precharged by the daily job. Any minimum-stay
+      // shortfall therefore fits in its one immutable dated line, without a second charge.
+      const minimum=countBedDays({admissionDate:through,dischargeDate:through,rule});
+      const prior=(await ctx.tx.query('SELECT coalesce(sum(c.quantity),0)::int n FROM bed_day_charges b JOIN charge_lines c ON c.id=b.charge_line_id WHERE b.admission_id=$1',[id])).rows[0].n;
+      quantity=Math.max(quantity,minimum-prior);
+    }
+    if(quantity>0&&!(await ctx.tx.query('SELECT 1 FROM bed_day_charges WHERE admission_id=$1 AND charge_date=$2',[id,day.date])).rowCount) {
+      const charge=await line(ctx,a.visit_id,bed.bed_service_id,quantity,at,'bed_day');
       await ctx.tx.query('INSERT INTO bed_day_charges(clinic_id,admission_id,charge_date,charge_line_id) VALUES($1,$2,$3,$4)',[ctx.clinicId,id,day.date,charge]);added++;
     }
     const caretakers=(await ctx.tx.query(`SELECT * FROM caretakers WHERE clinic_id=$1 AND admission_id=$2 AND daily_service_id IS NOT NULL
       AND from_date<=$3 AND (to_date IS NULL OR to_date>=$3)`,[ctx.clinicId,id,day.date])).rows;
     for(const ct of caretakers) {
-      if(isLast&&!rule.countDischargeDay&&!(isFirst&&rule.countAdmissionDay))continue;
+      const ctFirst=day.date===ct.from_date,ctLast=isLast||day.date===ct.to_date;
+      const ctBillable=ctFirst&&ctLast?(rule.countAdmissionDay||rule.countDischargeDay):ctFirst?rule.countAdmissionDay:ctLast?rule.countDischargeDay:true;
+      if(!ctBillable)continue;
       if((await ctx.tx.query('SELECT 1 FROM caretaker_day_charges WHERE caretaker_id=$1 AND charge_date=$2',[ct.id,day.date])).rowCount)continue;
       const charge=await line(ctx,a.visit_id,ct.daily_service_id,1,at,'caretaker');
       await ctx.tx.query('INSERT INTO caretaker_day_charges(clinic_id,caretaker_id,charge_date,charge_line_id) VALUES($1,$2,$3,$4)',[ctx.clinicId,ct.id,day.date,charge]);added++;
-    }
-  }
-  if(discharge) {
-    const rule=await ruleAt(ctx,through);
-    // countBedDays defines the minimum stay rule. With dated rules, the per-date flags above
-    // decide ordinary days; only the current minimum can add a separately identified shortfall.
-    const minimum=countBedDays({admissionDate:through,dischargeDate:through,rule:{...rule,countAdmissionDay:false,countDischargeDay:false}});
-    const actual=(await ctx.tx.query('SELECT count(*)::int n FROM bed_day_charges WHERE admission_id=$1',[id])).rows[0].n;
-    if(actual<minimum) {
-      const bed=(await ctx.tx.query(`SELECT b.bed_service_id FROM bed_assignments ba JOIN beds b ON b.id=ba.bed_id WHERE ba.admission_id=$1 ORDER BY ba.from_at DESC LIMIT 1`,[id])).rows[0];
-      await line(ctx,a.visit_id,bed.bed_service_id,minimum-actual,c.instant,'bed_day');added++;
     }
   }
   return added;

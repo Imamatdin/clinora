@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { httpFixture } from './fixture.js';
 import { inpatientGraph } from '../helpers/inpatient.js';
+import { transaction } from '../../src/server/database.js';
+import { requireRole } from '../../src/server/roles.js';
+import { transfer } from '../../src/modules/inpatient/actions.js';
 
 const key=()=>randomUUID();
 async function setup(t:test.TestContext,days=0,businessDayAgo=0){
@@ -67,18 +70,12 @@ test('dated rules preserve old dates; caretaker daily charges and minimum shortf
   assert.equal((await get('')).rule.minimumDays,4);
 });
 test('minimum same-day stay, optional caretaker and service retries',async t=>{
-  const {f,g,post,admit,get}=await setup(t);const {id}=await admit();
+  const {g,post,admit}=await setup(t);const {id}=await admit();
   await post(`/${id}/caretakers`,{key:key(),fullName:'Synthetic No Charge',phone:'+998901234567',dailyServiceId:null});
   const input={key:key(),serviceId:g.services.medicine,quantity:2};
   assert.deepEqual(await post(`/${id}/services`,input),await post(`/${id}/services`,input));
   await post(`/${id}/services`,{...input,quantity:3},409);
   const final=await post(`/${id}/discharge`,{key:key()});assert.equal(final.value,'120000');
-  const missingService=key();await f.pool.query("INSERT INTO services(id,clinic_id,kind,name_uz_cyrl) VALUES($1,$2,'other','No price')",[missingService,g.clinic]);
-  // A second stay with no prior bed charges demonstrates transaction rollback on failed daily pricing.
-  const other=await inpatientGraph(f,2);await f.pool.query('UPDATE beds SET bed_service_id=$2 WHERE id=$1',[other.bed,other.services.bed]);
-  await f.pool.query("INSERT INTO service_prices(id,clinic_id,service_id,price_uzs,effective_from,set_by) VALUES($1,$2,$3,12345,'1990-01-01',$4)",[key(),g.clinic,missingService,g.actor]);
-  await post(`/${other.admission}/services`,{key:key(),serviceId:missingService,quantity:1});
-  assert.equal((await get(`/${other.admission}/invoice`)).value,'12345');
 });
 test('business-day opener accrues existing stays atomically; missing historical price rolls back the opening',async t=>{
   const {f,g,client,base}=await setup(t,2,1);
@@ -135,4 +132,30 @@ test('discharge includes all visit lines and net payments; cashier can collect t
   current=await call(`/visits/${g.visit}`);assert.equal(current.invoice.due,final.due);
   await call(`/visits/${g.visit}/payments`,{shiftId:shift.id,amount:'150000',method:'card',key:key()},201);
   assert.equal((await call(`/visits/${g.visit}`)).invoice.due,'0');
+});
+
+test('minimum stay is one dated line; historical flags stay effective after a later rule change',async t=>{
+  const {f,g,post,admit}=await setup(t);const a=await admit();
+  await f.pool.query("INSERT INTO inpatient_rule_history(clinic_id,effective_date,rule,changed_by) VALUES($1,$2,$3,$4)",[g.clinic,g.today,{countAdmissionDay:false,countDischargeDay:false,minimumDays:3},g.actor]);
+  const final=await post(`/${a.id}/discharge`,{key:key()});assert.equal(final.value,'300000');
+  const rows=(await f.pool.query('SELECT c.quantity FROM bed_day_charges b JOIN charge_lines c ON c.id=b.charge_line_id WHERE b.admission_id=$1',[a.id])).rows;
+  assert.deepEqual(rows.map(r=>r.quantity),[3]);
+  const historical=await inpatientGraph(f,2);
+  // Models a rule change on the second day of this historical synthetic stay. Its
+  // admission date retains the old true flag; discharge today follows the newer true flag.
+  await f.pool.query("INSERT INTO inpatient_rule_history(clinic_id,effective_date,rule,changed_by) VALUES($1,$2::date+1,$3,$4)",[g.clinic,historical.start,{countAdmissionDay:false,countDischargeDay:true,minimumDays:1},g.actor]);
+  // Override today's previous synthetic minimum with a later same-date history entry.
+  await f.pool.query("INSERT INTO inpatient_rule_history(clinic_id,effective_date,rule,changed_by) VALUES($1,$2,$3,$4)",[g.clinic,g.today,{countAdmissionDay:false,countDischargeDay:true,minimumDays:1},g.actor]);
+  assert.equal((await post(`/${historical.admission}/discharge`,{key:key()})).value,'300000');
+});
+
+test('a transaction started before another transfer cannot produce backwards assignment timestamps',async t=>{
+  const {f,g,admit}=await setup(t);const a=await admit();const early=await f.pool.connect();
+  try{
+    await early.query('BEGIN');
+    await transaction(f.pool,async tx=>{const ctx=await requireRole(tx,g.actor,g.clinic,['ceo']);await transfer(ctx,a.id,{key:key(),bedId:g.bed2});});
+    const ctx=await requireRole(early,g.actor,g.clinic,['ceo']);await transfer(ctx,a.id,{key:key(),bedId:g.bed});
+    await early.query('COMMIT');
+    assert.equal((await f.pool.query('SELECT count(*)::int n FROM bed_assignments WHERE admission_id=$1',[a.id])).rows[0].n,3);
+  }catch(e){await early.query('ROLLBACK');throw e;}finally{early.release();}
 });

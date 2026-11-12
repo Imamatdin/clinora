@@ -18,7 +18,7 @@ BEGIN
       VALUES(NEW.clinic_id,'0001-01-01',NEW.bed_day_rule,NEW.updated_by);
   ELSIF NEW.bed_day_rule IS DISTINCT FROM OLD.bed_day_rule THEN
     INSERT INTO inpatient_rule_history(clinic_id,effective_date,rule,changed_by)
-      SELECT NEW.clinic_id,(now() AT TIME ZONE timezone)::date+1,NEW.bed_day_rule,NEW.updated_by
+      SELECT NEW.clinic_id,(clock_timestamp() AT TIME ZONE timezone)::date+1,NEW.bed_day_rule,NEW.updated_by
       FROM clinics WHERE id=NEW.clinic_id;
   END IF;
   RETURN NEW;

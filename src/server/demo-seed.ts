@@ -17,7 +17,7 @@ Password.parse(process.env.DEMO_PASSWORD);
 const prefix = process.env.DEMO_LOGIN_PREFIX ?? 'demo';
 const staff: [string, string][] = [
   ['ceo', 'Синтетик Раҳбар'], ['administrator', 'Синтетик Администратор'], ['registrar', 'Синтетик Регистратор'],
-  ['doctor', DOCTORS[0]![1]], ['laboratory', 'Синтетик Лаборант'], ['cashier', 'Синтетик Кассир'], ['inpatient', 'Синтетик Стационар ходими']
+  ['doctor', DOCTORS[0]![1]], ['laboratory', 'Синтетик Лаборант'], ['cashier', 'Синтетик Кассир'], ['inpatient', 'Синтетик Стационар ходими'], ['pharmacy', 'Синтетик Дорихона ходими']
 ];
 if (staff.map(s => s[0]).join() !== ROLES.join()) throw new Error('Demo must cover every role');
 const pool = makePool(process.env.DATABASE_URL!);

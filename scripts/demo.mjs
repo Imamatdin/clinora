@@ -8,6 +8,7 @@ import { Password } from '../src/contracts/notebook.ts';
 import { Encounter } from '../src/contracts/index.ts';
 import { Login, ROLES } from '../src/modules/identity/roles.ts';
 import { DOCTORS, seedDemoCatalog } from './demo-catalog.ts';
+import { seedAssistantDemo } from '../src/modules/assistant/demo.ts';
 
 if(process.env.NODE_ENV==='production'||process.env.ALLOW_SYNTHETIC_DEMO!=='true')throw new Error('Synthetic setup requires ALLOW_SYNTHETIC_DEMO=true and is forbidden in production');
 for(const key of ['DATABASE_URL','DEMO_PASSWORD'])if(!process.env[key])throw new Error(`${key} required; no default credentials`);
@@ -56,6 +57,7 @@ try{
       await tx.query('INSERT INTO documents(id,clinic_id,patient_id,encounter_id) VALUES($1,$2,$3,$4)',[document,clinicId,patient,id]);
     }
     await tx.query("INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,'synthetic.patient',$4)",[randomUUID(),doctor,clinicId,patient]);
+    await seedAssistantDemo(tx,clinicId,doctor); // Task 003C: synthetic GP patient with history and a visit dated today.
     return (await tx.query('SELECT login FROM accounts WHERE managed_by_clinic_id=$1 ORDER BY login',[clinicId])).rows.map(r=>r.login);
   });
   console.log(`Synthetic clinic provisioned with one login per role: ${logins.join(', ')}. Password not printed.`);

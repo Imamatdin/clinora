@@ -9,6 +9,7 @@ import { DayPanel, DayPill } from './day.js';
 import { errorText, setLocale, t, type UiKey } from './i18n/index.js';
 import { modulesFor, plannedFor, type ModuleProps } from './modules.js';
 import { Notebook } from './notebook.js';
+import { AssistantPanel } from './assistant/panel.js';
 import { Staff } from './staff.js';
 import { LockScreen, useIdleLock, type DeviceInfo } from './access/device.js';
 import { Devices, MyAccess } from './access/staff-access.js';
@@ -196,7 +197,8 @@ function App() {
         {active === 'doctor' && <>
           <div className="page home compact" data-role="doctor"><h1>{t('home.doctor.title')}</h1><p className="muted">{t('home.doctor.lead')}</p>
             <RoleModules key={`${clinic.id}:doctor`} role="doctor" busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, setDirty }} /><Planned role="doctor" /></div>
-          <Notebook clinic={clinic} request={request} dirty={dirty} setDirty={setDirty} guard={guard} />
+          <Notebook clinic={clinic} request={request} dirty={dirty} setDirty={setDirty} guard={guard}
+            visitExtra={(patientId, encounterId) => <AssistantPanel key={encounterId} clinicId={clinic.id} patientId={patientId} encounterId={encounterId} request={request} csrf={() => csrf.current} />} />
         </>}
       </>}
       {clinic && !sections.length && !invite && <main className="page"><p className="empty">{t('staff.noRoles')}</p></main>}

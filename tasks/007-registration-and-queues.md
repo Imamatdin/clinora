@@ -11,6 +11,7 @@ The registrar finds or registers a patient in under 60 seconds, picks doctors an
 ## Build
 
 1. Tables come from the core schema (`docs/DATA-MODEL.md`): patients (registration columns), patient_counters, visits, queue_points, queue_counters, queue_tickets, charge_lines. Charge lines created here are `ordered` with `unit_price_uzs` from `priceAt`. Work in `src/modules/registration/**`, `src/server/routes/registration.ts`, `src/web/registration/**`, `src/web/i18n/registration.*`.
+1b. `patients.full_name` is the canonical name (task 008 fills it from `display_name` for older rows). When a registrar edits a name, update both in the same action so the notebook and registration never disagree. Queue statuses include called -> waiting (missed call) and waiting -> in_progress (added by 008).
 2. Number allocation: use the core `nextQueueNumber` and `nextPatientNo` helpers inside the visit transaction, never `max()+1`.
 3. Routing a patient to a doctor creates the `patient_assignments` row for that doctor, so task-002 assigned-scope access applies unchanged.
 4. Search: by last 4+ phone digits, patient number, or name in any script (Cyrillic/Latin transliteration-insensitive match is a plus, document what you implement). Duplicate warning when name + birth date or phone already exists; the registrar can still proceed with a reason.

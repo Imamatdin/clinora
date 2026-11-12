@@ -38,6 +38,7 @@ test('C8: day close reconciles ledger, rejects open shifts, snapshots and sends 
     // The DB protects the boundary even if a future module forgets its own open-day check.
     await assert.rejects(f.pool.query(`INSERT INTO cash_shifts(id,clinic_id,cash_desk_id,business_day_id,cashier_user_id,opening_cash_uzs) VALUES($1,$2,$3,$4,$5,0)`,[randomUUID(),f.owner.clinicId,g.desk,g.day,f.owner.userId]),/closed/);
     // A stay/visit may accrue services after its arrival day closes. Preserve the original snapshot.
+    await f.pool.query(`INSERT INTO business_days(id,clinic_id,business_date,status,opened_by) VALUES($1,$2,$3::date+1,'open',$4)`,[randomUUID(),f.owner.clinicId,date,f.owner.userId]);
     await f.pool.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,source,created_by,created_at) VALUES($1,$2,$3,$4,1,200000,'inpatient',$5,now()+interval '1 day')`,[randomUUID(),f.owner.clinicId,g.visit,g.service,f.owner.userId]);
     assert.deepEqual((await call(`/reports/days/${g.day}`)).totals,saved.totals);
   }finally{await f.close();}

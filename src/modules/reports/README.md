@@ -25,7 +25,7 @@ Downloads return `{name,mime,base64}` through the authenticated JSON client. PDF
 - Net receipts = collections minus refunds. Cash outs are shown separately. Clinic-funded doctor entitlement is never revenue.
 - Doctor/department revenue follows payment allocations and signed allocation corrections. Their service, patient, discount and debt drilldowns use the visit cohort.
 - A single SQL statement captures the reporting source ledgers under one MVCC snapshot. Monetary SQL JSON projections cast bigint to text before parsing; calculations use bigint throughout.
-- Close locks the business day, rejects open shifts, reconciles the ledgers, stores the report and queues a notice in the same transaction. Cash writes and new shifts take a shared day lock, preventing races across the close boundary. Older visits may accrue later services/corrections, as required for inpatient stays; these never rewrite a stored close snapshot. Old empty pre-C8 snapshots are left untouched and fall back to a recomputation.
+- Close locks the business day, rejects open shifts, reconciles the ledgers, stores the report and queues a notice in the same transaction. Cash writes and new shifts lock their own day; service/discount activity locks the clinic's currently open day. Older visits may accrue services/corrections on later open days, as required for inpatient stays; these never rewrite a stored close snapshot. Old empty pre-C8 snapshots are left untouched and fall back to a recomputation.
 - Cash-print reports include each shift's opening cash, expected cash, counted cash and discrepancy. No printer-specific driver integration is claimed.
 
 ## Payroll and notifications

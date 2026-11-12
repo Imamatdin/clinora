@@ -26,6 +26,17 @@ CREATE TRIGGER reports_out_day BEFORE INSERT ON cash_outs FOR EACH ROW EXECUTE F
 CREATE TRIGGER reports_visit_day BEFORE INSERT ON visits FOR EACH ROW EXECUTE FUNCTION reports_open_day();
 -- Charges and discount corrections can accrue to a visit on later days (e.g. inpatient stays).
 -- Their timestamps reconstruct as-of totals; the stored close snapshot is never rewritten.
+CREATE FUNCTION reports_current_day() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE open_id uuid;
+BEGIN
+  -- Let the qualified FK retain its normal error for a missing/cross-clinic visit.
+  IF NOT EXISTS(SELECT 1 FROM visits WHERE clinic_id=NEW.clinic_id AND id=NEW.visit_id) THEN RETURN NEW; END IF;
+  SELECT id INTO open_id FROM business_days WHERE clinic_id=NEW.clinic_id AND status='open' FOR SHARE;
+  IF open_id IS NULL THEN RAISE EXCEPTION 'an open business day is required' USING ERRCODE='restrict_violation'; END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER reports_charge_activity BEFORE INSERT OR UPDATE ON charge_lines FOR EACH ROW EXECUTE FUNCTION reports_current_day();
+CREATE TRIGGER reports_discount_activity BEFORE INSERT OR UPDATE ON discounts FOR EACH ROW EXECUTE FUNCTION reports_current_day();
 
 CREATE TABLE report_notices (
   id uuid PRIMARY KEY,clinic_id uuid NOT NULL REFERENCES clinics(id),business_day_id uuid NOT NULL,

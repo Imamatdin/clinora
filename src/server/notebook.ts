@@ -24,7 +24,7 @@ type Actor = { userId: string; sessionId: string; email: string | null; login: s
   via: SessionVia; deviceClinicId: string | null; deviceLabel: string | null };
 type Access = { actor: Actor; member: Membership; owner: boolean };
 export type ApiConfig = { pool: pg.Pool; origin: string; secureCookies: boolean; telegram?: TelegramConfig | undefined; trustProxyHops?: number };
-export type ApiResult = { status?: number; body: unknown; cookie?: string | string[] };
+export type ApiResult = { status?: number; body: unknown; cookie?: string | string[]; html?: string };
 const jsonBody = async (req: IncomingMessage): Promise<unknown> => {
   if (req.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') return fail('INVALID_INPUT');
   let size = 0; const chunks: Buffer[] = [];

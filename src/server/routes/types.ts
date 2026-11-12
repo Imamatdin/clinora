@@ -10,7 +10,7 @@ export type Body = () => Promise<unknown>;
  */
 export type Route = {
   method: 'GET' | 'POST'; pattern: RegExp; roles: readonly Role[];
-  handle: (ctx: ClinicContext, params: string[], body: Body) => Promise<{ status?: number; body: unknown }>
+  handle: (ctx: ClinicContext, params: string[], body: Body) => Promise<{ status?: number; body: unknown; html?: string }>
 };
 export const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   const result = schema.safeParse(value); if (!result.success) throw new DomainError('INVALID_INPUT'); return result.data;

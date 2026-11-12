@@ -10,7 +10,7 @@ export const CLINIC_ROUTES = registeredRoutes();
 
 /** Returns null when the path is not a clinic route, so the notebook router can handle it. */
 export async function clinicRoute(tx: Tx, actorId: string, clinicId: string, rest: string, method: string, req: IncomingMessage,
-  readBody: (req: IncomingMessage) => Promise<unknown>): Promise<{ status?: number; body: unknown } | null> {
+  readBody: (req: IncomingMessage) => Promise<unknown>): Promise<{ status?: number; body: unknown; html?: string } | null> {
   const candidates = CLINIC_ROUTES.filter(route => route.pattern.test(rest));
   if (!candidates.length) return null;
   const route = candidates.find(r => r.method === method);

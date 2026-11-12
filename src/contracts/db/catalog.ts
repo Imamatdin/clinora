@@ -8,6 +8,7 @@ export const DepartmentRow = z.object({ ...base, ...Names, ...code, is_active: z
 export const ServiceGroupRow = z.object({ ...base, department_id: DbId.nullable(), ...Names, ...code, is_active: z.boolean() });
 export const ServiceRow = z.object({
   ...base, group_id: DbId.nullable(), department_id: DbId.nullable(), kind: ServiceKind, ...Names, ...code,
+  mxik_code: z.string().nullable().optional(), reference_range: z.string().nullable().optional(),
   unit: z.string().min(1), track_stock: z.boolean(), is_active: z.boolean()
 });
 /** Append-only. Price at time t = latest row with effective_from <= t (see repo/priceAt). */

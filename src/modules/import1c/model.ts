@@ -29,6 +29,9 @@ export const ImportRow = z.object({
   service: optional(300),
   kind: ServiceKind.nullable().optional().transform(v => v ?? null),
   unit: optional(40),
+  mxikCode: optional(100), referenceRange: optional(1000),
+  // Reference flags only; these never grant staff permissions.
+  doctorRoles: z.object({ 'Кабул': z.boolean(), 'Стационар': z.boolean(), 'Лабаратория': z.boolean(), 'УЗИ': z.boolean() }).nullable().optional().transform(v => v ?? null),
   trackStock: z.boolean().optional().transform(v => v ?? false),
   priceUzs: PriceText.nullable().optional().transform(v => v ?? null),
   /** ISO date or instant the price applies from; null means "from commit time". */

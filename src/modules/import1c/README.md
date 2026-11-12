@@ -23,30 +23,37 @@
   midnight in the clinic's time zone); the same date with a different price is rejected (`PRICE_CONFLICT`).
 - Re-importing the same file plans zero writes (tested).
 
-## `.dt` layout: what is confirmed and what is assumed
+## Verified `.dt` format (task 018)
 
-- Confirmed by the planner on the real files: `1CIBDmpF` + one version digit, raw deflate from byte 9.
-- **Assumed, not yet verified on a real file:** the inflated stream is a sequence of top-level brace lists, one per
-  metadata object; the first string is the object's full name (`Справочник.МУОЛАЖА`); each nested list is a record of
-  `{field name, value}` pairs; references are UUIDs. Field names are matched through aliases (`dt.ts`, `ALIASES`).
-  Parents are resolved by what the reference points at (БУЛИМ, МИХИЛАР, Туман), not by field name.
-- Prices: the reader looks for a price field on the item (`Нархи`, `Нарх`, `Цена`, …) and for information registers
-  whose name contains нарх/цен/price. Where Gʻofurov klinikasi actually stores prices is reported by the local run.
-- Strings may be UTF-16LE or single-byte; both are handled.
+The reader ports `scripts/reference/dt_reference.py`: format-3 raw deflate, binary bracket tags,
+`Params/DBNames` UUID-to-table/field mapping, Config catalog names/attribute names, then schema-ordered
+DataBase lists (including subtables). Version fields are omitted; NULL flags consume no value.
+Physical table/field numbers are resolved through metadata, rather than assumed.
 
-## Privacy property
+Inflated bytes are capped at 64 MiB (the two real files are 4–5 MiB). Binary scalar payloads stay byte
+spans until a permitted catalog field is selected. This bounds browser memory without creating a decoded
+copy of all patient records. Unsupported tags fail with their offset and byte; malformed nesting, lengths,
+schema/list alignment, row flags and truncation stop the import without partial rows.
 
-Objects outside the allowlist (БЕМОРЛАР, every Документ, РегистрНакопления, …) are skipped by the tokenizer without
-decoding a value; they appear in the report by name only. Мумкун and Каровчи are read for structure only (field names,
-record count). Tests plant marker text in patient, caretaker and document objects and assert it never appears.
+Services use НАРХИ and БУЛИМ; lab items use Цена and Норма, with lab folders as service groups.
+МИХИЛАР is a tax classifier, never a service group. МИХИ supplies `services.mxik_code`, shown in
+all three catalog locales. Reference ranges and non-authorizing source doctor flags are retained.
+Room types also produce bed services with their daily prices. Excel/CSV parsing and the staged
+preview/commit workflow retain task 005's matching, validation and price-history rules.
 
-## Local real-file run (Imamatdin)
+## Privacy
+
+БЕМОРЛАР, Каровчи and every non-allowlisted table are skipped before any row value is decoded.
+Doctor ПАРОЛ/Телефон fields and unapproved attributes remain raw spans, never output. Tests intercept
+text decoding itself, in addition to checking the returned rows and browser upload requests.
+
+## Local real-file check
 
 ```
-mkdir -p data/private   # gitignored, as is *.dt
 node --import tsx scripts/inspect-1c-dump.ts data/private/<file>.dt
 ```
 
-Prints object names, record counts and field names of catalog objects, where prices were found, rejected-row
-reasons, Мумкун/Каровчи structure and 5 sample services. If the layout is not recognized it prints a byte-pattern
-probe instead (statistics and object names only). Paste the output into the handoff; it contains no patient data.
+Only catalog counts/field names and sample service prices are printed. Do not commit dumps, extracted
+records, or CI logs. The planner still independently accepts real-file counts for the candidate commit.
+The real mahallas have no resolvable district; they remain visible to preview but the existing
+`NO_DISTRICT` rule rejects creating them until a district is supplied. No district is guessed.

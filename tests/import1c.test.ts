@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
-import { DtError, checkHeader, probeLayout, inferKind, parsePeriod, parsePrice, readDt } from '../src/modules/import1c/dt.js';
+import { DtError, checkHeader, inferKind, parsePeriod, parsePrice, readDt } from '../src/modules/import1c/dt.js';
 import { bytes, nodeInflate } from '../src/modules/import1c/node.js';
 import { PATIENT_MARKER, sampleSections, synthBody, synthDt } from '../src/modules/import1c/synthetic.js';
 import { guessMapping, parseCsv, readXlsx, rowsFromTable, TableError } from '../src/modules/import1c/table.js';
@@ -11,49 +11,51 @@ import { fold } from '../src/modules/catalog/shared.js';
 const read = (file: Uint8Array, chunk = 4093) => readDt(bytes(file, chunk), nodeInflate);
 const code = async (p: Promise<unknown>) => { try { await p; return 'ok'; } catch (e) { return e instanceof DtError ? e.code : String(e); } };
 
-test('synthetic .dt parses to the expected catalog rows in every string encoding and chunking', async () => {
+test('verified binary .dt parses catalogs across encodings and chunk boundaries', async () => {
   for (const encoding of ['mixed', 'utf16', 'utf8'] as const) for (const chunk of [1, 3, 997, 1 << 20]) {
     const x = await read(synthDt(sampleSections(), { encoding }), chunk);
     assert.equal(x.version, '3');
     const ok = x.rows.filter(r => !r.rejected);
     const count = (o: string) => ok.filter(r => r.object === o).length;
-    assert.deepEqual([count('department'), count('serviceGroup'), count('service'), count('doctor'), count('district'), count('mahalla'), count('roomType'), count('price')],
-      [2, 2, 5, 1, 1, 1, 1, 1], `${encoding}/${chunk}`);
+    assert.deepEqual([count('department'), count('serviceGroup'), count('service'), count('doctor'), count('district'), count('mahalla'), count('roomType')], [2, 2, 5, 1, 1, 2, 1]);
     const uzi = x.rows.find(r => r.code === 'МУОЛАЖА/10902002002000003')!;
-    assert.deepEqual([uzi.nameUzLatn, uzi.nameRu, uzi.priceUzs, uzi.kind, uzi.group], ['Nurlanish diagnostika Ultratovush tadqiqoti (UZI)',
-      'Лучевая диагностика Ультразвуковое исследование (УЗИ)', '150000', 'diagnostic', 'МИХИЛАР/002']);
-    assert.deepEqual(x.rows.filter(r => r.rejected).map(r => r.rejected).sort(), ['FOLDER', 'FRACTIONAL_PRICE', 'NO_DISTRICT', 'NO_NAME', 'UNKNOWN_SERVICE']);
-    assert.equal(x.rows.find(r => r.object === 'price' && !r.rejected)!.service, 'Анализ/A01');
-    assert.deepEqual(x.priceSources.sort(), ['Дорилар.Цена', 'МУОЛАЖА.Нархи', 'РегистрСведений.Нархлар', 'ХоналарТипи.Нархи'].sort());
-    for (const row of x.rows) ImportRow.parse(row); // every row satisfies the server contract
+    assert.deepEqual([uzi.priceUzs, uzi.kind, uzi.department, uzi.mxikCode, uzi.group], ['150000', 'diagnostic', 'БУЛИМ/01', '10902002002000003', null]);
+    assert.equal(x.rows.find(r => r.code === 'Анализ/A01')!.referenceRange, '4–9');
+    assert.deepEqual(x.rows.filter(r => r.rejected).map(r => r.rejected).sort(), ['FOLDER', 'FRACTIONAL_PRICE', 'NO_NAME']);
+    assert.deepEqual(x.priceSources.sort(), ['Анализ.Цена', 'МУОЛАЖА.НАРХИ', 'ХоналарТипи.КунликЁтокПули'].sort());
+    for (const row of x.rows) ImportRow.parse(row);
   }
 });
 
-test('the reader never emits data from patient, caretaker or document objects', async () => {
-  for (const encoding of ['mixed', 'utf16', 'utf8'] as const) {
-    const x = await read(synthDt(sampleSections(), { encoding }));
+test('patient, caretaker, document and staff secret values never enter a decoder', async () => {
+  const Original = globalThis.TextDecoder;
+  const decoded: string[] = [];
+  globalThis.TextDecoder = class extends Original {
+    override decode(...args: Parameters<TextDecoder['decode']>) { const text = super.decode(...args); decoded.push(text); return text; }
+  };
+  try {
+    const x = await read(synthDt(sampleSections()));
     const out = JSON.stringify(x);
-    assert.ok(!out.includes(PATIENT_MARKER), encoding);
-    assert.ok(!out.includes('998901234567') && !out.includes('777777'), 'atoms of skipped objects are not read either');
-    assert.deepEqual(x.objects.filter(o => o.mode === 'skipped').map(o => o.name), ['Справочник.БЕМОРЛАР', 'Документ.КАБУЛ', 'РегистрНакопления.БЕМОР']);
-    assert.ok(x.objects.filter(o => o.mode === 'skipped').every(o => o.records === undefined && o.fields === undefined), 'skipped objects report their name only');
-    const caretaker = x.structure.find(s => s.name === 'Каровчи')!;
-    assert.deepEqual(caretaker.fields.map(f => f.name), ['Ссылка', 'Наименование', 'Бемор']);
-  }
+    for (const marker of [PATIENT_MARKER, 'STAFFSECRET', '998901234567', '777777']) {
+      assert.ok(!out.includes(marker)); assert.ok(!decoded.some(s => s.includes(marker)), marker);
+    }
+    assert.ok(x.objects.some(o => o.name === 'Справочник.Каровчи' && o.mode === 'skipped'));
+    assert.ok(x.objects.filter(o => o.mode === 'skipped').every(o => o.records === undefined && o.fields === undefined));
+  } finally { globalThis.TextDecoder = Original; }
 });
 
-test('a corrupted, truncated or foreign file fails with a clear error', async () => {
+test('corrupt, truncated, unsupported and oversized files fail clearly', async () => {
   const good = synthDt(sampleSections());
   const flipped = Buffer.from(good); for (let i = 40; i < 60; i++) flipped[i] = flipped[i]! ^ 0xa5;
-  assert.equal(await code(read(flipped)), 'CORRUPT');
+  assert.ok(['CORRUPT', 'TRUNCATED', 'UNRECOGNIZED_LAYOUT'].includes(await code(read(flipped))));
   assert.ok(['CORRUPT', 'TRUNCATED'].includes(await code(read(good.subarray(0, Math.floor(good.length / 2))))));
-  const cutBody = synthBody(sampleSections()).subarray(0, 3000);
-  assert.equal(await code(read(Buffer.concat([Buffer.from('1CIBDmpF3'), deflateRawSync(cutBody)]))), 'TRUNCATED');
-  assert.equal(await code(read(Buffer.from('PK\x03\x04 not a dump at all'))), 'NOT_A_DT');
+  assert.equal(await code(read(Buffer.concat([Buffer.from('1CIBDmpF3'), deflateRawSync(synthBody(sampleSections()).subarray(0, 3000))]))), 'TRUNCATED');
+  assert.equal(await code(read(Buffer.from('PK not a dump'))), 'NOT_A_DT');
   assert.equal(await code(read(Buffer.from('1CIB'))), 'NOT_A_DT');
-  assert.equal(await code(read(Buffer.concat([Buffer.from('1CIBDmpF3'), deflateRawSync(Buffer.from('hello world, no braces here'))]))), 'UNRECOGNIZED_LAYOUT');
-  assert.equal(await code(read(Buffer.concat([Buffer.from('1CIBDmpF3'), deflateRawSync(Buffer.from('{"x"}}'))]))), 'UNRECOGNIZED_LAYOUT');
+  assert.equal(await code(read(synthDt(sampleSections(), { version: '4' }))), 'UNRECOGNIZED_LAYOUT');
+  await assert.rejects(read(Buffer.concat([Buffer.from('1CIBDmpF3'), deflateRawSync(Buffer.from([0x12]))])), (e: unknown) => e instanceof DtError && e.offset === 0 && e.tag === 0x12);
   assert.equal(await code(readDt(bytes(good), nodeInflate, { maxInflatedBytes: 100 })), 'TOO_LARGE');
+  assert.equal(await code(readDt(bytes(good), nodeInflate, { maxRecords: 1 })), 'TOO_LARGE');
   assert.throws(() => checkHeader(Buffer.from('1CIBDmpFX')), DtError);
 });
 
@@ -122,13 +124,4 @@ test('fold matches Cyrillic, Latin and Russian spellings', () => {
   assert.equal(fold('Хасанов'), fold('Xasanov'));
   assert.equal(fold('Ўзбекистон'), fold('Oʻzbekiston'));
   assert.equal(fold('Ультратовуш'), fold('Ultratovush'));
-});
-
-test('layout probe reports object names and byte statistics only', async () => {
-  for (const encoding of ['mixed', 'utf8'] as const) {
-    const p = await probeLayout(bytes(synthDt(sampleSections(), { encoding }), 50), nodeInflate);
-    assert.ok(p.metadataNames.some(m => m.name === 'Справочник.МУОЛАЖА'));
-    assert.ok(p.metadataNames.some(m => m.name === 'Справочник.БЕМОРЛАР'), 'names are reported so the builder can see what exists');
-    assert.ok(!JSON.stringify(p).includes(PATIENT_MARKER));
-  }
 });

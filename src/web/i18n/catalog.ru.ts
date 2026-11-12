@@ -2,6 +2,7 @@
 import type { catalogUzCyrl } from './catalog.uz-Cyrl.js';
 
 export const catalogRu: Record<keyof typeof catalogUzCyrl, string> = {
+  'catalog.mxik': 'ИКПУ',
   'catalog.title': 'Каталог: услуги и цены',
   'catalog.language': 'Язык',
   'catalog.loading': 'Загрузка…',

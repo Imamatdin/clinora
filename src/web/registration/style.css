@@ -1,0 +1,40 @@
+/* Registrar screen (task 007). Phone first: works at 360 px; large touch targets. */
+.registration { font-size: 1rem; max-width: 760px; }
+.registration fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.registration label { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.6rem 0; }
+.registration input, .registration select, .registration button, .registration .button { min-height: 48px; font-size: 1rem; max-width: 100%; box-sizing: border-box; }
+.registration input:not([type=checkbox]):not([type=radio]), .registration select { width: 100%; padding: 0 0.6rem; }
+.registration input[type=checkbox], .registration input[type=radio] { width: 24px; height: 24px; min-height: 24px; flex: none; }
+.registration button, .registration .button { margin: 0.3rem 0.3rem 0.3rem 0; padding: 0 1rem; }
+.registration .button { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; border: 2px solid currentColor; border-radius: 6px; }
+.registration .primary { display: block; width: 100%; font-size: 1.2rem; font-weight: bold; margin: 0.8rem 0; }
+.registration-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.registration-lang { flex-direction: row !important; align-items: center; }
+.registration-lang select { width: auto !important; }
+.registration-banner { padding: 0.8rem; border: 2px solid #8a5a00; background: #fff4dc; color: #3d2800; }
+.registration-search { display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end; }
+.registration-search input { font-size: 1.15rem !important; min-height: 56px !important; }
+.registration-search button { min-height: 56px; margin: 0.6rem 0; }
+.registration-results, .registration-points, .registration-services, .registration-tickets { list-style: none; padding: 0; margin: 0.5rem 0; }
+.registration-results li { margin: 0.4rem 0; }
+.registration-card { display: block; width: 100%; text-align: start; padding: 0.8rem !important; border: 2px solid #204b5c; border-radius: 8px; background: #fff; color: #10232b; }
+.registration-card.selected { background: #eaf4f7; }
+.registration-card-body { display: flex; flex-direction: column; gap: 0.2rem; }
+.registration-card-body strong { font-size: 1.15rem; }
+.registration .muted { color: #44545b; }
+.registration-gender { display: flex; gap: 1rem; flex-wrap: wrap; }
+.registration-gender legend { margin-bottom: 0.3rem; }
+.registration .choice { flex-direction: row; align-items: center; gap: 0.6rem; min-height: 48px; margin: 0.2rem 0; }
+.registration-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; max-width: 320px; }
+.registration-keypad button { margin: 0; font-size: 1.3rem; }
+.registration-keypad .wide { grid-column: span 3; font-size: 1rem; }
+.registration-points > li { border: 2px solid #b8c6cc; border-radius: 8px; padding: 0.3rem 0.8rem; margin: 0.5rem 0; }
+.registration-points > li.on { border-color: #204b5c; background: #f2f8fa; }
+.registration-point { flex-direction: row !important; align-items: center; gap: 0.8rem; min-height: 56px; cursor: pointer; }
+.registration-point > span { display: flex; flex-direction: column; }
+.registration-services { padding-inline-start: 2.2rem; }
+.registration-services .price { margin-inline-start: auto; white-space: nowrap; }
+.registration-total { font-size: 1.15rem; font-weight: bold; }
+.registration-duplicates { border: 3px solid #8a5a00; background: #fff8e8; padding: 0.8rem; border-radius: 8px; margin: 0.8rem 0; }
+.registration-tickets li { font-size: 1.25rem; padding: 0.5rem 0; border-bottom: 1px solid #ccd6da; }
+.registration-more summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; }

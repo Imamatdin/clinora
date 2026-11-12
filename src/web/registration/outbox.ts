@@ -49,7 +49,7 @@ export async function clearOutbox(endSession = false) {
 export async function checkOutboxUser(user: { id: string; session: { via: string; deviceId?: string | null } }) {
   const prefix = user.session.via === 'device' && user.session.deviceId ? `${user.id}:${user.session.deviceId}:` : null;
   await update(state => ({ state: state && prefix && state.owner.startsWith(prefix) ? state : { owner: '', counter: state?.counter ?? 0, entries: [] }, result: undefined }));
-  changed(); channel?.postMessage({ identity: prefix });
+  changed(); channel?.postMessage({ identity: `${user.id}:${user.session.deviceId ?? null}:` });
 }
 export async function openOutbox(owner: string) {
   return update(state => {

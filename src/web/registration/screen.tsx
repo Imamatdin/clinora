@@ -53,7 +53,10 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
   async function run(work: () => Promise<void>) {
     if (locked.current) return;
     locked.current = true; setBusy(true); setError(''); setNotice('');
-    try { await work(); } catch (e) { setError(errorText(e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE')); }
+    try { await work(); } catch (e) {
+      if (e instanceof ApiFailure && e.code === 'SERVICE_UNAVAILABLE') outbox.setOffline(true);
+      setError(errorText(e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE'));
+    }
     finally { setBusy(false); locked.current = false; }
   }
   useEffect(() => { void run(loadOptions); }, [clinic.id]);

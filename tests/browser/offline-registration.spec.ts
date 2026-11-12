@@ -15,7 +15,9 @@ async function enrolled(page: Page, f: F, userId: string) {
     { name: 'clinora_session', value: session, url: f.origin, httpOnly: true, sameSite: 'Strict' }
   ]);
   await page.addInitScript(() => { window.print = () => { document.documentElement.dataset.printed = 'yes'; }; });
+  const loaded = page.waitForResponse(r => r.url().endsWith('/registration/options') && r.status() === 200);
   await page.goto(f.origin);
+  await loaded;
   await expect(page.getByRole('heading', { name: T('registration.title'), exact: true })).toBeVisible();
   await expect(page.locator('.registration-banner')).toHaveCount(0);
   return id;
@@ -120,6 +122,7 @@ test('queued data survives reload, is removed on user switch, and revoked device
     await page.getByLabel(T('access.device.pin'), { exact: true }).fill('1397');
     await page.getByRole('button', { name: T('access.device.unlock'), exact: true }).click();
     await page.getByRole('navigation', { name: T('app.navigation') }).getByRole('button', { name: T('role.registrar'), exact: true }).click();
+    await expect(page.locator('.registration')).toHaveAttribute('aria-busy', 'false');
     await expect(page.getByText(pending(0), { exact: true })).toBeVisible();
     await expect(page.locator('.registration')).not.toContainText('Синтетик Приватний');
     await openDay(f.pool, f.owner.clinicId, f.owner.userId, 1);
@@ -132,5 +135,42 @@ test('queued data survives reload, is removed on user switch, and revoked device
     await page.context().setOffline(false);
     await expect.poll(async () => (await stored(page)).entries.length).toBe(0);
     expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(0);
+  } finally { await f.close(); }
+});
+
+test('failed requests detect offline without an offline event; inactive service and closed day have explicit resolutions', async ({ page }) => {
+  const f = await processFixture();
+  try {
+    const g = await seedRegistration(f.pool, f.owner.clinicId, f.owner.userId, f.password, 'conflict016');
+    const day = await openDay(f.pool, f.owner.clinicId, f.owner.userId);
+    await enrolled(page, f, g.registrar);
+    await page.route('**/registration/duplicates', route => route.abort('failed'));
+    // navigator.onLine stays true while a failed request switches registration to local storage.
+    await registerOffline(page, 'Синтетик Узилиш');
+    await expect(page.getByText(T('registration.offline.banner'), { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => navigator.onLine)).toBe(true);
+    await page.context().setOffline(true);
+    await page.unroute('**/registration/duplicates');
+    await f.pool.query('UPDATE services SET is_active=false WHERE id=$1', [g.consultA]);
+    await page.context().setOffline(false);
+    await expect(page.getByText(T('registration.offline.catalog'), { exact: true })).toBeVisible();
+    expect((await f.pool.query('SELECT count(*)::int n FROM patients')).rows[0].n).toBe(0);
+    await page.getByRole('button', { name: T('registration.offline.reroute'), exact: true }).click();
+    await page.locator('.registration-point', { hasText: 'Кардиолог' }).getByRole('checkbox').check();
+    await page.getByRole('button', { name: T('registration.print'), exact: true }).click();
+    await expect(page.getByText(pending(0), { exact: true })).toBeVisible();
+    expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(1);
+
+    await page.getByRole('button', { name: T('registration.nextPatient'), exact: true }).click();
+    await expect(page.locator('.registration')).toHaveAttribute('aria-busy', 'false');
+    await page.context().setOffline(true);
+    await registerOffline(page, 'Синтетик Янги Кун');
+    await closeDay(f.pool, day, f.owner.userId);
+    const nextDay = await openDay(f.pool, f.owner.clinicId, f.owner.userId, 1);
+    await page.context().setOffline(false);
+    await expect(page.getByText(T('registration.offline.closed'), { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: T('registration.offline.moveDay'), exact: true }).click();
+    await expect(page.getByText(pending(0), { exact: true })).toBeVisible();
+    expect((await f.pool.query('SELECT count(*)::int n FROM visits WHERE business_day_id=$1', [nextDay])).rows[0].n).toBe(1);
   } finally { await f.close(); }
 });

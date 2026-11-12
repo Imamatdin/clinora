@@ -10,7 +10,8 @@ export type Request = <T>(path: string, body?: unknown, idempotent?: boolean) =>
 export function createRequest(csrf: () => string): Request {
   let retry: { path: string; payload: string; key: string } | null = null;
   return async function request<T>(path: string, body?: unknown, idempotent = false): Promise<T> {
-    if (path === '/api/auth/logout') await clearOutbox();
+    const csrfToken = csrf(); // Cleanup may synchronously lock the shell; preserve the logout proof.
+    if (path === '/api/auth/logout') await clearOutbox(true);
     let key: string | undefined;
     if (idempotent) {
       const payload = JSON.stringify(body);
@@ -18,14 +19,14 @@ export function createRequest(csrf: () => string): Request {
       key = retry.key;
     }
     const headers: Record<string, string> = {};
-    if (body !== undefined) { headers['Content-Type'] = 'application/json'; headers['X-CSRF-Token'] = csrf(); }
+    if (body !== undefined) { headers['Content-Type'] = 'application/json'; headers['X-CSRF-Token'] = csrfToken; }
     if (key) headers['Idempotency-Key'] = key;
     let response: Response;
     try {
       response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) });
     } catch { throw new ApiFailure('SERVICE_UNAVAILABLE'); }
     const value = await response.json().catch(() => null);
-    if (!response.ok && (response.status === 401 || response.status === 403)) await clearOutbox();
+    if (!response.ok && (response.status === 401 || response.status === 403)) await clearOutbox(response.status === 401);
     if (!response.ok) throw new ApiFailure(value?.error?.code ?? 'SERVICE_UNAVAILABLE', value?.error?.unlockAt);
     if (path === '/api/auth/me') await checkOutboxUser(value);
     if (idempotent) retry = null;

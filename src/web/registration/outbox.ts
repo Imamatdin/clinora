@@ -41,9 +41,9 @@ async function update<T>(work: (state: State | undefined) => { state?: State; re
     });
   } finally { db.close(); }
 }
-export async function clearOutbox() {
-  await update(state => ({ state: { owner: '', counter: state?.counter ?? 0, entries: [] }, result: undefined })); changed(); channel?.postMessage('clear');
-  window.dispatchEvent(new Event('registration-session-ended'));
+export async function clearOutbox(endSession = false) {
+  await update(state => ({ state: { owner: '', counter: state?.counter ?? 0, entries: [] }, result: undefined })); changed(); channel?.postMessage(endSession ? 'clear' : 'change');
+  if (endSession) window.dispatchEvent(new Event('registration-session-ended'));
 }
 /** Called for every successful /auth/me, including tabs that never open registration. */
 export async function checkOutboxUser(user: { id: string; session: { via: string; deviceId?: string | null } }) {

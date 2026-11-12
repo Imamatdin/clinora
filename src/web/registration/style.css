@@ -46,9 +46,8 @@
 .offline-print { display: none; }
 @media print {
   @page { size: 80mm auto; margin: 3mm; }
-  body * { visibility: hidden; }
-  .offline-print, .offline-print * { visibility: visible; }
-  .offline-print { display: block; position: absolute; left: 0; top: 0; width: 100%; max-width: 74mm; color: black; background: white; }
+  body:has(> .offline-print) > * { display: none !important; }
+  body > .offline-print { display: block !important; width: 100%; max-width: 74mm; color: black; background: white; }
   .offline-print .ticket { break-after: page; text-align: center; }
   .offline-print .number { font-size: 28px; font-weight: bold; overflow-wrap: anywhere; }
 }

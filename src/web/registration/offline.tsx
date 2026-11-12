@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ApiFailure, type Request } from '../api.js';
 import { changeEntry, clearOutbox, openOutbox, readOutbox, type OfflineEntry } from './outbox.js';
 import { pickName, type Locale, type Names, type translator } from './i18n.js';
@@ -15,9 +16,11 @@ export function useRegistrationOutbox(owner: string | null, base: string, reques
     try {
       // Cross-tab serialization; server keys also protect a lost response or a browser crash.
       await navigator.locks.request('clinora-registration-sync', async () => {
+        if (!alive.current || latestOwner.current !== owner) return;
         try {
           const user = await request<{ id: string; session: { deviceId: string | null } }>('/api/auth/me');
-          if (!owner.startsWith(`${user.id}:${user.session.deviceId}:`)) { await clearOutbox(); return; }
+          // /auth/me already reconciled storage. Never let a stale tab clear a new person's outbox.
+          if (!owner.startsWith(`${user.id}:${user.session.deviceId}:`)) return;
           setOffline(false);
         } catch (e) {
           if (e instanceof ApiFailure && e.code === 'UNAUTHENTICATED') { await clearOutbox(); setSynced([]); }
@@ -60,9 +63,9 @@ export function useRegistrationOutbox(owner: string | null, base: string, reques
 
 /** Printed in the current shell: no fetch, no HTML interpolation, no names or clinical data. */
 export function LocalTickets({ entry, locale, clinicName, t }: { entry: OfflineEntry; locale: Locale; clinicName: string; t: ReturnType<typeof translator> }) {
-  return <div className="offline-print">{entry.labels.map((label, index) => <article className="ticket" key={index}>
+  return createPortal(<div className="offline-print">{entry.labels.map((label, index) => <article className="ticket" key={index}>
     <strong>{clinicName}</strong><p>{pickName(label, locale)}</p><p className="number">{entry.code}</p><p>{t('registration.offline.provisional')}</p>
-  </article>)}</div>;
+  </article>)}</div>, document.body);
 }
 
 type Match = { id: string; patientNo: number; fullName: string };

@@ -25,7 +25,7 @@ const fail = (code: ConstructorParameters<typeof DomainError>[0]): never => { th
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => { const result = schema.safeParse(value); return result.success ? result.data : fail('INVALID_INPUT'); };
 const iso = (value: Date) => value.toISOString();
 type Actor = { userId: string; sessionId: string; email: string | null; login: string | null; phone: string | null; name: string; csrf: string; verification: unknown; mustChangePassword: boolean; principal: Principal;
-  via: SessionVia; deviceClinicId: string | null; deviceLabel: string | null };
+  via: SessionVia; deviceClinicId: string | null; deviceId: string | null; deviceLabel: string | null };
 type Access = { actor: Actor; member: Membership; owner: boolean };
 export type ApiConfig = { pool: pg.Pool; origin: string; secureCookies: boolean; telegram?: TelegramConfig | undefined; trustProxyHops?: number };
 /** A clinic route result (JSON, HTML or file) plus an optional session cookie. */
@@ -49,7 +49,7 @@ export async function actorFor(tx: Tx, req: IncomingMessage): Promise<Actor> {
   // requests of one session serialize instead of deadlocking), then require it fresh below.
   await tx.query(`UPDATE sessions SET last_seen_at=now() WHERE token_hash=$1 AND via='device' AND last_seen_at>now()-make_interval(mins => $2)`, [digest(raw), DEVICE_IDLE_MINUTES]);
   const row = (await tx.query(`SELECT s.id,s.user_id,s.expires_at,s.via,a.email,a.login,a.phone,a.must_change_password,a.display_name,a.professional_verification,
-      d.clinic_id device_clinic_id, d.label device_label
+      d.clinic_id device_clinic_id, d.id device_id, d.label device_label
     FROM sessions s JOIN accounts a ON a.id=s.user_id LEFT JOIN devices d ON d.id=s.device_id
     WHERE s.token_hash=$1 AND s.expires_at>now() AND a.status='active'
       AND (s.via<>'device' OR (d.revoked_at IS NULL AND d.token_hash=$2 AND s.last_seen_at>now()-make_interval(mins => $3)))
@@ -58,7 +58,7 @@ export async function actorFor(tx: Tx, req: IncomingMessage): Promise<Actor> {
   return { userId: row.user_id, sessionId: row.id, email: row.email, login: row.login, phone: row.phone, name: row.display_name, csrf: digest('csrf:' + raw),
     verification: row.professional_verification, mustChangePassword: row.must_change_password,
     principal: { userId: row.user_id, sessionId: row.id, expiresAt: iso(row.expires_at), accountStatus: 'active' },
-    via: row.via, deviceClinicId: row.device_clinic_id ?? null, deviceLabel: row.device_label ?? null };
+    via: row.via, deviceId: row.device_id ?? null, deviceClinicId: row.device_clinic_id ?? null, deviceLabel: row.device_label ?? null };
 }
 async function accessFor(tx: Tx, actor: Actor, clinic: string): Promise<Access> {
   const row = (await tx.query('SELECT * FROM memberships WHERE clinic_id=$1 AND user_id=$2 AND status=\'active\' FOR SHARE', [clinic, actor.userId])).rows[0];
@@ -187,7 +187,7 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
         [actor.userId, actor.deviceClinicId])).rows;
       return { body: { id: actor.userId, name: actor.name, email: actor.email, login: actor.login, phone: actor.phone, csrf: actor.csrf,
         mustChangePassword: actor.mustChangePassword, professionalVerification: actor.verification, clinics: memberships,
-        session: { via: actor.via, deviceLabel: actor.deviceLabel, idleMinutes: actor.via === 'device' ? DEVICE_IDLE_MINUTES : null } } };
+        session: { via: actor.via, deviceId: actor.deviceId, deviceLabel: actor.deviceLabel, idleMinutes: actor.via === 'device' ? DEVICE_IDLE_MINUTES : null } } };
     }
     if (path === '/api/auth/logout' && method === 'POST') {
       await tx.query('DELETE FROM sessions WHERE id=$1', [actor.sessionId]);
@@ -229,6 +229,8 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
     const parts = path.split('/').filter(Boolean);
     if (parts[0] !== 'api' || parts[1] !== 'clinics' || !Id.safeParse(parts[2]).success) return fail('NOT_FOUND');
     const clinic = parts[2]!;
+    // Offline replay is limited to a currently enrolled shared PC, never a phone/password session.
+    if (parts[3] === 'registration' && parts[4] === 'offline' && actor.via !== 'device') return fail('FORBIDDEN');
     const routed = await clinicRoute(tx, actor.userId, clinic, parts.slice(3).join('/'), method, req, jsonBody);
     if (routed) return routed;
     const access = await accessFor(tx, actor, clinic);

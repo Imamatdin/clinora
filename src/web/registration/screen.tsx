@@ -2,13 +2,15 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { ModuleProps, WebModule } from '../modules.js';
 import { errorText } from '../i18n/index.js';
 import { ApiFailure } from '../api.js';
+import { enqueue, changeEntry, type OfflineEntry } from './outbox.js';
+import { LocalTickets, OfflineStatus, useRegistrationOutbox } from './offline.js';
 import { formatUzs, uzs } from '../../modules/billing/money.js';
 import { languages, pickName, translator, type Locale, type Names } from './i18n.js';
 
 type Service = { id: string; kind: string; names: Names; priceUzs: string | null };
 type Point = { id: string; kind: 'doctor' | 'department' | 'service'; names: Names; waiting: number; services: Service[] };
 type District = { id: string; names: Names; mahallas: { id: string; names: Names }[] };
-type Options = { day: { id: string; businessDate: string } | null; points: Point[]; districts: District[]; sources: string[] };
+export type Options = { day: { id: string; businessDate: string } | null; points: Point[]; districts: District[]; sources: string[] };
 type Patient = { id: string; patientNo: number; fullName: string; birthDate: string | null; gender: 'male' | 'female' | null; phone: string | null; lastVisit?: string | null };
 type Detail = Patient & { districtId: string | null; mahallaId: string | null; address: string | null; source: string | null; revision: number };
 type Ticket = { id: string; queuePointId: string; number: number; names: Names };
@@ -26,9 +28,12 @@ function age(birthDate: string | null): number | null {
 /** Phone digits as typed on the keypad; a 9-digit local number gets +998 on the server. */
 const phoneDigits = (value: string) => value.replace(/[^\d+]/g, '').slice(0, 16);
 
-export function Registration({ clinic, request, setDirty }: ModuleProps) {
+export function Registration({ clinic, request, setDirty, myId, offlineDeviceId }: ModuleProps) {
   const [locale, setLocale] = useState<Locale>('uz-Cyrl'), t = translator(locale);
   const base = `/api/clinics/${clinic.id}/registration`;
+  const owner = offlineDeviceId ? `${myId}:${offlineDeviceId}:${clinic.id}` : null;
+  const outbox = useRegistrationOutbox(owner, base, request);
+  const [local, setLocal] = useState<OfflineEntry | null>(null), [printed, setPrinted] = useState<OfflineEntry | null>(null);
   const [options, setOptions] = useState<Options | null>(null);
   const [step, setStep] = useState<Step>('find');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -41,19 +46,27 @@ export function Registration({ clinic, request, setDirty }: ModuleProps) {
   const patientKey = useRef(crypto.randomUUID()), visitKey = useRef<{ signature: string; key: string } | null>(null);
   const locked = useRef(false);
 
-  async function loadOptions() { setOptions(await request<Options>(`${base}/options`)); }
+  async function loadOptions() {
+    try { setOptions(await request<Options>(`${base}/options`)); outbox.setOffline(!navigator.onLine); }
+    catch (e) { if (e instanceof ApiFailure && e.code === 'SERVICE_UNAVAILABLE') outbox.setOffline(true); throw e; }
+  }
   async function run(work: () => Promise<void>) {
     if (locked.current) return;
     locked.current = true; setBusy(true); setError(''); setNotice('');
-    try { await work(); } catch (e) { setError(errorText(e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE')); }
+    try { await work(); } catch (e) {
+      if (e instanceof ApiFailure && e.code === 'SERVICE_UNAVAILABLE') outbox.setOffline(true);
+      setError(errorText(e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE'));
+    }
     finally { setBusy(false); locked.current = false; }
   }
   useEffect(() => { void run(loadOptions); }, [clinic.id]);
+  useEffect(() => { if (printed) { const timer = requestAnimationFrame(() => window.print()); return () => cancelAnimationFrame(timer); } }, [printed?.id]);
 
   function reset() {
+    setLocal(null); setPrinted(null);
     setStep('find'); setQuery(''); setResults(null); setDraft(emptyDraft); setEditing(null); setMatches([]); setReason('');
     setPatient(null); setChosen({}); setVisit(null); setDirty(false); patientKey.current = crypto.randomUUID(); visitKey.current = null;
-    void run(loadOptions);
+    if (navigator.onLine) void run(loadOptions);
   }
   const edit = (patch: Partial<Draft>) => { setDraft(d => ({ ...d, ...patch })); setMatches([]); patientKey.current = crypto.randomUUID(); setDirty(true); };
 
@@ -74,6 +87,14 @@ export function Registration({ clinic, request, setDirty }: ModuleProps) {
     e.preventDefault();
     await run(async () => {
       const body = payload();
+      const saveLocal = async () => {
+        if (!owner || !offlineDeviceId || !options?.day || editing) throw new ApiFailure('SERVICE_UNAVAILABLE');
+        const row = await enqueue(owner, offlineDeviceId, { id: patientKey.current, businessDayId: options.day.id, patient: { ...body, ...(anyway ? { duplicateReason: reason.trim() } : {}) }, points: [], labels: [] });
+        setLocal(row); setDirty(false);
+        choosePatient({ ...body, id: row.id, patientNo: 0, gender: body.gender as 'male' | 'female' });
+      };
+      if (outbox.offline && !editing) { await saveLocal(); return; }
+      try {
       if (editing) {
         const saved = await request<Patient>(`${base}/patients/${editing.id}`, { ...body, expectedRevision: editing.revision, idempotencyKey: patientKey.current });
         setNotice(t('registration.saved')); setEditing(null); setDirty(false); patientKey.current = crypto.randomUUID();
@@ -86,6 +107,9 @@ export function Registration({ clinic, request, setDirty }: ModuleProps) {
       const created = await request<Patient>(`${base}/patients`, { ...body, ...(anyway ? { duplicateReason: reason.trim() } : {}), idempotencyKey: patientKey.current });
       patientKey.current = crypto.randomUUID(); setDirty(false); setDraft(emptyDraft); setReason('');
       choosePatient(created);
+      } catch (e) {
+        if (e instanceof ApiFailure && e.code === 'SERVICE_UNAVAILABLE') { outbox.setOffline(true); await saveLocal(); } else throw e;
+      }
     });
   }
   async function startEdit() {
@@ -124,6 +148,20 @@ export function Registration({ clinic, request, setDirty }: ModuleProps) {
     if (!patient || !Object.keys(chosen).length) { setError(t('registration.choosePoint')); return; }
     const points = Object.entries(chosen).map(([queuePointId, serviceIds]) => ({ queuePointId, serviceIds }));
     const signature = JSON.stringify({ patientId: patient.id, points });
+    if (local || outbox.offline) {
+      await run(async () => {
+        if (!owner || !offlineDeviceId || !options?.day) throw new ApiFailure('SERVICE_UNAVAILABLE');
+        const labels = points.map(p => options.points.find(q => q.id === p.queuePointId)!.names);
+        let row: OfflineEntry;
+        if (local) {
+          const { error: _error, ...rest } = local;
+          row = { ...rest, ...(local.error ? { id: crypto.randomUUID() } : {}), points, labels };
+          await changeEntry(owner, local.id, () => row);
+        } else row = await enqueue(owner, offlineDeviceId, { id: visitKey.current?.key ?? crypto.randomUUID(), businessDayId: options.day.id, patientId: patient.id, points, labels });
+        setLocal(row); setPrinted(row); setStep('done'); setDirty(false);
+        await outbox.refresh(); if (!outbox.offline) await outbox.sync();
+      }); return;
+    }
     if (visitKey.current?.signature !== signature) visitKey.current = { signature, key: crypto.randomUUID() };
     // Open the print window inside the click so pop-up blockers allow it; it loads the tickets once they exist.
     const printWindow = window.open('about:blank', '_blank');
@@ -132,13 +170,20 @@ export function Registration({ clinic, request, setDirty }: ModuleProps) {
         const created = await request<Visit>(`${base}/visits`, { patientId: patient.id, points, idempotencyKey: visitKey.current!.key });
         visitKey.current = null; setVisit(created); setStep('done'); setDirty(false);
         if (printWindow) printWindow.location.href = ticketUrl(created.visitId); else setNotice(t('registration.popupBlocked'));
-      } catch (e) { printWindow?.close(); throw e; }
+      } catch (e) {
+        printWindow?.close();
+        if (e instanceof ApiFailure && e.code === 'SERVICE_UNAVAILABLE' && owner && offlineDeviceId && options?.day) {
+          outbox.setOffline(true);
+          const row = await enqueue(owner, offlineDeviceId, { id: visitKey.current!.key, businessDayId: options.day.id, patientId: patient.id, points, labels: points.map(p => options.points.find(q => q.id === p.queuePointId)!.names) });
+          setLocal(row); setPrinted(row); setStep('done'); setDirty(false);
+        } else throw e;
+      }
     });
   }
 
   const card = (p: Patient) => <span className="registration-card-body">
     <strong>{p.fullName}</strong>
-    <span>{t('registration.patientNo', { no: p.patientNo })}{p.birthDate && ` · ${formatDate(p.birthDate)} · ${t('registration.age', { age: age(p.birthDate) ?? '' })}`}</span>
+    <span>{p.patientNo ? t('registration.patientNo', { no: p.patientNo }) : local?.code}{p.birthDate && ` · ${formatDate(p.birthDate)} · ${t('registration.age', { age: age(p.birthDate) ?? '' })}`}</span>
     {p.phone && <span>{p.phone}</span>}
     {p.lastVisit && <span className="muted">{t('registration.lastVisit', { date: formatDate(p.lastVisit) })}</span>}
   </span>;
@@ -153,6 +198,13 @@ export function Registration({ clinic, request, setDirty }: ModuleProps) {
       <label className="registration-lang">{t('registration.language')}
         <select aria-label={t('registration.language')} value={locale} onChange={e => setLocale(e.target.value as Locale)}>{languages.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}</select></label>
     </div>
+    {outbox.offline && <p className="registration-banner" role="status">{t(owner ? 'registration.offline.banner' : 'registration.offline.enroll')}</p>}
+    {owner && <OfflineStatus {...outbox} owner={owner} base={base} request={request} locale={locale} t={t} onRoute={async row => {
+      await loadOptions(); setLocal(row);
+      choosePatient({ id: row.patientId ?? row.id, patientNo: 0, fullName: row.patient?.fullName ?? row.code, birthDate: row.patient?.birthDate ?? null, gender: null, phone: null });
+    }} onResume={row => {
+      setLocal(row); choosePatient({ id: row.id, patientNo: 0, fullName: row.patient!.fullName, birthDate: row.patient!.birthDate, gender: null, phone: row.patient!.phone });
+    }} />}
     <div aria-live="polite">
       {error && <p role="alert" className="error">{error}</p>}
       {notice && <p role="status" className="notice">{notice}</p>}
@@ -163,7 +215,7 @@ export function Registration({ clinic, request, setDirty }: ModuleProps) {
     {step === 'find' && <>
       <form className="registration-search" onSubmit={find} role="search">
         <label>{t('registration.search')}<input type="search" value={query} autoFocus maxLength={100} onChange={e => setQuery(e.target.value)} /></label>
-        <button type="submit" disabled={busy || !query.trim()}>{t('registration.find')}</button>
+        <button type="submit" disabled={busy || outbox.offline || !query.trim()}>{t('registration.find')}</button>
       </form>
       {results && !results.length && <p className="empty">{t('registration.notFound')}</p>}
       {results && results.length > 0 && <ul className="registration-results">{results.map(p =>
@@ -205,7 +257,7 @@ export function Registration({ clinic, request, setDirty }: ModuleProps) {
     {step === 'route' && patient && options && <div className="registration-route">
       <div className="registration-card selected">{card(patient)}</div>
       <details className="registration-more"><summary>{t('registration.more')}</summary>
-        <button type="button" onClick={startEdit} disabled={busy}>{t('registration.edit')}</button>
+        <button type="button" onClick={startEdit} disabled={busy || outbox.offline || !!local}>{t('registration.edit')}</button>
         <button type="button" onClick={reset}>{t('registration.back')}</button>
       </details>
       <h3>{t('registration.whoSees')}</h3>
@@ -224,6 +276,9 @@ export function Registration({ clinic, request, setDirty }: ModuleProps) {
       <button type="button" className="primary" disabled={busy || !options.day || !Object.keys(chosen).length} onClick={printTickets}>{t('registration.print')}</button>
     </div>}
 
+    {step === 'done' && printed && <div className="registration-done"><h3>{t('registration.offline.saved')}</h3><p>{printed.code}</p><p>{t('registration.offline.provisional')}</p>
+      <LocalTickets entry={printed} locale={locale} clinicName={clinic.name} t={t} /><button onClick={() => window.print()}>{t('registration.print')}</button>
+      <button className="primary" onClick={reset}>{t('registration.nextPatient')}</button></div>}
     {step === 'done' && visit && <div className="registration-done">
       <h3>{t('registration.done')}</h3>
       <ul className="registration-tickets">{visit.tickets.map(ticket => <li key={ticket.id}>

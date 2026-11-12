@@ -5,6 +5,10 @@ import { parse, uuid } from './types.js';
 
 /** Task 007 routes. requireRole runs before the body is read; each action rechecks its own roles. */
 registerRoutes('registration', [
+  { method: 'GET', pattern: /^registration\/offline\/history$/, roles: r.REGISTRARS,
+    handle: async ctx => ({ body: await r.offlineHistory(ctx) }) },
+  { method: 'POST', pattern: /^registration\/offline$/, roles: r.REGISTRARS,
+    handle: async (ctx, _p, body) => ({ status: 201, body: await r.syncRegistration(ctx, parse(r.OfflineInput, await body())) }) },
   { method: 'GET', pattern: /^registration\/options$/, roles: r.REGISTRARS, handle: async ctx => ({ body: await r.options(ctx) }) },
   { method: 'POST', pattern: /^registration\/search$/, roles: r.REGISTRARS,
     handle: async (ctx, _p, body) => ({ body: await r.search(ctx, parse(r.SearchInput, await body())) }) },

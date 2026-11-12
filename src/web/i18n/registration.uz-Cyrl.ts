@@ -1,5 +1,22 @@
 /** Task 007 registrar screen, Uzbek Cyrillic. Uzbek Latin and Russian files carry the same keys. */
 export const registration = {
+  "registration.offline.banner": "Интернет йўқ. Фақат рўйхатга олиш ва навбат офлайн ишлайди.",
+  "registration.offline.enroll": "Офлайн ишлаш учун администратор бу компьютерни рўйхатга олсин.",
+  "registration.offline.pending": "Синхронлаш кутилмоқда: {count}",
+  "registration.offline.sync": "Ҳозир синхронлаш",
+  "registration.offline.help": "Офлайн ишлаш қўлланмаси",
+  "registration.offline.cheat": "Интернет бор пайтда рўйхатга олишни очинг. Узилса, беморни сақланг, йўналтиринг ва вақтинчалик талонни чоп этинг. Қайта уланганда вақтинчалик код ёнида ҳақиқий навбат рақами чиқади. Беморни иккала рақам билан чақиринг. «Эътибор керак»ни ҳал қилинг. Фақат рўйхатга олиш офлайн; тўловлар ва бошқа модуллар интернет талаб қилади. Фойдаланувчини алмаштириш ёки қурилмани бекор қилиш кутилган маълумотларни ўчиради.",
+  "registration.offline.provisional": "Вақтинчалик код. Интернет тиклангач ҳақиқий навбат рақами берилади. Беморни иккала рақам билан чақиринг.",
+  "registration.offline.saved": "Қурилмада сақланди",
+  "registration.offline.attention": "Эътибор керак",
+  "registration.offline.duplicate": "Бундай бемор бор. Мавжуд беморни танланг.",
+  "registration.offline.closed": "Бу иш куни ёпилган. Администратор кунни очсин, сўнг янги кунга ўтказинг.",
+  "registration.offline.catalog": "Хизмат ёки йўналиш мавжуд эмас. Қайта танланг; маълумот ўчирилмади.",
+  "registration.offline.findDuplicate": "Мавжуд беморни топиш",
+  "registration.offline.moveDay": "Очиқ кунга ўтказиш",
+  "registration.offline.reroute": "Йўналишни қайта танлаш",
+  "registration.offline.retry": "Уланишни ва очиқ иш кунини текширинг, қайта урининг.",
+
   'registration.title': 'Рўйхатга олиш',
   'registration.language': 'Тил',
   'registration.loading': 'Юкланмоқда…',

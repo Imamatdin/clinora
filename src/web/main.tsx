@@ -15,13 +15,14 @@ import { Staff } from './staff.js';
 import { LockScreen, useIdleLock, type DeviceInfo } from './access/device.js';
 import { Devices, MyAccess } from './access/staff-access.js';
 import { InstallHint, registerServiceWorker } from './access/install.js';
+import { clearOutbox, lockOutbox } from './registration/outbox.js';
 import './style.css';
 
 // Task 003C assistant inside the task 010 visit screen (one line per visit panel).
 registerVisitPanel({ id: 'assistant', Panel: ({ onChanged, ...p }) => <AssistantPanel {...p} onApproved={onChanged} /> });
 
 type Me = { id: string; name: string; csrf: string; mustChangePassword: boolean; clinics: ClinicMembershipView[]; professionalVerification: { status: string };
-  session: { via: 'password' | 'telegram' | 'device'; deviceLabel: string | null; idleMinutes: number | null } };
+  session: { via: 'password' | 'telegram' | 'device'; deviceId: string | null; deviceLabel: string | null; idleMinutes: number | null } };
 type Section = Role | 'staff';
 const sectionLabel = (s: Section) => s === 'staff' ? t('nav.staff') : t(`role.${s}` as UiKey);
 
@@ -87,7 +88,11 @@ function App() {
   }
   /** Shared PC: end this person's session and return to the name list. */
   async function lock(notice = '') {
-    try { await request('/api/auth/logout', {}); } catch { /* the server may already have ended it */ }
+    try {
+      // Start the request with its CSRF proof, then hide data immediately. Idle locking permits
+      // same-person PIN recovery; explicitly choosing "Switch user" destroys queued records.
+      await Promise.all([request('/api/auth/logout', {}), notice ? Promise.resolve(lockOutbox()) : clearOutbox(true)]);
+    } catch { /* the server may already have ended it */ }
     setMe(null); csrf.current = ''; setDirty(false); setSection(''); setDay(null); setShowMe(false); setPasswordOnDevice(false);
     setError(''); setNotice(notice); await refreshDevice();
   }
@@ -113,6 +118,15 @@ function App() {
     window.addEventListener('focus', onFocus); return () => window.removeEventListener('focus', onFocus);
   }, [me?.id, me?.mustChangePassword, clinicId, clinic?.roles.join()]);
   useIdleLock(me?.session?.idleMinutes ?? null, () => { void lock(t('access.device.idleLocked')); });
+  useEffect(() => {
+    const ended = () => { setMe(null); csrf.current = ''; setDirty(false); setDay(null); setSection(''); void refreshDevice(); };
+    const identity = (event: Event) => {
+      if (me && (event as CustomEvent).detail !== `${me.id}:${me.session.deviceId}:`) ended();
+    };
+    window.addEventListener('registration-session-ended', ended);
+    window.addEventListener('registration-session-identity', identity);
+    return () => { window.removeEventListener('registration-session-ended', ended); window.removeEventListener('registration-session-identity', identity); };
+  }, [me?.id, me?.session.deviceId]);
   // Telegram's native back button: from a secondary screen back to the person's main screen.
   useEffect(() => setTelegramBack(me && (showMe || (active && active !== sections[0])) ? () => guard(() => { setDirty(false); setShowMe(false); setSection(''); }) : null),
     [me?.id, showMe, active, sections[0], dirty]);
@@ -135,7 +149,7 @@ function App() {
     if (f.get('newPassword') !== f.get('repeat')) { setError(t('password.mismatch')); return; }
     await run(async () => { await request('/api/auth/password', { currentPassword: f.get('currentPassword'), newPassword: f.get('newPassword') }); await refreshMe(); setNotice(t('password.saved')); });
   }
-  const signOut = () => guard(() => void run(async () => { await request('/api/auth/logout', {}); setMe(null); csrf.current = ''; setDirty(false); setClinicId(''); setSection(''); setDay(null); setShowMe(false); await refreshDevice(); }));
+  const signOut = () => guard(() => void run(async () => { await Promise.all([request('/api/auth/logout', {}), clearOutbox(true)]); setMe(null); csrf.current = ''; setDirty(false); setClinicId(''); setSection(''); setDay(null); setShowMe(false); await refreshDevice(); }));
   const onDevice = me?.session?.via === 'device', inTelegram = me?.session?.via === 'telegram' || telegramActive;
   const banners = <div className="banners" aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>;
 
@@ -195,12 +209,12 @@ function App() {
           {(active === 'ceo' || active === 'administrator') && <DayPanel day={day} busy={busy}
             onOpen={() => void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/open`, {}); setNotice(t('day.openedNotice')); } finally { await refreshDay().catch(() => {}); } })}
             onClose={(id, date) => { if (confirm(t('day.closeConfirm', { date }))) void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/${id}/close`, {}); setNotice(t('day.closedNotice')); } finally { await refreshDay().catch(() => {}); } }); }} />}
-          <RoleModules key={`${clinic.id}:${active}`} role={active} busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, setDirty }} />
+          <RoleModules key={`${clinic.id}:${active}`} role={active} busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, offlineDeviceId: onDevice ? me.session.deviceId : null, setDirty }} />
           <Planned role={active} />
         </main>}
         {active === 'doctor' && <>
           <div className="page home compact" data-role="doctor"><h1>{t('home.doctor.title')}</h1><p className="muted">{t('home.doctor.lead')}</p>
-            <RoleModules key={`${clinic.id}:doctor`} role="doctor" busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, setDirty }} /><Planned role="doctor" /></div>
+            <RoleModules key={`${clinic.id}:doctor`} role="doctor" busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, offlineDeviceId: onDevice ? me.session.deviceId : null, setDirty }} /><Planned role="doctor" /></div>
           <Notebook clinic={clinic} request={request} dirty={dirty} setDirty={setDirty} guard={guard}
             visitExtra={(patientId, encounterId, refresh) => <AssistantPanel key={encounterId} clinicId={clinic.id} patientId={patientId} encounterId={encounterId} request={request} onApproved={refresh} />} />
         </>}

@@ -165,7 +165,9 @@ test('password lock shows unlock time and the staff manager can unlock it', asyn
     const row = page.locator('.staff-list > li').filter({ hasText: 'Синтетик Қулф' });
     await row.getByRole('button', { name: T('staff.manage'), exact: true }).click();
     await row.getByRole('button', { name: T('access.unlockLogin'), exact: true }).click();
-    await expect(row.getByRole('status')).toHaveText(T('access.loginUnlocked'));
+    // The success notice can render before the refreshed lock summary replaces its old status.
+    await expect(row.getByRole('status').filter({ hasText: T('access.loginUnlocked') })).toHaveText(T('access.loginUnlocked'));
+    await expect(row.getByRole('button', { name: T('access.unlockLogin'), exact: true })).toHaveCount(0);
     expect((await f.pool.query("SELECT actor_id FROM audit_events WHERE action='login.unlocked' AND resource_id=$1", [staff.id])).rows[0].actor_id).toBe(f.owner.userId);
     const response = await page.request.post(f.origin + '/api/auth/login', { headers: { Origin: f.origin }, data: { identifier: 'login.locked', password: staff.password } });
     expect(response.status()).toBe(200);

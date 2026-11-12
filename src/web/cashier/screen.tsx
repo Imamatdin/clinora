@@ -19,7 +19,7 @@ export function Cashier({clinic,request}:ModuleProps){
  if(!clinic.roles.some((r:string)=>r==='ceo'||r==='administrator')){const approved=await request<{approvalId:string}>(base+'/approvals',{approverId:approver,pin,visitId:visit,operation,payload});approvalId=approved.approvalId;setPin('');}
  const result=await request<Row>(`${base}/visits/${visit}/${operation}`,{...payload,...(approvalId?{approvalId}:{})});if(operation==='refund')setPrintable(result.snapshot);await refresh();}
  function keyFor(payload:Row){const signature=JSON.stringify(payload);if(paymentKey.current?.signature!==signature)paymentKey.current={signature,key:crypto.randomUUID()};return paymentKey.current.key;}
- const select=(label:Parameters<typeof t>[0],value:string,set:(s:string)=>void,rows:Row[],name:(r:Row)=>string)=><label>{t(label)}<select value={value} onChange={e=>set(e.target.value)}><option value="">—</option>{rows.map(r=><option key={r.id} value={r.id}>{name(r)}</option>)}</select></label>;
+ const select=(label:Parameters<typeof t>[0],value:string,set:(s:string)=>void,rows:Row[],name:(r:Row)=>string)=><label>{t(label)}<select aria-label={t(label)} value={value} onChange={e=>set(e.target.value)}><option value="">—</option>{rows.map(r=><option key={r.id} value={r.id}>{name(r)}</option>)}</select></label>;
  const field=(label:Parameters<typeof t>[0],value:string,set:(s:string)=>void,numeric=false)=><label>{t(label)}<input value={value} inputMode={numeric?'numeric':undefined} onChange={e=>set(e.target.value)} /></label>;
  return <section className="cashier"><h2>{t('cashier.title')}</h2>{error&&<p role="alert">{error}</p>}{busy&&<p role="status">{t('cashier.loading')}</p>}{saved&&<p role="status">{t('cashier.saved')}</p>}
  <fieldset disabled={busy}>

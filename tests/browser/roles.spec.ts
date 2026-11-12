@@ -63,7 +63,7 @@ for (const width of [1280, 360]) test(`administrator opens the day and creates a
     await page.getByRole('button', { name: T('password.submit'), exact: true }).click();
 
     await expect(page.getByRole('heading', { name: T('home.cashier.title'), level: 1 })).toBeVisible();
-    await expect(page.getByText(T('module.payments'), { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('cashier.title'), exact: true })).toBeVisible();
     await expect(header.locator('[data-state="open"]')).toHaveText(dayText);
     await expect(header.getByText('Синтетик Кассир', { exact: true })).toBeVisible();
     // A single-role cashier gets no section navigation, no staff screen and no day controls.

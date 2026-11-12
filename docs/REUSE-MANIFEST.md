@@ -63,3 +63,10 @@ requirements were retained. No changes were made to a remote or production sourc
 This reference repair is not the new core's dependency set. The new core has no
 router dependency in increment 0 and one minimal consistent lockfile. Reference
 install/build/test outcomes and remaining failures are in the dated handoff.
+
+## Task 004 (12 November 2026)
+
+- `qrcode-generator@2.0.4` (MIT, zero dependencies, npm registry integrity in `package-lock.json`): renders invite QR codes in the browser as SVG rectangles. No code copied.
+- Telegram's `telegram-web-app.js` is **not** used or copied. `src/web/access/telegram.ts` is an original minimal bridge, so the CSP keeps `script-src 'self'` (telegram.org was also unreachable from the build container).
+- Init-data validation (`src/modules/telegram/init-data.ts`) is original code following core.telegram.org/bots/webapps; its algorithm was cross-checked against aiogram 3.15 `aiogram/utils/web_app.py::check_webapp_signature` (read only, not copied).
+- PWA icons are generated from the new `src/web/public/icons/icon.svg` (no logo file existed in the repository) by `scripts/render-icons.mjs`.

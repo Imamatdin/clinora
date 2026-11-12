@@ -1,3 +1,5 @@
+// The Telegram bridge reads the launch parameters from the URL hash; it must load before anything clears it.
+import { setTelegramBack, startTelegram, telegramActive, telegramInitData } from './access/telegram.js';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { ClinicMembershipView, CurrentDayView } from '../contracts/clinic.js';
@@ -8,9 +10,13 @@ import { errorText, setLocale, t, type UiKey } from './i18n/index.js';
 import { modulesFor, plannedFor, type ModuleProps } from './modules.js';
 import { Notebook } from './notebook.js';
 import { Staff } from './staff.js';
+import { LockScreen, useIdleLock, type DeviceInfo } from './access/device.js';
+import { Devices, MyAccess } from './access/staff-access.js';
+import { InstallHint, registerServiceWorker } from './access/install.js';
 import './style.css';
 
-type Me = { id: string; name: string; csrf: string; mustChangePassword: boolean; clinics: ClinicMembershipView[]; professionalVerification: { status: string } };
+type Me = { id: string; name: string; csrf: string; mustChangePassword: boolean; clinics: ClinicMembershipView[]; professionalVerification: { status: string };
+  session: { via: 'password' | 'telegram' | 'device'; deviceLabel: string | null; idleMinutes: number | null } };
 type Section = Role | 'staff';
 const sectionLabel = (s: Section) => s === 'staff' ? t('nav.staff') : t(`role.${s}` as UiKey);
 
@@ -37,6 +43,8 @@ function App() {
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [dirty, setDirty] = useState(false), [pending, setPending] = useState<(() => void) | null>(null);
   const [invite, setInvite] = useState(() => new URLSearchParams(location.hash.slice(1)).get('invite') ?? '');
+  const [device, setDevice] = useState<DeviceInfo | null>(null), [passwordOnDevice, setPasswordOnDevice] = useState(false);
+  const [tgState, setTgState] = useState<'' | 'signing' | 'blocked' | 'reopen' | 'unavailable'>(''), [showMe, setShowMe] = useState(false);
   const csrf = useRef('');
   const request = useMemo(() => createRequest(() => csrf.current), []);
   const clinic = me?.clinics.find(c => c.id === clinicId);
@@ -50,13 +58,33 @@ function App() {
     try { await work(); } catch (e) {
       const code = e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE';
       setError(errorText(code));
-      if (code === 'UNAUTHENTICATED') { setMe(null); csrf.current = ''; }
+      if (code === 'UNAUTHENTICATED') { setMe(null); csrf.current = ''; void refreshDevice(); }
       if (code === 'FORBIDDEN' || code === 'INVALID_TRANSITION') void refreshMe().catch(() => {});
     } finally { setBusy(false); }
   };
   async function refreshMe() {
     const user = await request<Me>('/api/auth/me'); csrf.current = user.csrf; setMe(user);
     setClinicId(old => user.clinics.some(c => c.id === old) ? old : user.clinics[0]?.id ?? '');
+  }
+  async function refreshDevice() {
+    if (telegramActive) return;
+    try { setDevice(await request<DeviceInfo>('/api/device')); } catch { setDevice(null); }
+  }
+  /** Mini App: exchange Telegram's signed launch data for a normal server session, once. */
+  async function telegramSignIn() {
+    if (!telegramInitData) { setTgState('reopen'); return; }
+    setTgState('signing');
+    try { await request('/api/telegram/session', { initData: telegramInitData }); await refreshMe(); setTgState(''); }
+    catch (e) {
+      const code = e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE';
+      setTgState(code === 'FORBIDDEN' ? 'blocked' : code === 'INTEGRATION_UNAVAILABLE' ? 'unavailable' : 'reopen');
+    }
+  }
+  /** Shared PC: end this person's session and return to the name list. */
+  async function lock(notice = '') {
+    try { await request('/api/auth/logout', {}); } catch { /* the server may already have ended it */ }
+    setMe(null); csrf.current = ''; setDirty(false); setSection(''); setDay(null); setShowMe(false); setPasswordOnDevice(false);
+    setError(''); setNotice(notice); await refreshDevice();
   }
   async function refreshDay(id = clinicId) {
     if (!id) { setDay(null); return; }
@@ -65,7 +93,11 @@ function App() {
   useEffect(() => {
     setLocale('uz-Cyrl'); document.title = t('app.title');
     history.replaceState(null, '', location.pathname);
-    refreshMe().catch(e => { if (!(e instanceof ApiFailure && e.code === 'UNAUTHENTICATED')) setError(errorText('SERVICE_UNAVAILABLE')); }).finally(() => setLoading(false));
+    startTelegram();
+    refreshMe().catch(async e => {
+      if (!(e instanceof ApiFailure && e.code === 'UNAUTHENTICATED')) { setError(errorText('SERVICE_UNAVAILABLE')); return; }
+      if (telegramActive) await telegramSignIn(); else await refreshDevice();
+    }).finally(() => setLoading(false));
   }, []);
   useEffect(() => {
     setDay(null);
@@ -75,6 +107,10 @@ function App() {
     const onFocus = () => { refreshDay(clinicId).catch(() => {}); };
     window.addEventListener('focus', onFocus); return () => window.removeEventListener('focus', onFocus);
   }, [me?.id, me?.mustChangePassword, clinicId, clinic?.roles.join()]);
+  useIdleLock(me?.session?.idleMinutes ?? null, () => { void lock(t('access.device.idleLocked')); });
+  // Telegram's native back button: from a secondary screen back to the person's main screen.
+  useEffect(() => setTelegramBack(me && (showMe || (active && active !== sections[0])) ? () => guard(() => { setDirty(false); setShowMe(false); setSection(''); }) : null),
+    [me?.id, showMe, active, sections[0], dirty]);
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
     window.addEventListener('beforeunload', handler); return () => window.removeEventListener('beforeunload', handler);
@@ -86,7 +122,7 @@ function App() {
       if (mode === 'register') {
         await request('/api/auth/register', { email: f.get('email'), displayName: f.get('name'), password: f.get('password') });
         setMode('login'); setNotice(t('auth.registered'));
-      } else { await request('/api/auth/login', { identifier: f.get('identifier'), password: f.get('password') }); await refreshMe(); }
+      } else { await request('/api/auth/login', { identifier: f.get('identifier'), password: f.get('password') }); await refreshMe(); setPasswordOnDevice(false); }
     });
   }
   async function changePassword(e: FormEvent<HTMLFormElement>) {
@@ -94,7 +130,8 @@ function App() {
     if (f.get('newPassword') !== f.get('repeat')) { setError(t('password.mismatch')); return; }
     await run(async () => { await request('/api/auth/password', { currentPassword: f.get('currentPassword'), newPassword: f.get('newPassword') }); await refreshMe(); setNotice(t('password.saved')); });
   }
-  const signOut = () => guard(() => void run(async () => { await request('/api/auth/logout', {}); setMe(null); csrf.current = ''; setDirty(false); setClinicId(''); setSection(''); setDay(null); }));
+  const signOut = () => guard(() => void run(async () => { await request('/api/auth/logout', {}); setMe(null); csrf.current = ''; setDirty(false); setClinicId(''); setSection(''); setDay(null); setShowMe(false); await refreshDevice(); }));
+  const onDevice = me?.session?.via === 'device', inTelegram = me?.session?.via === 'telegram' || telegramActive;
   const banners = <div className="banners" aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>;
 
   if (loading) return <main className="auth"><p role="status">{t('app.loading')}</p></main>;
@@ -103,9 +140,19 @@ function App() {
       <div className="brand">{t('app.brand')}<span>{t('app.brandTag')}</span></div>
       {clinic && <strong className="clinic-name">{clinic.name}</strong>}
       {clinic && clinic.roles.length > 0 && !me?.mustChangePassword && <DayPill day={day} />}
-      {me && <div className="account"><span className="person">{me.name}</span><button className="quiet" disabled={busy} onClick={signOut}>{t('app.signOut')}</button></div>}
+      {me && <div className="account"><span className="person">{me.name}</span>
+        {onDevice ? <button className="primary" disabled={busy} onClick={() => guard(() => void lock())}>{t('access.device.switchUser')}</button>
+          : <>{!me.mustChangePassword && clinic && <button className="quiet" disabled={busy} onClick={() => guard(() => { setDirty(false); setShowMe(true); })}>{t('access.me.button')}</button>}
+            {!inTelegram && <button className="quiet" disabled={busy} onClick={signOut}>{t('app.signOut')}</button>}</>}</div>}
+      {onDevice && <span className="fine device-note">{t('access.device.sessionNote', { minutes: me?.session.idleMinutes ?? 10 })}</span>}
     </header>
-    {!me ? <main className="auth"><p className="eyebrow">{t('auth.eyebrow')}</p><h1>{mode === 'login' ? t('auth.welcome') : t('auth.createTitle')}</h1><p className="muted">{t('auth.lead')}</p>
+    {!me && telegramActive ? <main className="auth tg-gate">
+      {tgState === 'signing' || tgState === '' ? <p role="status">{t('access.tg.signingIn')}</p> : tgState === 'blocked' ? <><h1>{t('access.tg.blockedTitle')}</h1><p>{t('access.tg.blockedLead')}</p></>
+        : tgState === 'unavailable' ? <><h1>{t('access.tg.blockedTitle')}</h1><p>{t('access.tg.telegramUnavailable')}</p></> : <><h1>{t('access.tg.reopenTitle')}</h1><p>{t('access.tg.reopenLead')}</p></>}
+    </main> :
+    !me && device?.enrolled && !passwordOnDevice ? <LockScreen device={device} request={request} notice={notice} onPassword={() => { setPasswordOnDevice(true); setNotice(''); }}
+      onUnlocked={async () => { setNotice(''); await refreshMe(); }} /> :
+    !me ? <main className="auth"><p className="eyebrow">{t('auth.eyebrow')}</p><h1>{mode === 'login' ? t('auth.welcome') : t('auth.createTitle')}</h1><p className="muted">{t('auth.lead')}</p>
       <form onSubmit={signIn}>
         {mode === 'login'
           ? <label>{t('auth.identifier')}<input name="identifier" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} /></label>
@@ -116,6 +163,7 @@ function App() {
       <p className="fine">{t('auth.staffNote')}</p>
       <button className="link" disabled={busy} onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}>{mode === 'login' ? t('auth.toRegister') : t('auth.toLogin')}</button>
       {mode === 'register' && <p className="fine">{t('auth.registrationNote')}</p>}
+      {device?.enrolled && <button className="link" onClick={() => { setPasswordOnDevice(false); setError(''); }}>{t('access.device.backToList')}</button>}
       {error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</main> :
     me.mustChangePassword ? <main className="auth"><h1>{t('password.title')}</h1><p className="muted">{t('password.lead')}</p>
       <form onSubmit={changePassword}>
@@ -128,12 +176,15 @@ function App() {
       {me.clinics.length > 1 && <div className="clinicbar"><label>{t('app.clinic')}<select aria-label={t('app.clinic')} value={clinicId} disabled={busy} onChange={e => { const id = e.target.value; guard(() => { setDirty(false); setClinicId(id); setSection(''); }); }}>{me.clinics.map(c => <option value={c.id} key={c.id}>{c.name}</option>)}</select></label></div>}
       {sections.length > 1 && <nav className="sections" aria-label={t('app.navigation')}>{sections.map(s => <button key={s} className={s === active ? 'current' : ''} aria-current={s === active ? 'page' : undefined} disabled={busy} onClick={() => guard(() => { setDirty(false); setSection(s); })}>{sectionLabel(s)}</button>)}</nav>}
       {banners}
+      {!onDevice && <InstallHint />}
       {(!clinic || invite) && <section className="pending"><h1>{t('notebook.pendingTitle')}</h1><p>{t('notebook.pendingLead')}</p><p className="fine">{t('app.verification', { status: t(`verification.${me.professionalVerification.status}` as UiKey) })}</p>
         <form onSubmit={e => { e.preventDefault(); void run(async () => { await request('/api/invitations/accept', { token: invite }); setInvite(''); await refreshMe(); setNotice(t('notebook.inviteAccepted')); }); }}>
           <label>{t('notebook.inviteToken')}<input value={invite} onChange={e => setInvite(e.target.value)} required autoComplete="off" /></label><button className="primary" disabled={busy}>{t('notebook.acceptInvite')}</button>
         </form></section>}
-      {clinic && active === 'staff' && <main className="page"><Staff clinicId={clinic.id} request={request} myId={me.id} myRoles={roles} /></main>}
-      {clinic && active && active !== 'staff' && <>
+      {showMe && clinic && <MyAccess clinicId={clinic.id} name={me.name} request={request} onBack={() => setShowMe(false)} />}
+      {!showMe && clinic && active === 'staff' && <main className="page"><Staff clinicId={clinic.id} request={request} myId={me.id} myRoles={roles} />
+        {!onDevice && !inTelegram && <Devices clinicId={clinic.id} request={request} onEnrolled={() => { setMe(null); csrf.current = ''; setSection(''); setDay(null); setNotice(t('access.devices.enrolled')); void refreshDevice(); }} />}</main>}
+      {!showMe && clinic && active && active !== 'staff' && <>
         {active !== 'doctor' && <main className="page home" data-role={active}>
           <h1>{t(`home.${active}.title` as UiKey)}</h1><p className="muted">{t(`home.${active}.lead` as UiKey)}</p>
           {(active === 'ceo' || active === 'administrator') && <DayPanel day={day} busy={busy}
@@ -160,4 +211,5 @@ function App() {
     <footer>{t('app.footer')}</footer>
   </div>;
 }
+registerServiceWorker();
 createRoot(document.getElementById('root')!).render(<App />);

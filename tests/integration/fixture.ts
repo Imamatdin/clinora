@@ -4,6 +4,10 @@ import { once } from 'node:events';
 import { createApp } from '../../src/server/app.js';
 import { makePool, migrate } from '../../src/server/database.js';
 import { provisionOwner } from '../../src/server/provision.js';
+import { recordingTelegramApi } from '../../src/modules/telegram/api.js';
+
+/** Synthetic bot for tests. Outbound calls are recorded, never sent. */
+export const TEST_BOT={botToken:'123456789:TEST_synthetic_bot_token_not_real_000000',webhookSecret:'synthetic-webhook-secret-0123456789abcdef',botUsername:'clinora_test_bot'};
 
 export async function databaseFixture() {
   const url=process.env.TEST_DATABASE_URL;
@@ -21,7 +25,8 @@ export async function databaseFixture() {
 }
 export async function httpFixture(){
   const db=await databaseFixture();
-  const config={pool:db.pool,origin:'http://127.0.0.1:0',secureCookies:false};
+  const telegramApi=recordingTelegramApi();
+  const config={pool:db.pool,origin:'http://127.0.0.1:0',secureCookies:false,telegram:{...TEST_BOT,api:telegramApi}};
   let server=await createApp(undefined,config);
   async function listen(){server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();assert.ok(address&&typeof address==='object');config.origin=`http://127.0.0.1:${address.port}`;}
   await listen();
@@ -33,7 +38,7 @@ export async function httpFixture(){
     async login(email='owner@example.test') {const r=await this.request('/api/auth/login',{email,password:db.password});assert.equal(r.status,200);const me=await this.request('/api/auth/me');const value=await me.json();csrf=value.csrf;return value;},
     get cookie(){return cookie;},get csrf(){return csrf;}
   };}
-  return {...db,config,client,
+  return {...db,config,client,telegramApi,
     async restart(){await new Promise<void>(resolve=>server.close(()=>resolve()));server=await createApp(undefined,config);await listen();},
     async close(){await new Promise<void>(resolve=>server.close(()=>resolve()));await db.close();}
   };

@@ -11,14 +11,18 @@ import { sortVisits } from '../contracts/timeline.js';
 import { PasswordChangeInput } from '../contracts/clinic.js';
 import { identifierKind } from '../modules/identity/roles.js';
 import { clinicRoute } from './clinic-routes.js';
+import type { TelegramConfig } from '../modules/telegram/api.js';
+import { createSession, deviceFromRequest, publicAccessRoute, readCookie, sessionAccessRoute, sessionCookie, webhookRoute, type SessionVia } from './access.js';
+import { DEVICE_IDLE_MINUTES } from '../modules/devices/actions.js';
 
 const fail = (code: ConstructorParameters<typeof DomainError>[0]): never => { throw new DomainError(code); };
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => { const result = schema.safeParse(value); return result.success ? result.data : fail('INVALID_INPUT'); };
 const iso = (value: Date) => value.toISOString();
-type Actor = { userId: string; sessionId: string; email: string | null; login: string | null; phone: string | null; name: string; csrf: string; verification: unknown; mustChangePassword: boolean; principal: Principal };
+type Actor = { userId: string; sessionId: string; email: string | null; login: string | null; phone: string | null; name: string; csrf: string; verification: unknown; mustChangePassword: boolean; principal: Principal;
+  via: SessionVia; deviceClinicId: string | null; deviceLabel: string | null };
 type Access = { actor: Actor; member: Membership; owner: boolean };
-export type ApiConfig = { pool: pg.Pool; origin: string; secureCookies: boolean };
-export type ApiResult = { status?: number; body: unknown; cookie?: string };
+export type ApiConfig = { pool: pg.Pool; origin: string; secureCookies: boolean; telegram?: TelegramConfig | undefined };
+export type ApiResult = { status?: number; body: unknown; cookie?: string | string[] };
 const jsonBody = async (req: IncomingMessage): Promise<unknown> => {
   if (req.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') return fail('INVALID_INPUT');
   let size = 0; const chunks: Buffer[] = [];
@@ -31,15 +35,23 @@ const audit = (tx: Tx, actor: string, clinic: string | null, action: string, res
 async function actorFor(tx: Tx, req: IncomingMessage): Promise<Actor> {
   // No bearer fallback: an explicit unsupported bearer cannot override browser identity.
   if (req.headers.authorization) return fail('UNAUTHENTICATED');
-  const cookies = (req.headers.cookie ?? '').split(';').map(v => v.trim()).filter(v => v.startsWith('clinora_session='));
-  const raw = cookies.length === 1 ? cookies[0]!.slice('clinora_session='.length) : '';
+  const raw = readCookie(req, 'clinora_session') ?? '';
   if (!/^[a-f0-9]{64}$/.test(raw)) return fail('UNAUTHENTICATED');
-  const row = (await tx.query(`SELECT s.id,s.user_id,s.expires_at,a.email,a.login,a.phone,a.must_change_password,a.display_name,a.professional_verification
-    FROM sessions s JOIN accounts a ON a.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND a.status='active' FOR SHARE OF s,a`, [digest(raw)])).rows[0];
+  const deviceRaw = readCookie(req, 'clinora_device');
+  // A shared-PC session stays alive only while used: bump it first (row lock, so concurrent
+  // requests of one session serialize instead of deadlocking), then require it fresh below.
+  await tx.query(`UPDATE sessions SET last_seen_at=now() WHERE token_hash=$1 AND via='device' AND last_seen_at>now()-make_interval(mins => $2)`, [digest(raw), DEVICE_IDLE_MINUTES]);
+  const row = (await tx.query(`SELECT s.id,s.user_id,s.expires_at,s.via,a.email,a.login,a.phone,a.must_change_password,a.display_name,a.professional_verification,
+      d.clinic_id device_clinic_id, d.label device_label
+    FROM sessions s JOIN accounts a ON a.id=s.user_id LEFT JOIN devices d ON d.id=s.device_id
+    WHERE s.token_hash=$1 AND s.expires_at>now() AND a.status='active'
+      AND (s.via<>'device' OR (d.revoked_at IS NULL AND d.token_hash=$2 AND s.last_seen_at>now()-make_interval(mins => $3)))
+    FOR SHARE OF s,a`, [digest(raw), deviceRaw && /^[a-f0-9]{64}$/.test(deviceRaw) ? digest(deviceRaw) : '', DEVICE_IDLE_MINUTES])).rows[0];
   if (!row) return fail('UNAUTHENTICATED');
   return { userId: row.user_id, sessionId: row.id, email: row.email, login: row.login, phone: row.phone, name: row.display_name, csrf: digest('csrf:' + raw),
     verification: row.professional_verification, mustChangePassword: row.must_change_password,
-    principal: { userId: row.user_id, sessionId: row.id, expiresAt: iso(row.expires_at), accountStatus: 'active' } };
+    principal: { userId: row.user_id, sessionId: row.id, expiresAt: iso(row.expires_at), accountStatus: 'active' },
+    via: row.via, deviceClinicId: row.device_clinic_id ?? null, deviceLabel: row.device_label ?? null };
 }
 async function accessFor(tx: Tx, actor: Actor, clinic: string): Promise<Access> {
   const row = (await tx.query('SELECT * FROM memberships WHERE clinic_id=$1 AND user_id=$2 AND status=\'active\' FOR SHARE', [clinic, actor.userId])).rows[0];
@@ -119,7 +131,11 @@ async function throttle(pool: pg.Pool, identity: string, ip: string) {
 export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiResult> {
   const url = new URL(req.url ?? '/', config.origin), path = url.pathname, method = req.method ?? 'GET';
   const mutation = !['GET','HEAD'].includes(method);
+  const webhook = await webhookRoute(req, config, path, method, jsonBody);
+  if (webhook) return webhook;
   if (mutation && req.headers.origin !== config.origin) return fail('FORBIDDEN');
+  const publicAccess = await publicAccessRoute(req, config, path, method, jsonBody);
+  if (publicAccess) return publicAccess;
   if (path === '/api/auth/register' && method === 'POST') {
     const input = parse(SignupInput, await jsonBody(req));
     await throttle(config.pool, input.email.toLowerCase(), req.socket.remoteAddress ?? 'unknown');
@@ -135,9 +151,13 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
     const account = who ? (await config.pool.query(`SELECT * FROM accounts WHERE ${who.column}=$1`, [who.value])).rows[0] : undefined;
     const matches = await passwordMatches(input.password, account?.password_hash ?? dummyHash);
     if (!matches || !account || account.status !== 'active') return fail('UNAUTHENTICATED');
-    const raw = token();
-    await config.pool.query('INSERT INTO sessions(id,token_hash,user_id,expires_at) VALUES($1,$2,$3,now()+interval \'8 hours\')', [randomUUID(), digest(raw), account.id]);
-    return { body: { ok: true }, cookie: `clinora_session=${raw}; HttpOnly; Path=/; SameSite=Strict; Max-Age=28800${config.secureCookies ? '; Secure' : ''}` };
+    // On an enrolled clinic PC a password sign-in becomes a device session (idle lock, bound to the
+    // device, limited to its clinic), and only that clinic's active members may sign in there.
+    const device = await deviceFromRequest(config.pool, req);
+    if (device && !(await config.pool.query("SELECT 1 FROM memberships WHERE clinic_id=$1 AND user_id=$2 AND status='active'", [device.clinicId, account.id])).rows[0]) return fail('UNAUTHENTICATED');
+    const via: SessionVia = device ? 'device' : 'password';
+    const raw = await createSession(config.pool, account.id, via, device?.id ?? null);
+    return { body: { ok: true }, cookie: sessionCookie(raw, via, config.secureCookies) };
   }
   return transaction(config.pool, async tx => {
     const actor = await actorFor(tx, req);
@@ -146,9 +166,11 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
       // Roles are display hints for navigation only; every route rechecks them in the database.
       const memberships = (await tx.query(`SELECT m.clinic_id id,c.name,m.is_owner "isOwner",m.clinical_access "clinicalAccess",m.patient_scope "patientScope",
           coalesce((SELECT array_agg(r.role ORDER BY r.role) FROM membership_roles r WHERE r.clinic_id=m.clinic_id AND r.user_id=m.user_id),'{}') roles
-        FROM memberships m JOIN clinics c ON c.id=m.clinic_id WHERE m.user_id=$1 AND m.status='active' ORDER BY c.name`, [actor.userId])).rows;
+        FROM memberships m JOIN clinics c ON c.id=m.clinic_id WHERE m.user_id=$1 AND m.status='active' AND ($2::uuid IS NULL OR m.clinic_id=$2) ORDER BY c.name`,
+        [actor.userId, actor.deviceClinicId])).rows;
       return { body: { id: actor.userId, name: actor.name, email: actor.email, login: actor.login, phone: actor.phone, csrf: actor.csrf,
-        mustChangePassword: actor.mustChangePassword, professionalVerification: actor.verification, clinics: memberships } };
+        mustChangePassword: actor.mustChangePassword, professionalVerification: actor.verification, clinics: memberships,
+        session: { via: actor.via, deviceLabel: actor.deviceLabel, idleMinutes: actor.via === 'device' ? DEVICE_IDLE_MINUTES : null } } };
     }
     if (path === '/api/auth/logout' && method === 'POST') {
       await tx.query('DELETE FROM sessions WHERE id=$1', [actor.sessionId]);
@@ -167,6 +189,11 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
     }
     // A temporary password only unlocks changing it. Enforced here, not just in the interface.
     if (actor.mustChangePassword) return fail('PASSWORD_CHANGE_REQUIRED');
+    // A shared-PC session reaches only the device's own clinic.
+    const clinicPart = /^\/api\/clinics\/([^/]+)/.exec(path)?.[1];
+    if (actor.deviceClinicId && clinicPart !== undefined && clinicPart !== actor.deviceClinicId) return fail('NOT_FOUND');
+    const sessionAccess = await sessionAccessRoute(tx, req, config, actor, path, method, jsonBody);
+    if (sessionAccess) return sessionAccess;
     if (path === '/api/invitations/accept' && method === 'POST') {
       const input = parse(AcceptInviteInput, await jsonBody(req));
       const invite = (await tx.query('SELECT * FROM invitations WHERE token_hash=$1 AND email=$2 AND expires_at>now() AND consumed_at IS NULL AND revoked_at IS NULL FOR UPDATE', [digest(input.token), actor.email])).rows[0];

@@ -4,6 +4,9 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { uzCyrl } from '../src/web/i18n/uz-Cyrl.js';
+import { accessUzCyrl } from '../src/web/i18n/access.uz-Cyrl.js';
+import { accessUzLatn } from '../src/web/i18n/access.uz-Latn.js';
+import { accessRu } from '../src/web/i18n/access.ru.js';
 
 // Gate for increment C1: no hardcoded user-visible strings in the web client.
 const VISIBLE_ATTRIBUTES = new Set(['placeholder', 'aria-label', 'title', 'alt', 'label']);
@@ -41,7 +44,23 @@ test('web client has no hardcoded visible strings; everything goes through t()',
 test('uz-Cyrl dictionary entries are non-empty and Cyrillic where they are prose', () => {
   for (const [key, value] of Object.entries(uzCyrl)) {
     assert.ok(value.trim().length > 0, key);
-    if (!['app.brand', 'auth.email', 'app.title'].includes(key) && /\p{L}{3,}/u.test(value)) assert.match(value, /\p{Script=Cyrillic}/u, key);
+    if (!['app.brand', 'auth.email', 'app.title', 'access.me.telegramTitle'].includes(key) && /\p{L}{3,}/u.test(value)) assert.match(value, /\p{Script=Cyrillic}/u, key);
+  }
+});
+
+test('task 004 access strings exist in all three languages with the same keys and placeholders', () => {
+  const keys = Object.keys(accessUzCyrl).sort();
+  const vars = (v: string) => [...v.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort();
+  for (const [locale, dict, script] of [['uz-Latn', accessUzLatn, /\p{Script=Latin}/u], ['ru', accessRu, /\p{Script=Cyrillic}/u]] as const) {
+    assert.deepEqual(Object.keys(dict).sort(), keys, locale);
+    for (const key of keys) {
+      const value = (dict as Record<string, string>)[key]!;
+      assert.ok(value.trim().length > 0, `${locale} ${key}`);
+      assert.deepEqual(vars(value), vars(accessUzCyrl[key as keyof typeof accessUzCyrl]), `${locale} ${key} placeholders`);
+      if (key !== 'access.me.telegramTitle' && /\p{L}{3,}/u.test(value)) assert.match(value, script, `${locale} ${key} script`);
+      if (locale === 'uz-Latn') assert.doesNotMatch(value, /\p{Script=Cyrillic}/u, `${key} has no Cyrillic in Uzbek Latin`);
+    }
+    assert.ok(Object.keys(dict).every(k => k.startsWith('access.')), 'feature keys carry the access. prefix');
   }
 });
 

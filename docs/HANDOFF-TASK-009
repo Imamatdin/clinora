@@ -1,0 +1,5 @@
+Task 009 retrospective handoff — 13 November 2026, Asia/Tashkent; source: merged cashier module.
+Delivered: cash desks/shifts, payments/refunds, discounts/voids, PIN approvals, cash out and printable receipts.
+Money writes are transactional and audited; payment retries bind actor/payload, receipt snapshots remain historical.
+Allocation corrections append signed deltas; reports and payroll consume them. Task 021 separates approval limits and fixes void attribution.
+Evidence: tests/integration/cashier.test.ts and tests/browser/cashier.spec.ts in repository CI; physical printers and deployment remain unverified.

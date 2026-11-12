@@ -41,13 +41,17 @@ export async function openDay(ctx: ClinicContext): Promise<BusinessDayView> {
   return view((await ctx.tx.query(`${SELECT} WHERE d.id=$1`, [id])).rows[0]);
 }
 
-/** Lock the day before reading its ledgers; shift/payment writers take the same lock. */
+/** Read before the day lock; verify the MVCC ledger revision after writers drain. */
 export async function closeDay(ctx: ClinicContext, dayId: string): Promise<BusinessDayView> {
-  const day = (await ctx.tx.query('SELECT * FROM business_days WHERE clinic_id=$1 AND id=$2 FOR UPDATE',[ctx.clinicId,dayId])).rows[0];
+  const day = (await ctx.tx.query('SELECT * FROM business_days WHERE clinic_id=$1 AND id=$2',[ctx.clinicId,dayId])).rows[0];
   if (!day) return fail('NOT_FOUND');
   if (day.status !== 'open') return fail('INVALID_TRANSITION');
   if ((await ctx.tx.query("SELECT 1 FROM cash_shifts WHERE clinic_id=$1 AND business_day_id=$2 AND status='open'",[ctx.clinicId,dayId])).rowCount) return fail('INVALID_TRANSITION');
-  const snapshot=computeReport(await records(ctx),{from:day.business_date,to:day.business_date});
+  const p={from:day.business_date,to:day.business_date};
+  const data=await records(ctx,p,{outstanding:true}),snapshot=computeReport(data,p);
+  const locked=(await ctx.tx.query('SELECT status FROM business_days WHERE clinic_id=$1 AND id=$2 FOR UPDATE',[ctx.clinicId,dayId])).rows[0];
+  const version=(await ctx.tx.query('SELECT version::text FROM report_versions WHERE clinic_id=$1',[ctx.clinicId])).rows[0]?.version??'0';
+  if(locked.status!=='open' || version!==data.version)return fail('INVALID_TRANSITION');
   const updated = (await ctx.tx.query(`UPDATE business_days SET status='closed', closed_by=$3, closed_at=now(), close_snapshot=$4::jsonb
     WHERE clinic_id=$1 AND id=$2 AND status='open' RETURNING id`, [ctx.clinicId, dayId, ctx.actorId, JSON.stringify(snapshot)])).rows[0];
   if (!updated) {

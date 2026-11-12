@@ -4,7 +4,7 @@ import type { Download } from '../../modules/reports/exports.js';
 import { Confirm,Dates,money,saveFile,t,Language,useReportLocale,type Key } from './shared.js';
 type RuleRow={id:string;user_id:string;doctor_share_bp:number;basis:'paid'|'billed';discount_bearer:'clinic'|'doctor'|'proportional';categories:string[];effective_from:string;created_by_name:string};
 type State={doctors:{id:string;display_name:string}[];history:RuleRow[];today:string;ceo:boolean};
-type Earnings={from:string;to:string;period:{id:string;status:string}|null;lines:{charge_line_id:string;user_id:string;doctor:string;rule_id:string;entitlement_uzs:string;from_receipts_uzs:string;clinic_funded_uzs:string}[]};
+type Earnings={from:string;to:string;period:{id:string;status:string}|null;lines:{charge_line_id:string;user_id:string;doctor:string;rule_id:string|null;status?:string;entitlement_uzs:string;from_receipts_uzs:string;clinic_funded_uzs:string}[]};
 const kinds=['consultation','procedure','lab','diagnostic','bed','surgery','medicine','good','caretaker','other'];
 export function Payroll({clinic,request,day,setDirty}:ModuleProps) {
   useReportLocale();
@@ -31,8 +31,8 @@ export function Payroll({clinic,request,day,setDirty}:ModuleProps) {
     <Language/><Dates {...range} onChange={(from,to)=>{setRange({from,to});setResult(null);}} onSubmit={()=>void calculate()} busy={busy}/>
     {busy&&<p role="status">{t('ceo.loading')}</p>}{error&&<p className="ceo-error" role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
     {result&&<section className="ceo-pay-results"><span className="ceo-live">{result.period?t('ceo.final'):t('ceo.draft')}</span><p>{result.from} — {result.to}</p>
-      {groups.size===0?<p className="ceo-empty">{t('ceo.empty')}</p>:[...groups].map(([id,g])=><details className="ceo-pay-doctor" key={id}><summary><span>{g.name}</span><strong>{money(g.earned)} {t('ceo.uzs')}</strong></summary><dl><div><dt>{t('ceo.receipts')}</dt><dd>{money(g.receipts)}</dd></div><div><dt>{t('ceo.funded')}</dt><dd>{money(g.funded)}</dd></div></dl><ul className="ceo-pay-lines">{g.lines.map(l=><li key={l.charge_line_id}><span>{l.charge_line_id}<small>{l.rule_id}</small></span><strong>{money(l.entitlement_uzs)}</strong></li>)}</ul></details>)}
-      {state?.ceo&&<div className="ceo-actions">{!result.period&&<Confirm label={t('ceo.finalize')} text={t('ceo.finalConfirm')} busy={busy} onConfirm={()=>void run(async()=>{setResult(await request<Earnings>(base+'/finalize',{from:result.from,to:result.to}));})}/>}
+      {groups.size===0?<p className="ceo-empty">{t('ceo.empty')}</p>:[...groups].map(([id,g])=><details className="ceo-pay-doctor" key={id}><summary><span>{g.name}</span><strong>{g.lines.some(l=>l.status==='rule_missing')?t('ceo.ruleMissing'):money(g.earned)+' '+t('ceo.uzs')}</strong></summary><dl><div><dt>{t('ceo.receipts')}</dt><dd>{money(g.receipts)}</dd></div><div><dt>{t('ceo.funded')}</dt><dd>{money(g.funded)}</dd></div></dl><ul className="ceo-pay-lines">{g.lines.map(l=><li key={l.charge_line_id}><span>{l.charge_line_id}<small>{l.status==='rule_missing'?t('ceo.ruleMissing'):l.rule_id}</small></span><strong>{money(l.entitlement_uzs)}</strong></li>)}</ul></details>)}
+      {state?.ceo&&<div className="ceo-actions">{!result.period&&<Confirm label={t('ceo.finalize')} text={t('ceo.finalConfirm')} busy={busy} onConfirm={()=>{const missing=[...groups.values()].filter(g=>g.lines.some(l=>l.status==='rule_missing')).map(g=>g.name);if(missing.length){setError(t('ceo.ruleMissing')+': '+missing.join(', '));return;}void run(async()=>{setResult(await request<Earnings>(base+'/finalize',{from:result.from,to:result.to}));});}}/>}
         {(['pdf','xlsx'] as const).map(format=><button key={format} disabled={busy} onClick={()=>void run(async()=>{saveFile(await request<Download>(base+'/export',{from:result.from,to:result.to,format}));})}>{format==='pdf'?t('ceo.pdf'):t('ceo.excel')}</button>)}
       </div>}
     </section>}

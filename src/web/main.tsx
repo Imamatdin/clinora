@@ -194,7 +194,7 @@ function App() {
       {!showMe && clinic && active && active !== 'staff' && <>
         {active !== 'doctor' && <main className="page home" data-role={active}>
           <h1>{t(`home.${active}.title` as UiKey)}</h1><p className="muted">{t(`home.${active}.lead` as UiKey)}</p>
-          {(active === 'ceo' || active === 'administrator') && <DayPanel day={day} busy={busy}
+          {(active === 'ceo' || active === 'administrator') && <DayPanel day={day} busy={busy} compact={active==='ceo'}
             onOpen={() => void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/open`, {}); setNotice(t('day.openedNotice')); } finally { await refreshDay().catch(() => {}); } })}
             onClose={(id, date) => { if (confirm(t('day.closeConfirm', { date }))) void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/${id}/close`, {}); setNotice(t('day.closedNotice')); } finally { await refreshDay().catch(() => {}); } }); }} />}
           <RoleModules key={`${clinic.id}:${active}`} role={active} busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, setDirty, reportDayId }} />

@@ -74,7 +74,7 @@ test('C8: dated split, private doctor earnings, concurrent finalization, immutab
     const call=async(path:string,input?:unknown,status=200)=>{const r=await client.request(base+path,input),v=await r.json();assert.equal(r.status,status,JSON.stringify(v));return v;};
     const rule={userId:f.owner.userId,shareBp:5000,basis:'billed',discountBearer:'proportional',categories:['consultation'],effectiveFrom:date};
     await call('/payroll/rules',rule,201);
-    await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,granted_by) VALUES($1,$2,$3,$4)",[randomUUID(),f.owner.clinicId,f.other.userId,f.owner.userId]);
+    await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,status,granted_by) VALUES($1,$2,$3,'active',$4)",[randomUUID(),f.owner.clinicId,f.other.userId,f.owner.userId]);
     await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'doctor',$3)",[f.owner.clinicId,f.other.userId,f.owner.userId]);
     await call('/payroll/rules',{...rule,userId:f.other.userId,shareBp:4000},201);
     await f.pool.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,performer_user_id,quantity,unit_price_uzs,source,created_by) VALUES($1,$2,$3,$4,$5,1,200000,'registration',$6)`,[randomUUID(),f.owner.clinicId,g.visit,g.service,f.other.userId,f.owner.userId]);

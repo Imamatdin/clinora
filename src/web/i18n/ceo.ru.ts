@@ -1,5 +1,6 @@
 import type { ceo } from './ceo.uz-Cyrl.js';
 export const ceoRu:Record<keyof typeof ceo,string>={
+  'ceo.filters':'Выбрать период и язык',
   'ceo.langCyrl':'Узбекский · кириллица','ceo.langLatn':'Узбекский · латиница','ceo.langRu':'Русский',
   'ceo.title':'Показатели клиники','ceo.eyebrow':'КАБИНЕТ РУКОВОДИТЕЛЯ','ceo.lead':'Точные цифры для решений. Откройте записи за каждым показателем.',
   'ceo.live':'Текущий отчёт','ceo.from':'Начало периода','ceo.to':'Конец периода','ceo.show':'Показать отчёт','ceo.today':'Сегодня','ceo.refresh':'Обновить',

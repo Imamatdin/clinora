@@ -6,3 +6,8 @@ coverage/
 !.env.example
 work/
 outputs/
+
+# Clinic 1C dumps and anything extracted from them may contain real patient data. Never commit.
+*.dt
+*.1cd
+data/private/

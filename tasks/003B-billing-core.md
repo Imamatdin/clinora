@@ -38,7 +38,8 @@ Doctor share
   - doctor bears discount: max(0, floor(value * bp / 10000) - lineDiscount)
   - proportional: floor((value - lineDiscount) * bp / 10000)
 - Paid basis: the billed-basis amount scaled by allocatedPaid / linePayable, floored. A fully paid line gives the billed-basis amount.
-- Clinic share = line amount received minus doctor share. Doctor plus clinic always sums to the money involved, never more.
+- Per line, return three numbers: `doctorFromReceipts`, `clinicShare` and `clinicFundedShare`. Always `doctorFromReceipts + clinicShare = amount received`. The doctor's entitlement is `doctorFromReceipts + clinicFundedShare`. `clinicFundedShare` is above 0 only when `discountBearer = 'clinic'` (the clinic pays the doctor's share of the discounted amount from its own money); it is 0 for 'doctor' and 'proportional'.
+- Paid basis with `payable = 0` (full discount): entitlement is the full billed-basis amount when the clinic bears the discount, otherwise 0.
 
 Bed days
 - Rule: `{ countAdmissionDay: boolean, countDischargeDay: boolean, minimumDays: integer >= 1 }`, dates as `YYYY-MM-DD` already converted to Asia/Tashkent.
@@ -48,7 +49,7 @@ Bed days
 
 - Spec example: 5 bed days at 100,000 + lab 250,000 + ultrasound 150,000 + other 100,000 = 1,000,000 UZS.
 - Spec example: 500,000 service with 100% discount gives payable 0, line kept.
-- Property tests (fast-check): per-line discounts sum to the visit discount; allocations sum to paid; doctor share + clinic share equals amount received on every line; `due >= 0` after any valid sequence of payments and refunds; no result depends on line input order except allocation order.
+- Property tests (fast-check): per-line discounts sum to the visit discount; allocations sum to paid; `doctorFromReceipts + clinicShare` equals amount received on every line; `clinicFundedShare` is 0 unless the clinic bears the discount; `due >= 0` after any valid sequence of payments and refunds; no result depends on line input order except allocation order.
 - Typecheck clean; the new tests run in `npm run test:unit` on Linux and Windows CI.
 
 Return a handoff of at most 60 lines with the PR link and CI run link.

@@ -12,7 +12,7 @@ type Draft = { draft: { revision: number; status: string }; approval: { approved
   fields: FieldView[]; segments: Segment[]; captures: Capture[]; transcripts: { simulated: boolean }[];
   providers: { stt: { name: string; simulated: boolean }; extractor: { name: string; simulated: boolean } } };
 type Lab = { code: string; uzCyrl: string; uzLatn: string; ru: string };
-type Config = { labs: Lab[]; stt: { simulated: boolean; name: string }; extractor: { simulated: boolean; name: string }; telegram: { available: boolean } };
+type Config = { labs: Lab[]; stt: { simulated: boolean; name: string }; extractor: { simulated: boolean; name: string }; telegram: { available: boolean; linked: boolean } };
 
 const CATEGORY_OPTIONS: Record<string, string[]> = {
   complaints: ['reported'], hpi: ['reported'], pastHistory: ['history', 'reported'], examination: ['observed', 'measured', 'not_examined'],
@@ -37,7 +37,6 @@ export function AssistantPanel({ clinicId, patientId, encounterId, request, onAp
   const [pending, setPending] = useState<Capture[]>([]), [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [error, setError] = useState(''), [notice, setNotice] = useState(''), [busy, setBusy] = useState(false), [consent, setConsent] = useState(false);
   const [editing, setEditing] = useState<string | null>(null), [sourceOf, setSourceOf] = useState<string | null>(null);
-  const [link, setLink] = useState<{ status: string; telegramName: string | null; url?: string } | null>(null);
   const recorder = useRef<{ rec: MediaRecorder; stream: MediaStream; timer: number } | null>(null);
   const alive = useRef(true);
   // Raw audio uploads bypass the JSON client, so the panel fetches the session's CSRF token itself.
@@ -53,7 +52,7 @@ export function AssistantPanel({ clinicId, patientId, encounterId, request, onAp
 
   useEffect(() => {
     alive.current = true; setDraft(null); setPhase({ kind: 'idle' }); setEditing(null); setError(''); setNotice('');
-    Promise.all([request<Config>(`${root}/config`).then(setConfig), refresh(), request<{ status: string; telegramName: string | null }>(`${root}/telegram/link`).then(setLink)]).catch(show);
+    Promise.all([request<Config>(`${root}/config`).then(setConfig), refresh()]).catch(show);
     return () => { alive.current = false; stopTracks(); };
   }, [base]);
 
@@ -203,15 +202,9 @@ export function AssistantPanel({ clinicId, patientId, encounterId, request, onAp
       {draft.segments.length > 0 && <details className="transcript"><summary>{t('transcript', { count: draft.segments.length })}</summary>
         {draft.segments.map(s => <p key={s.id}><small>{t(`speaker_${s.speaker}` as AKey)}</small> {s.text}</p>)}</details>}
 
+      {/* Linking is task 004's staff Telegram invite ("PIN and Telegram" or the administrator); one link serves sign-in and voice notes. */}
       <details className="telegram-link"><summary>{t('telegramLink')}</summary>
-        {!config?.telegram.available ? <p className="fine">{t('telegramUnavailable')}</p> : link?.status === 'active' ? <>
-          <p>{t('telegramLinked', { name: link.telegramName ?? '' })}</p>
-          <button type="button" disabled={busy} onClick={() => void run(async () => { setLink(await request(`${root}/telegram/link/revoke`, {})); })}>{t('telegramUnlink')}</button></> : <>
-          <p className="fine">{t('telegramLinkLead')}</p>
-          <button type="button" disabled={busy} onClick={() => void run(async () => { const r = await request<{ link: string }>(`${root}/telegram/link-code`, {}); setLink({ status: 'none', telegramName: null, url: r.link }); })}>{t('telegramCreate')}</button>
-          {link?.url && <p><a href={link.url} target="_blank" rel="noopener">{link.url}</a></p>}
-          <button type="button" disabled={busy} onClick={() => void run(async () => { const s = await request<{ status: string; telegramName: string | null }>(`${root}/telegram/link`); if (s.status === 'pending' && confirm(t('telegramConfirm', { name: s.telegramName ?? '' }))) { await request(`${root}/telegram/link/confirm`, {}); setLink({ ...s, status: 'active' }); } else setLink(s); })}>{t('telegramConfirm', { name: link?.telegramName ?? '' })}</button>
-        </>}
+        <p className="fine">{!config?.telegram.available ? t('telegramUnavailable') : config.telegram.linked ? t('telegramLinkedNote') : t('telegramInviteHint')}</p>
       </details>
     </>}
   </section>;

@@ -21,7 +21,7 @@ registerRoutes('assistant', [
     await svc.doctorAccess(ctx.tx, me(ctx), ctx.clinicId, null);
     const p = assistantProviders();
     return { body: { formId: FORM_ID, labs: LABS, stt: { name: p.stt.name, simulated: p.stt.simulated },
-      extractor: { name: p.extractor.name, simulated: p.extractor.simulated }, telegram: { available: !!(p.telegram && p.webhookSecret) } } };
+      extractor: { name: p.extractor.name, simulated: p.extractor.simulated }, telegram: { available: !!p.telegram, linked: await svc.telegramLinked(ctx.tx, me(ctx)) } } };
   } },
   { method: 'GET', pattern: new RegExp(`^${ENC}$`), roles: DOCTOR,
     handle: async (ctx, [patient, encounter]) => ({ body: await svc.draftView(ctx.tx, me(ctx), ctx.clinicId, patient!, encounter!, assistantProviders()) }) },
@@ -33,12 +33,5 @@ registerRoutes('assistant', [
       ({ body: await svc.fieldAction(ctx.tx, me(ctx), ctx.clinicId, patient!, encounter!, key, parse(svc.FieldActionInput, await body())) }) })),
   { method: 'GET', pattern: /^assistant\/captures\/pending$/, roles: DOCTOR, handle: async ctx => ({ body: await svc.pendingTelegram(ctx.tx, me(ctx), ctx.clinicId) }) },
   { method: 'POST', pattern: new RegExp(`^assistant/captures/${uuid}/discard$`), roles: DOCTOR,
-    handle: async (ctx, [id], body) => { parse(Empty, await body()); return { body: await svc.discardCapture(ctx.tx, me(ctx), ctx.clinicId, id!) }; } },
-  { method: 'POST', pattern: /^assistant\/telegram\/link-code$/, roles: DOCTOR,
-    handle: async (ctx, _p, body) => { parse(Empty, await body()); return { status: 201, body: await svc.createLinkCode(ctx.tx, me(ctx), ctx.clinicId, assistantProviders()) }; } },
-  { method: 'GET', pattern: /^assistant\/telegram\/link$/, roles: DOCTOR, handle: async ctx => ({ body: await svc.linkStatus(ctx.tx, me(ctx), ctx.clinicId) }) },
-  { method: 'POST', pattern: /^assistant\/telegram\/link\/confirm$/, roles: DOCTOR,
-    handle: async (ctx, _p, body) => { parse(Empty, await body()); return { body: await svc.confirmLink(ctx.tx, me(ctx), ctx.clinicId) }; } },
-  { method: 'POST', pattern: /^assistant\/telegram\/link\/revoke$/, roles: DOCTOR,
-    handle: async (ctx, _p, body) => { parse(Empty, await body()); return { body: await svc.revokeLink(ctx.tx, me(ctx), ctx.clinicId) }; } }
+    handle: async (ctx, [id], body) => { parse(Empty, await body()); return { body: await svc.discardCapture(ctx.tx, me(ctx), ctx.clinicId, id!) }; } }
 ]);

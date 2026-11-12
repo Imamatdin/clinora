@@ -21,3 +21,7 @@ tasks add their own `0NN_<task>_<what>.sql`; never edit an applied migration.
 
 Task 005 adds `016_catalog_import.sql`: is_active on districts/mahallas/room_types, 1C-code unique indexes for re-import,
 `catalog_doctors` (1C doctors, linked to staff by an administrator) and staged import batches (catalog rows only).
+
+Task 015 adds `019_assistant_telegram_unify.sql`: confirmed 003C assistant Telegram links move into task 004's
+`telegram_links` (an existing 004 link for the same account or Telegram user wins; blocked accounts and pending
+links are not carried over), then the 003C link, link-code and update tables are dropped.

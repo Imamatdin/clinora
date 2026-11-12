@@ -8,6 +8,7 @@ import { MANAGERS, ROLES } from '../modules/identity/roles.js';
 import { createInvite, manageableMember } from '../modules/telegram/links.js';
 import { verifyInitData, INIT_DATA_MAX_AGE_SECONDS } from '../modules/telegram/init-data.js';
 import { handleUpdate, webhookSecretMatches } from '../modules/telegram/webhook.js';
+import { receiveTelegramVoice } from '../modules/assistant/service.js';
 import type { TelegramConfig } from '../modules/telegram/api.js';
 import { activeDevice, checkPin, enrollDevice, EnrollInput, pickerStaff, PinInput, setOwnPin, UnlockInput, type ActiveDevice } from '../modules/devices/actions.js';
 import { transaction, type Tx } from './database.js';
@@ -65,7 +66,8 @@ export async function webhookRoute(req: IncomingMessage, config: AccessConfig, p
   if (!webhookSecretMatches(req.headers['x-telegram-bot-api-secret-token'], config.telegram.webhookSecret)) return fail('UNAUTHENTICATED');
   let body: unknown;
   try { body = await readBody(req); } catch { return { body: { ok: true } }; }
-  await handleUpdate(config.pool, config.telegram, `${config.origin}/`, body);
+  // One webhook for the clinic bot: sign-in links here, voice notes to the doctor assistant inbox (task 015).
+  await handleUpdate(config.pool, config.telegram, `${config.origin}/`, body, receiveTelegramVoice);
   return { body: { ok: true } };
 }
 

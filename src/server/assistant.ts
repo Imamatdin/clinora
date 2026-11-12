@@ -13,8 +13,9 @@ import { same } from './security.js';
 /**
  * Transport-level assistant routes (task 003C) that the JSON route registry (server/routes/assistant.ts)
  * cannot express: raw audio chunk upload, the PDF response, approval (needs the verified session as the
- * policy Principal), routes that start a background job after their transaction commits, and the
- * assistant bot's Telegram webhook. Same session, origin and CSRF rules as every other route.
+ * policy Principal) and routes that start a background job after their transaction commits. Telegram voice
+ * notes arrive through the clinic bot's single webhook (server/access.ts, task 015). Same session, origin and
+ * CSRF rules as every other route.
  */
 const providersOf = (_config?: unknown) => assistantProviders();
 const fail = (code: ErrorCode): never => { throw new DomainError(code); };
@@ -62,7 +63,6 @@ const ROUTES: Route[] = [
 const CLINIC_PATH = /^\/api\/clinics\/([0-9a-fA-F-]{36})\/assistant\/(.+)$/;
 /** True only for the routes this handler owns; other assistant routes go through the clinic route registry. */
 export function isAssistantPath(path: string, method = 'GET'): boolean {
-  if (path === '/api/assistant/telegram/webhook') return method === 'POST';
   const m = CLINIC_PATH.exec(path);
   return !!m && ROUTES.some(r => r.method === method && r.pattern.test(m[2]!));
 }
@@ -75,12 +75,6 @@ export async function handleAssistant(req: IncomingMessage, res: ServerResponse,
   const failWith = (code: ErrorCode) => send(ERROR_STATUS[code], { error: { code, message: code, requestId } });
   try {
     const providers = providersOf(config);
-    if (path === '/api/assistant/telegram/webhook') {
-      if (!providers.webhookSecret) { failWith('NOT_FOUND'); return true; }
-      if (!same(String(req.headers['x-telegram-bot-api-secret-token'] ?? ''), providers.webhookSecret)) { failWith('UNAUTHENTICATED'); return true; }
-      await svc.handleUpdate({ pool: config.pool, providers, origin: config.origin }, await json(req, 64 * 1024));
-      send(200, { ok: true }); return true;
-    }
     const [, clinic, rest] = CLINIC_PATH.exec(path)!;
     if (!Id.safeParse(clinic).success) fail('NOT_FOUND');
     const candidates = ROUTES.filter(r => r.pattern.test(rest!));

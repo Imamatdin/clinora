@@ -1,26 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { httpFixture, patientInput, encounterInput, key } from './fixture.js';
-import { simulatedExtractor, simulatedStt, type AssistantProviders, type NoteExtractor, type SpeechToText, type TelegramBot } from '../../src/modules/assistant/providers.js';
-import { BOT_TEXT, drainJobs } from '../../src/modules/assistant/service.js';
+import { readdir, readFile } from 'node:fs/promises';
+import { makePool, migrate } from '../../src/server/database.js';
+import { provisionOwner } from '../../src/server/provision.js';
+import { httpFixture, patientInput, encounterInput, key, TEST_BOT } from './fixture.js';
+import { simulatedExtractor, simulatedStt, type AssistantProviders, type NoteExtractor, type SpeechToText, type TelegramVoice } from '../../src/modules/assistant/providers.js';
+import { drainJobs } from '../../src/modules/assistant/service.js';
+import { BOT_TEXT, botText } from '../../src/modules/telegram/messages.js';
 import { setAssistantProviders } from '../../src/modules/assistant/runtime.js';
 import { registeredRoutes } from '../../src/server/routes/index.js';
 import { isAssistantPath } from '../../src/server/assistant.js';
 
 type Fixture = Awaited<ReturnType<typeof httpFixture>>;
 type Client = ReturnType<Fixture['client']>;
-const SECRET = 'synthetic-webhook-secret-0123456789';
-
-function fakeBot() {
-  const sent: { chatId: number; text: string; button?: { text: string; url: string } }[] = [];
-  const bot: TelegramBot = { username: 'clinora_synthetic_bot',
-    async sendMessage(chatId, text, button) { sent.push({ chatId, text, ...(button ? { button } : {}) }); },
-    async downloadVoice() { return { data: Buffer.concat([Buffer.from('OggS'), Buffer.alloc(64, 1)]), mimeType: 'audio/ogg' }; } };
-  return { bot, sent };
-}
+const fakeVoice = (): TelegramVoice => ({ async downloadVoice() { return { data: Buffer.concat([Buffer.from('OggS'), Buffer.alloc(64, 1)]), mimeType: 'audio/ogg' }; } });
 function providers(over: Partial<AssistantProviders> = {}): AssistantProviders {
-  return { stt: simulatedStt(), extractor: simulatedExtractor(), telegram: fakeBot().bot, webhookSecret: SECRET, ...over };
+  return { stt: simulatedStt(), extractor: simulatedExtractor(), telegram: fakeVoice(), ...over };
 }
 async function signIn(f: Fixture, identifier: string, password: string): Promise<Client> {
   const client = f.client();
@@ -42,7 +38,7 @@ async function setup(over: Partial<AssistantProviders> = {}) {
   const doctor = async (login: string) => {
     const r = await owner.request(`/api/clinics/${C}/staff`, { fullName: 'Синтетик Шифокор ' + login, login, phone: null, roles: ['doctor'] });
     assert.equal(r.status, 201); const s = await r.json();
-    return { client: await signIn(f, login, s.temporaryPassword), userId: s.staff.userId as string };
+    return { client: await signIn(f, login, s.temporaryPassword), userId: s.staff.userId as string, login };
   };
   const A = await doctor('doctor.a'), B = await doctor('doctor.b');
   const visit = async (c: Client) => {
@@ -214,31 +210,47 @@ test('proposals citing another encounter\'s segments or asserting unsupported no
   assert.deepEqual(reasons, ['complaints:foreign_evidence', 'diagnosis:patient_only_evidence', 'examination:unsupported_normal', 'role:unknown_field']);
 });
 
-test('Telegram: secret-checked webhook, confirmed linking, deduplicated voice, confirmed attach, no patient data in bot messages', async t => {
-  const { bot, sent } = fakeBot();
-  const s = await setup({ telegram: bot }); t.after(() => s.f.close());
-  const { A, B, A1, B1, C, f } = s;
-  const hook = (body: unknown, secret = SECRET) => fetch(f.config.origin + '/api/assistant/telegram/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Telegram-Bot-Api-Secret-Token': secret }, body: JSON.stringify(body) });
-  assert.equal((await hook({ update_id: 1 }, 'wrong-secret-wrong-secret-wrong')).status, 401);
-  assert.equal(Number((await f.pool.query('SELECT count(*) n FROM assistant_telegram_updates')).rows[0].n), 0, 'forged webhook does nothing');
-  const from = { id: 777001, first_name: 'Synthetic' }, chat = { id: 777001, type: 'private' };
-  const voice = (update: number, message: number) => hook({ update_id: update, message: { message_id: message, chat, from, voice: { file_id: 'synthetic-file-' + message, duration: 20 } } });
+// Task 015: voice notes reach the assistant only through task 004's clinic bot, its single webhook and its links.
+test('Telegram: one webhook and one link; deduplicated voice, confirmed attach, blocked or unlinked staff rejected, no patient data in bot messages', async t => {
+  const s = await setup(); t.after(() => s.f.close());
+  const { A, B, A1, B1, C, f, owner } = s;
+  let updateId = 0;
+  const hook = (body: unknown, secret = TEST_BOT.webhookSecret) => fetch(f.config.origin + '/api/telegram/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Telegram-Bot-Api-Secret-Token': secret }, body: JSON.stringify(body) });
+  const tg = 777001, from = { id: tg, first_name: 'Synthetic', is_bot: false }, chat = { id: tg, type: 'private' };
+  const voice = (update: number, message: number) => hook({ update_id: update, message: { message_id: message, date: 1, chat, from, voice: { file_id: 'synthetic-file-' + message, duration: 20 } } });
+  const sent = () => f.telegramApi.calls.filter(c => c.method === 'sendMessage').map(c => c.payload as { chat_id: number; text: string });
+  const last = () => sent().at(-1)!.text;
+  const captures = async () => Number((await f.pool.query("SELECT count(*) n FROM assistant_captures WHERE source='telegram'")).rows[0].n);
+  const notice = (key: keyof typeof BOT_TEXT['uz-Cyrl']) => botText('uz-Cyrl', key);
+
+  assert.equal((await hook({ update_id: 1 }, 'wrong-secret-wrong-secret-wrong-secret')).status, 401);
+  assert.equal(Number((await f.pool.query('SELECT count(*) n FROM telegram_updates')).rows[0].n), 0, 'forged webhook does nothing');
+  const oldHook = await fetch(f.config.origin + '/api/assistant/telegram/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Telegram-Bot-Api-Secret-Token': TEST_BOT.webhookSecret }, body: JSON.stringify({ update_id: 2 }) });
+  assert.notEqual(oldHook.status, 200, 'the 003C webhook is gone');
+  assert.equal((await A.client.request(`/api/clinics/${C}/assistant/telegram/link-code`, {})).status, 404, 'the 003C linking routes are gone');
+  const tables = (await f.pool.query("SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name LIKE '%telegram%' ORDER BY 1")).rows.map(r => r.table_name);
+  assert.deepEqual(tables, ['telegram_init_data_uses', 'telegram_invites', 'telegram_links', 'telegram_updates'], 'one link table and one update log');
 
   assert.equal((await voice(10, 100)).status, 200);
-  assert.equal(sent.at(-1)!.text, BOT_TEXT.notLinked, 'unlinked Telegram user gets no access');
-  const link = await (await A.client.request(`/api/clinics/${C}/assistant/telegram/link-code`, {})).json();
-  const code = new URL(link.link).searchParams.get('start')!;
-  assert.equal((await hook({ update_id: 11, message: { message_id: 101, chat, from, text: '/start ' + code } })).status, 200);
-  assert.equal((await (await A.client.request(`/api/clinics/${C}/assistant/telegram/link`)).json()).status, 'pending', 'link waits for confirmation in the app');
-  // The same code cannot link a second Telegram identity.
-  await hook({ update_id: 12, message: { message_id: 1, chat: { id: 888, type: 'private' }, from: { id: 888 }, text: '/start ' + code } });
-  assert.equal(sent.at(-1)!.text, BOT_TEXT.linkInvalid);
-  assert.equal((await B.client.request(`/api/clinics/${C}/assistant/telegram/link/confirm`, {})).status, 409, 'B cannot confirm A\'s link');
-  assert.equal((await A.client.request(`/api/clinics/${C}/assistant/telegram/link/confirm`, {})).status, 200);
+  assert.equal(last(), notice('notLinked'), 'unlinked Telegram user gets the standard notice');
+  assert.equal(await captures(), 0, 'nothing stored for an unlinked sender');
 
+  // Task 004's invite: the owner invites doctor A, A confirms in Telegram.
+  const inv = await (await owner.request(`/api/clinics/${C}/staff/${A.userId}/telegram-invite`, {})).json() as { link: string };
+  const token = inv.link.split('start=')[1]!;
+  await hook({ update_id: ++updateId + 10, message: { message_id: 101, date: 1, chat, from, text: '/start ' + token } });
+  await hook({ update_id: ++updateId + 10, callback_query: { id: 'cb1', data: 'link:' + token, from, message: { message_id: 102, date: 1, chat } } });
+  assert.equal(last(), notice('linked'));
+  const cfg = await (await A.client.request(`/api/clinics/${C}/assistant/config`)).json();
+  assert.deepEqual(cfg.telegram, { available: true, linked: true }, 'panel sees the 004 link');
+  assert.deepEqual((await (await B.client.request(`/api/clinics/${C}/assistant/config`)).json()).telegram, { available: true, linked: false });
+
+  const before = sent().length;
   assert.equal((await voice(20, 200)).status, 200);
+  assert.equal(last(), notice('voiceReceived'));
   assert.equal((await voice(20, 200)).status, 200, 'redelivered update');
   assert.equal((await voice(21, 200)).status, 200, 'same message, new update id');
+  assert.equal(sent().length, before + 1, 'one reply for repeated deliveries');
   const pending = await (await A.client.request(`/api/clinics/${C}/assistant/captures/pending`)).json();
   assert.equal(pending.length, 1, 'one capture for repeated updates');
   assert.deepEqual(await (await B.client.request(`/api/clinics/${C}/assistant/captures/pending`)).json(), []);
@@ -254,16 +266,77 @@ test('Telegram: secret-checked webhook, confirmed linking, deduplicated voice, c
   assert.equal(Number((await f.pool.query('SELECT count(*) n FROM assistant_transcripts WHERE capture_id=$1', [capId])).rows[0].n), 1);
   assert.equal((await view(A.client, A1.base)).transcripts.length, 1);
 
+  // Too long: refused before anything is stored.
+  await hook({ update_id: 40, message: { message_id: 400, date: 1, chat, from, voice: { file_id: 'synthetic-long', duration: 16 * 60 } } });
+  assert.equal(last(), notice('voiceTooLong'));
+  // A linked member without the doctor role is told the assistant is for doctors.
+  await f.pool.query("DELETE FROM membership_roles WHERE user_id=$1 AND role='doctor'", [A.userId]);
+  await voice(41, 401);
+  assert.equal(last(), notice('voiceNotDoctor'));
+  await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'doctor',$3)", [C, A.userId, f.owner.userId]);
+  // Blocking the staff member cuts voice capture at once, through the same link.
+  assert.equal((await owner.request(`/api/clinics/${C}/staff/${A.userId}/status`, { status: 'blocked' })).status, 200);
+  await voice(42, 402);
+  assert.equal(last(), notice('notLinked'), 'blocked staff get the standard notice');
+  assert.equal((await owner.request(`/api/clinics/${C}/staff/${A.userId}/status`, { status: 'active' })).status, 200);
+  await voice(43, 403);
+  assert.equal(last(), notice('voiceReceived'), 'unblocked staff are accepted again');
+  // Unlinking through task 004 ends it too.
+  assert.equal((await owner.request(`/api/clinics/${C}/staff/${A.userId}/telegram-unlink`, {})).status, 200);
+  await voice(44, 404);
+  assert.equal(last(), notice('notLinked'));
+  assert.equal(await captures(), 2, 'only accepted voice notes were stored');
+
   const patient = (await f.pool.query('SELECT display_name,id FROM patients WHERE id=$1', [A1.patientId])).rows[0];
-  for (const m of sent) {
-    assert.ok(Object.values(BOT_TEXT).includes(m.text as never), 'bot text is a fixed notice');
+  const fixed = Object.values(BOT_TEXT).flatMap(Object.values);
+  for (const m of sent()) {
+    assert.ok(fixed.includes(m.text) || m.text.startsWith(notice('confirmQuestion').slice(0, 4)), 'bot text is a fixed notice');
     const raw = JSON.stringify(m);
     for (const forbidden of [patient.display_name, patient.id, A1.encounterId, 'Fictional']) assert.equal(raw.includes(forbidden), false);
   }
-  // Blocking the doctor's role stops new voice captures.
-  await f.pool.query("DELETE FROM membership_roles WHERE user_id=$1 AND role='doctor'", [A.userId]);
-  await voice(30, 300);
-  assert.equal(sent.at(-1)!.text, BOT_TEXT.notLinked);
+});
+
+test('migration 019 moves confirmed 003C links into task 004 links without overriding them, then drops the 003C tables', async t => {
+  const url = process.env.TEST_DATABASE_URL!;
+  const schema = 'clinora_test_' + randomUUID().replaceAll('-', '');
+  const admin = makePool(url); await admin.query(`CREATE SCHEMA "${schema}"`);
+  const pool = makePool(url, schema);
+  t.after(async () => { await pool.end(); await admin.query(`DROP SCHEMA "${schema}" CASCADE`); await admin.end(); });
+  // Bring the schema to the state before task 015, recording each file so migrate() later applies only 019 onwards.
+  await pool.query('CREATE TABLE schema_migrations (name text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())');
+  for (const name of (await readdir('db/migrations')).filter(n => /^\d+.*\.sql$/.test(n) && n < '019').sort()) {
+    const sql = await readFile('db/migrations/' + name, 'utf8');
+    await pool.query(sql);
+    await pool.query('INSERT INTO schema_migrations(name,checksum) VALUES($1,$2)', [name, createHash('sha256').update(sql).digest('hex')]);
+  }
+  const owner = await provisionOwner(pool, { email: 'owner@example.test', password: 'Synthetic-' + randomUUID(), name: 'Synthetic Owner', clinic: 'Synthetic Clinic', clinicalAccess: true });
+  const C = owner.clinicId;
+  const person = async (login: string, status = 'active') => {
+    const id = randomUUID();
+    await pool.query("INSERT INTO accounts(id,login,display_name,password_hash,status,managed_by_clinic_id) VALUES($1,$2,$3,'x',$4,$5)", [id, login, 'Синтетик ' + login, status, C]);
+    await pool.query("INSERT INTO memberships(id,clinic_id,user_id,status,granted_by) VALUES($1,$2,$3,'active',$4)", [randomUUID(), C, id, owner.userId]);
+    return id;
+  };
+  const [moved, pendingOnly, has004, tgTaken, blocked] = [await person('moved'), await person('pending'), await person('has004'), await person('taken'), await person('blocked', 'blocked')];
+  const link003 = async (user: string, tgId: number, status: string) => {
+    const code = randomUUID();
+    await pool.query("INSERT INTO assistant_telegram_link_codes(id,clinic_id,user_id,code_hash,expires_at) VALUES($1,$2,$3,$4,now())", [code, C, user, createHash('sha256').update(code).digest('hex')]);
+    await pool.query('INSERT INTO assistant_telegram_links(id,clinic_id,user_id,telegram_user_id,telegram_chat_id,code_id,status,confirmed_at) VALUES($1,$2,$3,$4,$4,$5,$6,$7)',
+      [randomUUID(), C, user, tgId, code, status, status === 'active' ? new Date() : null]);
+  };
+  await pool.query('INSERT INTO telegram_links(account_id,telegram_user_id,clinic_id) VALUES($1,1001,$3),($2,1004,$3)', [has004, owner.userId, C]);
+  await link003(moved, 2001, 'active');
+  await link003(pendingOnly, 2002, 'pending');
+  await link003(has004, 2003, 'active');     // account already linked through 004: 004 wins
+  await link003(tgTaken, 1004, 'active');    // Telegram user already linked to another account: 004 wins
+  await link003(blocked, 2005, 'active');    // blocked account: not carried over
+  await pool.query('INSERT INTO assistant_telegram_updates(update_id) VALUES(1)');
+  await migrate(pool);
+  const links = Object.fromEntries((await pool.query('SELECT account_id,telegram_user_id FROM telegram_links')).rows.map(r => [r.account_id, Number(r.telegram_user_id)]));
+  assert.deepEqual(links, { [has004]: 1001, [owner.userId]: 1004, [moved]: 2001 });
+  const left = (await pool.query("SELECT table_name FROM information_schema.tables WHERE table_schema=$1 AND table_name LIKE 'assistant_telegram%'", [schema])).rows;
+  assert.deepEqual(left, [], '003C link, code and update tables dropped');
+  assert.ok(pendingOnly && tgTaken && blocked);
 });
 
 test('revocation or discard while the provider runs publishes nothing', async t => {
@@ -293,14 +366,14 @@ test('assistant routes: unauthenticated 401, non-doctor 403, other clinic 404, C
   const anon = f.client();
   assert.equal((await anon.request(A1.base)).status, 401);
   assert.equal((await cashier.request(A1.base)).status, 403);
-  assert.equal((await cashier.request(`/api/clinics/${C}/assistant/telegram/link-code`, {})).status, 403);
+  assert.equal((await cashier.request(`/api/clinics/${C}/assistant/config`)).status, 403);
   const otherOwner = await signIn(f, 'other@example.test', f.password);
   assert.equal((await otherOwner.request(A1.base)).status, 404);
   const noCsrf = await fetch(f.config.origin + A1.base + '/simulated-capture', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: f.config.origin, Cookie: (s.A.client as unknown as { cookie: string }).cookie }, body: JSON.stringify({ clientKey: key() }) });
   assert.equal(noCsrf.status, 403);
   // JSON routes sit on the shared registry; transport routes (upload, PDF, approve, job start) on the assistant handler. Both enforce the doctor role.
   const assistantRoutes = registeredRoutes().filter(r => r.feature === 'assistant');
-  assert.ok(assistantRoutes.length >= 15 && assistantRoutes.every(r => r.roles.join() === 'doctor'));
+  assert.ok(assistantRoutes.length >= 13 && assistantRoutes.every(r => r.roles.join() === 'doctor'));
   assert.equal(isAssistantPath(`/api/clinics/${C}/assistant/config`, 'GET'), false);
   assert.equal(isAssistantPath(`${A1.base}/approve`, 'POST'), true);
   assert.equal((await cashier.request(`${A1.base}/approve`, { expectedDraftRevision: 0, fieldRevisions: {} })).status, 403);

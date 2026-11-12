@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import type { Note, PatientView, VisitView } from '../contracts/notebook.js';
 import { sortVisits } from '../contracts/timeline.js';
 import { ApiFailure, type Request } from './api.js';
@@ -16,8 +16,10 @@ function visitDate(v: VisitView) {
   return `${new Intl.DateTimeFormat('uz-Cyrl', { dateStyle: 'medium', timeStyle: 'short', timeZone: o.timezone }).format(new Date(o.at))} · ${o.timezone}`;
 }
 
-export function Notebook({ clinic, request, dirty, setDirty, guard }: {
-  clinic: NotebookClinic; request: Request; dirty: boolean; setDirty: (d: boolean) => void; guard: (action: () => void) => void
+export function Notebook({ clinic, request, dirty, setDirty, guard, visitExtra }: {
+  clinic: NotebookClinic; request: Request; dirty: boolean; setDirty: (d: boolean) => void; guard: (action: () => void) => void;
+  /** Task 003C: the doctor assistant panel for the open encounter. */
+  visitExtra?: (patientId: string, encounterId: string) => ReactNode
 }) {
   const [patients, setPatients] = useState<PatientView[]>([]), [search, setSearch] = useState('');
   const [patient, setPatient] = useState<PatientView | null>(null), [visits, setVisits] = useState<VisitView[]>([]), [visit, setVisit] = useState<VisitView | null>(null);
@@ -104,6 +106,7 @@ export function Notebook({ clinic, request, dirty, setDirty, guard }: {
           </form></> :
         visit ? <><div className="section-heading"><div><p className="eyebrow">{t('notebook.noteEyebrow')}</p><h2>{visitDate(visit)}</h2></div><span className="draft-tag">{t('notebook.unapproved')}</span></div>
           <p className="fine">{visit.encounter.location.label} · {visit.encounter.specialty} · {visit.clinicianName}</p>
+          {visitExtra?.(patient.id, visit.encounter.id)}
           <form onSubmit={save}><label>{t('notebook.template')}<input value={template} required maxLength={100} disabled={busy} onChange={e => { setTemplate(e.target.value); setDirty(true); setNotice(''); }} /></label>
             {(Object.keys(empty) as (keyof Note)[]).map(key => <label key={key}>{fieldLabel(key)}<textarea id={`note-${key}`} aria-label={fieldLabel(key)} value={note[key]} maxLength={16000} rows={key === 'reported' ? 4 : 3} disabled={busy} placeholder={t('notebook.notRecorded')} onChange={e => { const value = e.target.value; setNote(old => ({ ...old, [key]: value })); setDirty(true); setNotice(''); }} /></label>)}
             <div className="savebar"><p role="status">{busy ? t('notebook.saving') : dirty ? t('notebook.unsaved') : visit.revision ? t('notebook.savedRevision', { revision: visit.revision }) : t('notebook.emptyNote')}</p><button className="primary" disabled={busy || (!dirty && visit.revision > 0)}>{busy ? t('notebook.saving') : t('notebook.saveDraft')}</button></div>

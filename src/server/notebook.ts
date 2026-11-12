@@ -32,7 +32,7 @@ const jsonBody = async (req: IncomingMessage): Promise<unknown> => {
 const audit = (tx: Tx, actor: string, clinic: string | null, action: string, resource: string) =>
   tx.query('INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,$4,$5)', [randomUUID(), actor, clinic, action, resource]);
 
-async function actorFor(tx: Tx, req: IncomingMessage): Promise<Actor> {
+export async function actorFor(tx: Tx, req: IncomingMessage): Promise<Actor> {
   // No bearer fallback: an explicit unsupported bearer cannot override browser identity.
   if (req.headers.authorization) return fail('UNAUTHENTICATED');
   const raw = readCookie(req, 'clinora_session') ?? '';

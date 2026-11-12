@@ -96,7 +96,7 @@ export async function dashboard(c: ClinicContext,p: Period) {
 }
 export async function dayReport(c: ClinicContext,id: string) {
   const ctx=await requireRole(c.tx,c.actorId,c.clinicId,['ceo','administrator','cashier']);
-  const day=(await c.tx.query('SELECT * FROM business_days WHERE clinic_id=$1 AND id=$2',[c.clinicId,id])).rows[0];
+  const day=(await c.tx.query('SELECT id,business_date,status FROM business_days WHERE clinic_id=$1 AND id=$2',[c.clinicId,id])).rows[0];
   if (!day) throw new DomainError('NOT_FOUND');
   const p={from:day.business_date,to:day.business_date};
   if(!ctx.roles.some(r=>r==='ceo'||r==='administrator')) {
@@ -112,6 +112,9 @@ export async function dayReport(c: ClinicContext,id: string) {
     const total=(await c.tx.query(`SELECT coalesce(sum(amount_uzs) FILTER(WHERE kind='payment'),0)::text total FROM payments WHERE clinic_id=$1 AND business_day_id=$2`,[c.clinicId,id])).rows[0].total;
     return {...p,clinic:(await c.tx.query('SELECT name FROM clinics WHERE id=$1',[c.clinicId])).rows[0].name,generatedAt:new Date().toISOString(),snapshot:day.status==='closed',totals:{collected:total},details:{},doctors:[],departments:[],sources:[],cashShifts} as Report;
   }
-  if (day.status==='closed' && day.close_snapshot?.totals) return {...day.close_snapshot,snapshot:true} as Report;
+  if(day.status==='closed'){
+    const snapshot=(await c.tx.query('SELECT close_snapshot FROM business_days WHERE clinic_id=$1 AND id=$2',[c.clinicId,id])).rows[0]?.close_snapshot;
+    if(snapshot?.totals)return {...snapshot,snapshot:true} as Report;
+  }
   return computeReport(await records(c,p,{outstanding:true}),p);
 }

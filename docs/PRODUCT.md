@@ -63,6 +63,16 @@ The assistant turns speech or text into proposed actions in the clinic system; a
 
 Previous planner's detailed AI briefs: `docs/backlog/ai-documentation/`.
 
+## Decisions from Imamatdin, 12 November 2026 (evening)
+
+- Printing: industry defaults, no printer-model targeting. Receipts and queue tickets render for 80 mm thermal paper (ESC/POS printers via the operating-system driver, printed from the browser) and stay readable at 58 mm. Prescriptions, invoices and reports render as A4 PDF. Staff adjust in their print dialog.
+- Documents (prescription, invoices, reports) are generated on the server as PDF, viewable on screen and printable, so low-memory phones never render heavy documents. Printing is expected mostly from clinic PCs.
+- Languages: Uzbek Cyrillic, Uzbek Latin and Russian all ship. Each clinic has a default; each person can override it. Gʻofurov klinikasi defaults to Uzbek Cyrillic (CEO's request); new clinics default to Uzbek Latin, the official script.
+- Doctor split: adjustable per doctor by the CEO, effective from a date forward, every change recorded with who and when. Each doctor sees their own rule, its change history and their own earnings. A change never rewrites past periods.
+- Caretakers: optional entry on an admission with an optional charge. Low priority; details later.
+- Testing: Mashxura is a doctor and leads clinical testing.
+- President's Tech Award: 19 November 2026, the same day as the clinic go-live. The doctor assistant slice (A1) is the award demo, so it runs in parallel now on the existing notebook, on a staging environment with synthetic data, separate from the live clinic.
+
 ## Data model direction
 
 Reuse the task-002 foundation: accounts, sessions, clinics, memberships, patients, patient_assignments, encounters, documents, document_versions, idempotency_records, audit_events.

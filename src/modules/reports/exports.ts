@@ -24,9 +24,29 @@ export function xlsx(rows:unknown[][]):Buffer {
 export async function pdf(title:string,rows:unknown[][],thermal=false):Promise<Buffer> {
   const doc=new PDFDocument({size:thermal?[226.77,841.89]:'A4',margin:thermal?14:42,bufferPages:true});
   doc.registerFont('body',join(process.cwd(),'assets/fonts/DejaVuSans.ttf'));
+  doc.registerFont('bold',join(process.cwd(),'assets/fonts/DejaVuSans-Bold.ttf'));
   const chunks:Buffer[]=[]; const done=new Promise<Buffer>((resolve,reject)=>{doc.on('data',c=>chunks.push(c));doc.on('end',()=>resolve(Buffer.concat(chunks)));doc.on('error',reject);});
-  doc.font('body').fillColor('#392c3e').fontSize(thermal?13:20).text(title).moveDown();
-  for(const row of rows)doc.fontSize(thermal?9:10).fillColor('#252229').text(row.map(v=>String(v??'')).join('  ·  '),{paragraphGap:7});
+  const margin=thermal?14:42,width=doc.page.width-margin*2,bottom=doc.page.height-margin-25;
+  const heading=()=>{doc.font('bold').fontSize(9).fillColor('#8b5036').text('CLINORA');doc.moveDown(.4).fontSize(thermal?13:19).fillColor('#50344d').text(title).moveDown(.8);};
+  heading();let section=true,rowIndex=0;
+  for(const row of rows){
+    if(!row.length){doc.y+=10;section=true;continue;}
+    const values=row.map(v=>{const s=String(v??'');return /^-?\d+$/.test(s)?BigInt(s).toLocaleString('ru-RU'):s;});
+    const weights=values.length===2?[.62,.38]:values.length===3?[.5,.25,.25]:values.length===4?[.25,.16,.42,.17]:values.map(()=>1/values.length);
+    const sizes=weights.map(n=>n*width),fontSize=thermal?8.5:9;
+    doc.font(section?'bold':'body').fontSize(fontSize);
+    const height=Math.max(...values.map((v,i)=>doc.heightOfString(v,{width:sizes[i]!-12})),13)+14;
+    if(doc.y+height>bottom){doc.addPage();heading();}
+    doc.font(section?'bold':'body').fontSize(fontSize);
+    const y=doc.y;let x=margin;
+    if(section||rowIndex%2===0)doc.rect(margin,y,width,height).fill(section?'#e9e1e7':'#f7f4ef');
+    doc.fillColor('#302934');
+    values.forEach((value,i)=>{doc.text(value,x+6,y+7,{width:sizes[i]!-12,align:i>0&&/^-?[\d\s\u00a0]+$/.test(value)?'right':'left'});x+=sizes[i]!;});
+    doc.y=y+height;doc.moveTo(margin,doc.y).lineTo(margin+width,doc.y).lineWidth(.4).strokeColor('#ddd5ce').stroke();
+    section=false;rowIndex++;
+  }
+  const pages=doc.bufferedPageRange();
+  for(let i=pages.start;i<pages.start+pages.count;i++){doc.switchToPage(i);doc.font('body').fontSize(8).fillColor('#71656d').text(`Clinora  |  ${i+1} / ${pages.count}`,margin,doc.page.height-margin-12,{width,lineBreak:false,align:'right'});}
   doc.end();return done;
 }
 export const download=(name:string,mime:string,data:Buffer):Download=>({name,mime,base64:data.toString('base64')});
@@ -43,19 +63,20 @@ export async function fullExport(c:ClinicContext) {
   await requireRole(c.tx,c.actorId,c.clinicId,['ceo']);
   // Explicit clinical/operational allowlist. Authentication tokens, passwords, invite codes,
   // provider credentials and replay caches never belong in a portable clinic archive.
-  const tables=['patients','patient_assignments','patient_duplicate_overrides','encounters','documents','document_versions','note_approvals','assistant_transcripts','assistant_segments','assistant_drafts','assistant_extraction_runs','assistant_proposals','assistant_field_versions','assistant_approvals','visits','business_days','departments','services','service_groups','service_prices','doctor_profiles','catalog_doctors','doctor_services','queue_points','queue_tickets','charge_lines','discounts','payments','payment_allocations','cashier_allocation_adjustments','receipts','cash_desks','cash_shifts','expense_types','cash_outs','admissions','rooms','room_types','beds','bed_assignments','bed_day_charges','caretakers','caretaker_day_charges','lab_results','surgeries','stock_movements','pharmacy_settings','doctor_split_rules','payroll_periods','payroll_lines','clinic_settings','districts','mahallas','membership_roles','audit_events'];
+  const tables=['clinics','patients','patient_assignments','patient_duplicate_overrides','encounters','documents','document_versions','note_approvals','assistant_captures','assistant_transcripts','assistant_segments','assistant_drafts','assistant_extraction_runs','assistant_proposals','assistant_field_versions','assistant_approvals','visits','business_days','departments','services','service_groups','service_prices','doctor_profiles','catalog_doctors','doctor_services','queue_points','queue_tickets','charge_lines','discounts','payments','payment_allocations','cashier_allocation_adjustments','receipts','cash_desks','cash_shifts','expense_types','cash_outs','admissions','rooms','room_types','beds','bed_assignments','bed_day_charges','caretakers','caretaker_day_charges','lab_results','surgeries','stock_movements','pharmacy_settings','doctor_split_rules','payroll_periods','payroll_lines','clinic_settings','districts','mahallas','membership_roles','audit_events'];
   // A single statement keeps all exported tables in the same snapshot.
   const sql:string[]=[];
   // Cast bigint columns before JSON encoding (including nested record fields via row projection).
   const projections=await c.tx.query(`SELECT table_name,column_name,data_type FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=ANY($1::text[]) ORDER BY ordinal_position`,[tables]);
+  const columns=(table:string)=>projections.rows.filter(r=>r.table_name===table && !(table==='assistant_captures' && ['lease_token','lease_until','client_key','telegram_file_id'].includes(r.column_name)));
   for(let i=0;i<tables.length;i++){
-    const cols=projections.rows.filter(r=>r.table_name===tables[i]).map(r=>`"${r.column_name}"${r.data_type==='bigint'?'::text':''}`);
-    sql[i]=`coalesce((SELECT jsonb_agg(t) FROM (SELECT ${cols.join(',')} FROM ${tables[i]} WHERE clinic_id=$1) t),'[]') t${i}`;
+    const cols=columns(tables[i]!).map(r=>`"${r.column_name}"${r.data_type==='bigint'?'::text':''}`);
+    sql[i]=`coalesce((SELECT jsonb_agg(t) FROM (SELECT ${cols.join(',')} FROM ${tables[i]} WHERE ${tables[i]==='clinics'?'id':'clinic_id'}=$1) t),'[]') t${i}`;
   }
   const all=(await c.tx.query('SELECT '+sql.join(','),[c.clinicId])).rows[0];
   const files:Record<string,Uint8Array>={};
   for(let i=0;i<tables.length;i++){
-    const rows=all[`t${i}`] as Record<string,unknown>[]; const cols=projections.rows.filter(r=>r.table_name===tables[i]).map(r=>r.column_name as string);
+    const rows=all[`t${i}`] as Record<string,unknown>[]; const cols=columns(tables[i]!).map(r=>r.column_name as string);
     files[`${tables[i]}.csv`]=strToU8(csv([cols,...rows.map(r=>cols.map(k=>r[k]))]));
   }
   const staff=(await c.tx.query(`SELECT a.id,a.display_name,a.login,a.phone,m.status FROM accounts a JOIN memberships m ON m.user_id=a.id WHERE m.clinic_id=$1`,[c.clinicId])).rows;

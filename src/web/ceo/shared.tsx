@@ -11,7 +11,7 @@ export const t=(key:Key)=>dictionaries[locale][key];
 const subscribe=(fn:()=>void)=>{listeners.add(fn);return()=>{listeners.delete(fn);};};
 const snapshot=()=>locale;
 export function useReportLocale(){return useSyncExternalStore(subscribe,snapshot);}
-export function Language(){const value=useReportLocale();return <label className="ceo-language">{t('ceo.language')}<select value={value} onChange={e=>{locale=e.target.value as Locale;for(const fn of [...listeners])fn();}}><option value="uz-Cyrl">{t('ceo.langCyrl')}</option><option value="uz-Latn">{t('ceo.langLatn')}</option><option value="ru">{t('ceo.langRu')}</option></select></label>;}
+export function Language(){const value=useReportLocale();return <label className="ceo-language">{t('ceo.language')}<select aria-label={t('ceo.language')} value={value} onChange={e=>{locale=e.target.value as Locale;for(const fn of [...listeners])fn();}}><option value="uz-Cyrl">{t('ceo.langCyrl')}</option><option value="uz-Latn">{t('ceo.langLatn')}</option><option value="ru">{t('ceo.langRu')}</option></select></label>;}
 export const money=(value:string|bigint)=>BigInt(value).toLocaleString('ru-RU');
 export const metric=(key:string)=>t(`ceo.${key}` as Key);
 export function saveFile(file:Download) {

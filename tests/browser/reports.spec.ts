@@ -31,8 +31,8 @@ for(const width of [1440,390])test(`C8: real dashboard, drilldown, PDF download 
     await card.focus();await page.keyboard.press('Enter');await expect(page.locator('.ceo-ledger h2')).toBeFocused();await expect(page.locator('.ceo-ledger')).toContainText('Synthetic Aliyev');
     await page.getByRole('button',{name:C('ceo.back'),exact:true}).click();
     await page.getByText(C('ceo.more'),{exact:true}).click();const download=page.waitForEvent('download',{timeout:10000});await page.getByRole('button',{name:C('ceo.pdf'),exact:true}).click();const pdf=await download.catch(e=>{throw new Error(`${e.message}; browser errors: ${errors.join('; ')}`);});expect(pdf.suggestedFilename()).toBe('clinora-report.pdf');await pdf.saveAs(`work/browser-evidence/ceo-report-${width}.pdf`);
-    await page.locator('.ceo-filters>summary').click();await page.getByLabel(C('ceo.language'),{exact:true}).selectOption('uz-Latn');await expect(page.getByRole('heading',{name:'Klinika koʻrsatkichlari'})).toBeVisible();
-    await page.getByLabel('Hisobot tili',{exact:true}).selectOption('uz-Cyrl');
+    await page.locator('.ceo-filters>summary').click();await page.getByLabel(C('ceo.language'),{exact:true}).selectOption('uz-Latn',{timeout:5000});await expect(page.getByRole('heading',{name:'Klinika koʻrsatkichlari'})).toBeVisible();
+    await page.getByLabel('Hisobot tili',{exact:true}).selectOption('uz-Cyrl',{timeout:5000});
     await page.getByRole('button',{name:T('module.payroll'),exact:true}).click();await expect(page.getByRole('heading',{name:C('ceo.payrollTitle'),exact:true})).toBeVisible();
     await page.getByRole('button',{name:C('ceo.show'),exact:true}).click();await expect(page.locator('.ceo-pay-doctor')).toContainText('500');
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);

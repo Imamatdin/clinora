@@ -38,8 +38,8 @@ test('admit and concurrent retry are one stay; occupied bed and wrong visit type
   await post('/admit',{...input,bedId:g.bed2},409);
   const v=randomUUID();await f.pool.query("INSERT INTO visits(id,clinic_id,patient_id,business_day_id,type,created_by) SELECT $1,clinic_id,patient_id,business_day_id,'inpatient',created_by FROM visits WHERE id=$2",[v,g.visit]);
   await post('/admit',{...input,key:key(),visitId:v},409);
-  await f.pool.query("UPDATE visits SET type='outpatient' WHERE id=$1",[v]);
-  await post('/admit',{...input,key:key(),visitId:v,bedId:g.bed2},404);
+  const outpatient=key();await f.pool.query("INSERT INTO visits(id,clinic_id,patient_id,business_day_id,type,created_by) SELECT $1,clinic_id,patient_id,business_day_id,'outpatient',created_by FROM visits WHERE id=$2",[outpatient,g.visit]);
+  await post('/admit',{...input,key:key(),visitId:outpatient,bedId:g.bed2},404);
 });
 test('transfer prices each date once, historical price changes are resolved by date',async t=>{
   const {f,g,post}=await setup(t,3);
@@ -116,4 +116,23 @@ test('doctor reads only assigned stays; cashier reads debt but cannot add charge
   await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'cashier',$2)",[g.clinic,g.actor]);
   assert.equal((await client.request(base+`/${a.id}/invoice`)).status,200);
   assert.equal((await client.request(base+`/${a.id}/services`,{})).status,403);
+});
+
+test('discharge includes all visit lines and net payments; cashier can collect the remaining balance afterwards',async t=>{
+  const {f,g,client,admit,post}=await setup(t);const a=await admit();
+  // Charges from another module are part of the same visit's final invoice.
+  await f.pool.query("INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,status,source,created_by,completed_by,completed_at) VALUES($1,$2,$3,$4,1,250000,'completed','lab',$5,$5,now())",[key(),g.clinic,g.visit,g.services.lab,g.actor]);
+  const desk=key();await f.pool.query("INSERT INTO cash_desks(id,clinic_id,name) VALUES($1,$2,'Synthetic cashier')",[desk,g.clinic]);
+  const cb=`/api/clinics/${g.clinic}/cashier`;
+  const call=async(path:string,body?:unknown,status=200)=>{const r=await client.request(cb+path,body);const v=await r.json();assert.equal(r.status,status,JSON.stringify(v));return v;};
+  const shift=await call('/shifts',{deskId:desk,opening:'0'},201);
+  await call(`/visits/${g.visit}/payments`,{shiftId:shift.id,amount:'200000',method:'cash',key:key()},201);
+  let current=await call(`/visits/${g.visit}`);const original=current.payments[0].id;
+  await call(`/visits/${g.visit}/refund`,{shiftId:shift.id,paymentId:original,amount:'100000',reason:'Synthetic correction',key:key()});
+  await call(`/visits/${g.visit}/discount`,{kind:'fixed',amount:'100000',reason:'Synthetic approved discount'});
+  const final=await post(`/${a.id}/discharge`,{key:key()});
+  assert.equal(final.value,'350000');assert.equal(final.discount,'100000');assert.equal(final.paid,'100000');assert.equal(final.due,'150000');
+  current=await call(`/visits/${g.visit}`);assert.equal(current.invoice.due,final.due);
+  await call(`/visits/${g.visit}/payments`,{shiftId:shift.id,amount:'150000',method:'card',key:key()},201);
+  assert.equal((await call(`/visits/${g.visit}`)).invoice.due,'0');
 });

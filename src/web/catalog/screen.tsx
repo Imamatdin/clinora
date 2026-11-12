@@ -14,7 +14,7 @@ type List = (typeof LISTS)[number];
 type Item = {
   id: string; list: List; names: Names & { uzCyrl: string }; code: string | null; active: boolean;
   departmentId?: string | null; groupId?: string | null; districtId?: string | null; kind?: ServiceKind; unit?: string; trackStock?: boolean;
-  priceUzs?: string | null; specialty?: string | null; linkedUserId?: string | null; linkedUserName?: string | null; serviceIds?: string[];
+  mxikCode?: string | null; priceUzs?: string | null; specialty?: string | null; linkedUserId?: string | null; linkedUserName?: string | null; serviceIds?: string[];
 };
 type Ref = { id: string; names: Names & { uzCyrl: string } };
 type Options = { departments: Ref[]; groups: (Ref & { departmentId: string | null })[]; districts: Ref[]; doctors: { userId: string; fullName: string }[] };
@@ -103,6 +103,7 @@ function Lists({ base, request, t, locale, setDirty }: ViewProps) {
         <strong>{pickName(item.names, locale)}</strong>
         <span className="muted">{[item.code, item.kind && t(kindKey(item.kind)), item.specialty, nameOf(options?.departments, item.departmentId),
           nameOf(options?.groups, item.groupId), nameOf(options?.districts, item.districtId)].filter(Boolean).join(' · ')}</span>
+        {list === 'service' && item.mxikCode && <span>{t('catalog.mxik')}: {item.mxikCode}</span>}
         {list === 'service' && <span className="catalog-price">{money(item.priceUzs) ?? t('catalog.noPrice')}</span>}
         {list === 'doctor' && <span>{item.linkedUserName ? t('catalog.link.linked', { name: item.linkedUserName }) : t('catalog.link.none')}</span>}
         {!item.active && <span className="badge">{t('catalog.inactive')}</span>}

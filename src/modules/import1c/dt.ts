@@ -1,103 +1,19 @@
 import type { ImportRow, ServiceKind } from './model.js';
-import { TokenError, Tokenizer, type TokenSink } from './tokenizer.js';
-
-/*
- * Reader for 1C:Enterprise infobase dumps (.dt) of the Gʻofurov klinikasi configuration.
- *
- * Container (confirmed by the planner on the real files): 8-byte signature `1CIBDmpF`, one ASCII
- * version digit, then a raw deflate stream (wbits -15) from byte 9.
- *
- * Inflated layout (ASSUMPTION, to be confirmed by `scripts/inspect-1c-dump.ts` on the real files): a
- * sequence of top-level brace lists, one per metadata object. The first string directly inside a
- * list is the object's full name (`Справочник.МУОЛАЖА`); every nested list after it is one record;
- * a record is a list of `{field name, value}` pairs; a reference value is a UUID atom or a list that
- * contains one. See README.md in this folder.
- *
- * Only allowlisted catalog objects are decoded. Every other object (БЕМОРЛАР, all documents,
- * registers other than prices) is skipped by the tokenizer without decoding a single value.
- */
+import { parseBinary, scalar, list, type BinaryNode } from './binary.js';
 
 export type DtErrorCode = 'NOT_A_DT' | 'CORRUPT' | 'TRUNCATED' | 'UNRECOGNIZED_LAYOUT' | 'TOO_LARGE';
-export class DtError extends Error { constructor(public readonly code: DtErrorCode) { super(code); } }
-
+export class DtError extends Error {
+  constructor(public readonly code: DtErrorCode, public readonly offset?: number, public readonly tag?: number) {
+    super(`${code}${offset === undefined ? '' : ` at offset ${offset}`}${tag === undefined ? '' : ` tag 0x${tag.toString(16)}`}`);
+  }
+}
 export const DT_SIGNATURE = '1CIBDmpF';
 export const DT_PAYLOAD_OFFSET = 9;
-/** Turns the compressed stream (raw deflate) into inflated chunks. Node: zlib; browser: DecompressionStream. */
 export type Inflater = (compressed: AsyncIterable<Uint8Array>) => AsyncIterable<Uint8Array>;
-
-type Target =
-  | { object: 'department' } | { object: 'serviceGroup' } | { object: 'doctor' } | { object: 'district' } | { object: 'mahalla' }
-  | { object: 'roomType' } | { object: 'service'; kind: ServiceKind | 'infer'; trackStock: boolean };
-
-/** Catalogs the brief allows us to extract, by 1C name (compared case-insensitively). */
-export const CATALOG_TARGETS: Record<string, Target> = {
-  'БУЛИМ': { object: 'department' },
-  'ВРАЧЛАР': { object: 'doctor' },
-  'МИХИЛАР': { object: 'serviceGroup' },
-  'МУОЛАЖА': { object: 'service', kind: 'infer', trackStock: false },
-  'Анализ': { object: 'service', kind: 'lab', trackStock: false },
-  'ЛАБАРАТОРИЯ': { object: 'service', kind: 'lab', trackStock: false },
-  'ХоналарТипи': { object: 'roomType' },
-  'Туман': { object: 'district' },
-  'МФЙ': { object: 'mahalla' },
-  'Дорилар': { object: 'service', kind: 'medicine', trackStock: true },
-  'Товары': { object: 'service', kind: 'good', trackStock: true }
-};
-/** Catalogs whose structure (field names, value kinds, record count) is reported, never their values. */
-export const STRUCTURE_ONLY = ['Мумкун', 'Каровчи'];
-/** Information registers whose name looks like a price list are read as price history. */
-const PRICE_REGISTER = /нарх|narx|цен|price|прайс/i;
-
-const lower = (s: string) => s.toLocaleLowerCase('ru');
-const targetByName = new Map(Object.entries(CATALOG_TARGETS).map(([k, v]) => [lower(k), { name: k, target: v }]));
-const structureByName = new Map(STRUCTURE_ONLY.map(k => [lower(k), k]));
-
-/** Field names we understand, normalized (lower case, no spaces, underscores or dots). */
-const ALIASES = {
-  code: ['код', 'code', 'kod'],
-  ref: ['ссылка', 'ref', 'uuid'],
-  nameUzCyrl: ['наименование', 'description', 'номи', 'номиузб', 'наименованиеузб', 'nomi'],
-  nameUzLatn: ['наименованиелат', 'наименованиелотин', 'номилотин', 'лотин', 'лотинча', 'nomilotin', 'namelatn', 'наименованиеlat'],
-  nameRu: ['наименованиерус', 'наименованиеру', 'номирус', 'русча', 'nameru', 'наименованиеrus'],
-  price: ['нархи', 'нарх', 'нархсумма', 'цена', 'narxi', 'narx', 'price', 'сумма', 'суммаси'],
-  folder: ['этогруппа', 'isfolder'],
-  deleted: ['пометкаудаления', 'deletionmark'],
-  unit: ['единицаизмерения', 'бирлик', 'улчовбирлиги', 'ўлчовбирлиги', 'unit'],
-  specialty: ['мутахассислик', 'специальность', 'лавозим', 'должность', 'specialty'],
-  period: ['период', 'period', 'сана', 'дата', 'date']
-} as const;
-const norm = (s: string) => lower(s).replace(/[\s_.\-]/g, '');
-const aliasOf = new Map<string, keyof typeof ALIASES>();
-for (const [field, names] of Object.entries(ALIASES)) for (const n of names) aliasOf.set(norm(n), field as keyof typeof ALIASES);
-
-type Atom = { atom: string };
-type Node = string | Atom | null | Node[];
-type RawRecord = { source: string; target: Target | 'price'; fields: Map<string, Node>; fieldNames: string[] };
-
 export type ObjectReport = { name: string; mode: 'catalog' | 'price-register' | 'structure' | 'skipped'; records?: number; fields?: string[] };
 export type StructureReport = { name: string; records: number; fields: { name: string; kinds: string[] }[] };
-export type DtExtract = {
-  version: string;
-  inflatedBytes: number;
-  /** Every top-level object seen, in order. Skipped objects carry their name only. */
-  objects: ObjectReport[];
-  /** Where prices were found: "<object>.<field>" for item fields, "<register>" for price registers. */
-  priceSources: string[];
-  structure: StructureReport[];
-  rows: ImportRow[];
-};
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const isAtom = (n: Node): n is Atom => !!n && typeof n === 'object' && !Array.isArray(n);
-const scalar = (n: Node | undefined): string | null => typeof n === 'string' ? n : n && isAtom(n) ? n.atom : null;
-function refOf(n: Node | undefined, depth = 0): string | null {
-  const s = scalar(n);
-  if (s !== null) return UUID.test(s) ? lower(s) : null;
-  if (Array.isArray(n) && depth < 4) for (let i = n.length - 1; i >= 0; i--) { const r = refOf(n[i], depth + 1); if (r) return r; }
-  return null;
-}
-const truthy = (n: Node | undefined) => ['1', 'true', 'истина', 'да', 'ha'].includes(lower(scalar(n) ?? ''));
-
+export type DtExtract = { version: string; inflatedBytes: number; objects: ObjectReport[]; priceSources: string[]; structure: StructureReport[]; rows: ImportRow[] };
+const lower = (s: string) => s.toLocaleLowerCase('ru');
 /** Whole UZS from a 1C number ("150000", "150000.00", "150 000,00"). */
 export function parsePrice(text: string): { priceUzs: string } | { rejected: 'BAD_PRICE' | 'FRACTIONAL_PRICE' } {
   const t = text.replace(/[\s ]/g, '').replace(',', '.');
@@ -123,168 +39,6 @@ export function inferKind(names: string): ServiceKind {
   return 'procedure';
 }
 
-type Section = { name: string | null; mode: 'pending' | 'catalog' | 'price' | 'structure' | 'skip'; target?: Target; records: number;
-  fieldNames: Set<string>; structureFields: Map<string, Set<string>> };
-
-class Extractor implements TokenSink {
-  depth = 0;
-  section: Section | null = null;
-  stack: Node[][] = [];
-  records: RawRecord[] = [];
-  objects: ObjectReport[] = [];
-  structure: StructureReport[] = [];
-  private keyPending = false;
-
-  want(): boolean {
-    const s = this.section;
-    if (!s) return false;
-    if (this.depth === 1) return s.name === null;
-    if (s.mode === 'catalog' || s.mode === 'price') return true;
-    // Structure-only: decode the field name (first value of a pair at depth 3), never the value.
-    return s.mode === 'structure' && this.depth === 3 && this.keyPending;
-  }
-  open(): void {
-    this.depth++;
-    if (this.depth === 1) { this.section = { name: null, mode: 'pending', records: 0, fieldNames: new Set(), structureFields: new Map() }; return; }
-    const s = this.section!;
-    if (this.depth === 2 && s.mode === 'pending') s.mode = 'skip'; // a record before any name: unknown object
-    if (s.mode === 'skip') return;
-    if (this.depth === 2) { s.records++; this.stack = [[]]; return; }
-    if (this.stack.length) { const list: Node[] = []; this.stack[this.stack.length - 1]!.push(list); this.stack.push(list); }
-    if (this.depth === 3) this.keyPending = true;
-  }
-  close(): void {
-    const s = this.section!;
-    if (this.depth === 1) { this.finishSection(s); this.section = null; }
-    else if (s.mode !== 'skip' && this.stack.length) {
-      const done = this.stack.pop()!;
-      if (this.depth === 2) this.finishRecord(s, done);
-    }
-    if (this.depth === 3) this.keyPending = false;
-    this.depth--;
-  }
-  string(value: string | null): void { this.value(value); }
-  atom(value: string | null): void { this.value(value === null ? null : { atom: value }); }
-
-  private value(v: Node): void {
-    const s = this.section;
-    if (!s) return;
-    if (this.depth === 1) { if (s.name === null && typeof v === 'string') this.name(s, v); return; }
-    if (s.mode === 'skip' || !this.stack.length) return;
-    this.stack[this.stack.length - 1]!.push(v);
-    if (this.depth === 3) this.keyPending = false;
-  }
-  private name(s: Section, full: string) {
-    s.name = full;
-    const m = /^(?:Справочник|Catalog)\.(.+)$/u.exec(full), r = /^(?:РегистрСведений|InformationRegister)\.(.+)$/u.exec(full);
-    const catalog = m ? targetByName.get(lower(m[1]!)) : undefined;
-    if (catalog) { s.mode = 'catalog'; s.target = catalog.target; s.name = catalog.name; }
-    else if (m && structureByName.has(lower(m[1]!))) { s.mode = 'structure'; s.name = structureByName.get(lower(m[1]!))!; }
-    else if (r && PRICE_REGISTER.test(r[1]!)) { s.mode = 'price'; s.name = full; }
-    else s.mode = 'skip';
-  }
-  private finishRecord(s: Section, record: Node[]) {
-    const fields = new Map<string, Node>(), names: string[] = [];
-    for (const pair of record) {
-      if (!Array.isArray(pair) || typeof pair[0] !== 'string') continue;
-      const key = pair[0]; names.push(key); s.fieldNames.add(key);
-      if (s.mode === 'structure') {
-        // Values were never decoded; only their shape (string / atom / list) is known.
-        const value = pair[1], kind = value === null ? 'value' : Array.isArray(value) ? 'list' : 'value';
-        const set = s.structureFields.get(key) ?? new Set<string>(); set.add(kind); s.structureFields.set(key, set);
-        continue;
-      }
-      fields.set(norm(key), pair.length > 2 ? pair.slice(1) : pair[1] ?? null);
-    }
-    if (s.mode === 'catalog') this.records.push({ source: s.name!, target: s.target!, fields, fieldNames: names });
-    if (s.mode === 'price') this.records.push({ source: s.name!, target: 'price', fields, fieldNames: names });
-  }
-  private finishSection(s: Section) {
-    if (s.name === null) return;
-    if (s.mode === 'skip') { this.objects.push({ name: s.name, mode: 'skipped' }); return; }
-    if (s.mode === 'structure') {
-      this.structure.push({ name: s.name, records: s.records, fields: [...s.structureFields].map(([name, kinds]) => ({ name, kinds: [...kinds].sort() })) });
-      this.objects.push({ name: s.name, mode: 'structure', records: s.records });
-      return;
-    }
-    this.objects.push({ name: s.name, mode: s.mode === 'price' ? 'price-register' : 'catalog', records: s.records, fields: [...s.fieldNames] });
-  }
-}
-
-function field(r: RawRecord, name: keyof typeof ALIASES): Node | undefined {
-  for (const [key, value] of r.fields) if (aliasOf.get(key) === name) return value;
-  return undefined;
-}
-function fieldName(r: RawRecord, name: keyof typeof ALIASES): string | null {
-  return r.fieldNames.find(n => aliasOf.get(norm(n)) === name) ?? null;
-}
-
-/** Turns raw catalog records into import rows: resolves references by target object, maps names and prices. */
-export function rowsFrom(records: RawRecord[]): { rows: ImportRow[]; priceSources: string[] } {
-  const byRef = new Map<string, { target: Target; code: string }>();
-  const codeOf = (r: RawRecord): string | null => {
-    const code = scalar(field(r, 'code'))?.trim(), ref = refOf(field(r, 'ref'));
-    return code ? `${r.source}/${code}` : ref ? `${r.source}/${ref}` : null;
-  };
-  for (const r of records) {
-    if (r.target === 'price') continue;
-    const ref = refOf(field(r, 'ref')), code = codeOf(r);
-    if (ref && code) byRef.set(ref, { target: r.target, code });
-  }
-  const rows: ImportRow[] = [], priceSources = new Set<string>();
-  for (const r of records) {
-    const parents: { department?: string; group?: string; district?: string; service?: string } = {};
-    const ownRef = refOf(field(r, 'ref'));
-    for (const value of r.fields.values()) {
-      const ref = refOf(value); if (!ref || ref === ownRef) continue;
-      const hit = byRef.get(ref); if (!hit) continue;
-      if (hit.target.object === 'department') parents.department ??= hit.code;
-      else if (hit.target.object === 'serviceGroup') parents.group ??= hit.code;
-      else if (hit.target.object === 'district') parents.district ??= hit.code;
-      else if (hit.target.object === 'service') parents.service ??= hit.code;
-    }
-    if (r.target === 'price') {
-      const priceText = scalar(field(r, 'price')), period = scalar(field(r, 'period'));
-      const priced = priceText === null ? { rejected: 'BAD_PRICE' as const } : parsePrice(priceText);
-      const effectiveFrom = period ? parsePeriod(period) : null;
-      const rejected = !parents.service ? 'UNKNOWN_SERVICE' : 'rejected' in priced ? priced.rejected : !effectiveFrom ? 'NO_PRICE_DATE' : null;
-      priceSources.add(r.source);
-      rows.push({ object: 'price', source: r.source, service: parents.service ?? null, priceUzs: 'priceUzs' in priced ? priced.priceUzs : null,
-        effectiveFrom, rejected });
-      continue;
-    }
-    const cyrl = scalar(field(r, 'nameUzCyrl'))?.trim() || null, latn = scalar(field(r, 'nameUzLatn'))?.trim() || null, ru = scalar(field(r, 'nameRu'))?.trim() || null;
-    const code = codeOf(r);
-    const base = { source: r.source, code, nameUzCyrl: cyrl ?? ru ?? latn, nameUzLatn: latn, nameRu: ru, department: parents.department ?? null };
-    let rejected: string | null = truthy(field(r, 'deleted')) ? 'DELETED' : truthy(field(r, 'folder')) ? 'FOLDER' : !base.nameUzCyrl ? 'NO_NAME' : !code ? 'NO_CODE' : null;
-    const priceText = scalar(field(r, 'price'));
-    let priceUzs: string | null = null;
-    if (priceText !== null && priceText.trim() !== '') {
-      priceSources.add(`${r.source}.${fieldName(r, 'price')}`);
-      const p = parsePrice(priceText);
-      if ('rejected' in p) rejected ??= p.rejected; else priceUzs = p.priceUzs;
-    }
-    const t = r.target;
-    if (t.object === 'service') {
-      const unit = scalar(field(r, 'unit'));
-      rows.push({ ...base, object: 'service', group: parents.group ?? null, kind: t.kind === 'infer' ? inferKind(`${cyrl ?? ''} ${latn ?? ''} ${ru ?? ''}`) : t.kind,
-        trackStock: t.trackStock, unit: unit && !UUID.test(unit) ? unit.slice(0, 40) : null, priceUzs, rejected });
-    } else if (t.object === 'doctor') {
-      const specialty = scalar(field(r, 'specialty'));
-      rows.push({ ...base, object: 'doctor', specialty: specialty && !UUID.test(specialty) ? specialty : null, rejected });
-    } else if (t.object === 'mahalla') {
-      rows.push({ ...base, object: 'mahalla', district: parents.district ?? null, rejected: rejected ?? (parents.district ? null : 'NO_DISTRICT') });
-    } else if (t.object === 'roomType') {
-      rows.push({ ...base, object: 'roomType', rejected });
-      // A room type with a price is a daily bed price: it becomes a service of kind bed.
-      if (priceUzs !== null && !rejected) rows.push({ ...base, object: 'service', code: `${code}/bed`, kind: 'bed', priceUzs, rejected: null });
-    } else {
-      rows.push({ ...base, object: t.object, rejected });
-    }
-  }
-  return { rows, priceSources: [...priceSources] };
-}
-
 async function* afterHeader(source: AsyncIterable<Uint8Array>, header: (h: Uint8Array) => void): AsyncIterable<Uint8Array> {
   let head = new Uint8Array(0), done = false;
   for await (const chunk of source) {
@@ -306,74 +60,149 @@ export function checkHeader(head: Uint8Array): string {
 }
 
 export type ReadOptions = { maxInflatedBytes?: number; maxRecords?: number };
+const ALLOWED = new Set(['МУОЛАЖА', 'Анализ', 'БУЛИМ', 'ВРАЧЛАР', 'МИХИЛАР', 'ХоналарТипи', 'Туман', 'МФЙ', 'Дорилар', 'Товары', 'Расходлар']);
+const SECRET = /^(ПАРОЛ|Телефон)$/i;
 
-/**
- * Reads a .dt stream and returns the catalog import rows plus a structure report. Throws DtError with a
- * clear code on a wrong file, a corrupt or truncated stream, or a layout this reader does not know.
- * Pure: writes nothing anywhere, so a failure can never leave partial data behind.
- */
-export async function readDt(source: AsyncIterable<Uint8Array>, inflate: Inflater, options: ReadOptions = {}): Promise<DtExtract> {
-  const maxBytes = options.maxInflatedBytes ?? 4 * 1024 ** 3, maxRecords = options.maxRecords ?? 200_000;
-  let version = '';
-  const sink = new Extractor(), tokens = new Tokenizer(sink);
-  let inflated = 0;
-  try {
-    for await (const chunk of inflate(afterHeader(source, h => { version = checkHeader(h); }))) {
-      inflated += chunk.length;
-      if (inflated > maxBytes) throw new DtError('TOO_LARGE');
-      tokens.push(chunk);
-      if (sink.records.length > maxRecords) throw new DtError('TOO_LARGE');
-    }
-    if (!version) throw new DtError('NOT_A_DT');
-    tokens.finish();
-  } catch (error) {
-    if (error instanceof DtError) throw error;
-    if (error instanceof TokenError) throw new DtError(error.reason === 'TRUNCATED' ? 'TRUNCATED' : 'UNRECOGNIZED_LAYOUT');
-    throw new DtError('CORRUPT'); // inflate failure: the deflate stream is damaged
+async function collect(source: AsyncIterable<Uint8Array>, max: number): Promise<Uint8Array> {
+  const parts: Uint8Array[] = []; let size = 0;
+  for await (const part of source) { size += part.length; if (size > max) throw new DtError('TOO_LARGE'); parts.push(part); }
+  const out = new Uint8Array(size); let at = 0;
+  for (const part of parts) { out.set(part, at); at += part.length; }
+  return out;
+}
+async function unpack(data: Uint8Array, inflate: Inflater, max: number) {
+  try { return await collect(inflate((async function* () { yield data; })()), max); }
+  catch (e) { if (e instanceof DtError) throw e; return data; } // reference: folder entries may be uncompressed
+}
+async function folder(node: BinaryNode | undefined, inflate: Inflater, max: number) {
+  const files = new Map<string, Uint8Array>(); let size = 0;
+  for (const e of list(node)) {
+    const entry = list(e); if (entry.length <= 11) continue;
+    const name = scalar(entry[1]); if (!name) continue;
+    const parts: Uint8Array[] = [];
+    const walk = (n: BinaryNode) => { if (Array.isArray(n)) n.forEach(walk); else if (typeof n === 'object' && n.kind === 'bytes') parts.push(n.bytes); };
+    entry.slice(11).forEach(walk);
+    const blob = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let at = 0;
+    for (const p of parts) { blob.set(p, at); at += p.length; }
+    const decoded = await unpack(blob, inflate, max - size); size += decoded.length;
+    files.set(name, decoded);
   }
-  if (!sink.objects.length) throw new DtError('UNRECOGNIZED_LAYOUT');
-  const { rows, priceSources } = rowsFrom(sink.records);
-  return { version, inflatedBytes: inflated, objects: sink.objects, priceSources, structure: sink.structure, rows };
+  return files;
 }
 
-export type LayoutProbe = {
-  version: string; inflatedBytes: number; zeroByteShare: number; braces: { open: number; close: number }; quotes: number;
-  /** Metadata object names found by byte pattern (e.g. "Справочник.МУОЛАЖА"), with first offset and count. */
-  metadataNames: { name: string; encoding: 'utf16' | 'utf8'; firstOffset: number; count: number }[];
-};
-const META_PREFIXES = ['Справочник.', 'Документ.', 'РегистрСведений.', 'РегистрНакопления.', 'Перечисление.', 'Константа.'];
-
-/**
- * Diagnostic for a dump the reader does not recognize. Reports byte statistics and metadata object names
- * found by searching for their known prefixes. It decodes nothing else, so it cannot print record values.
+/** Port of scripts/reference/dt_reference.py. Binary scalars stay byte spans until explicitly selected.
+ * This is deliberate: patient/caretaker lists and unapproved attributes never enter a text decoder.
+ * Bounded inflated input (real dumps are 4–5 MiB) is indexed once; nested metadata uses the same browser inflater.
  */
-export async function probeLayout(source: AsyncIterable<Uint8Array>, inflate: Inflater): Promise<LayoutProbe> {
-  let version = '', inflated = 0, zeros = 0, open = 0, close = 0, quotes = 0;
-  const found = new Map<string, LayoutProbe['metadataNames'][number]>();
-  const patterns = META_PREFIXES.flatMap(p => [{ bytes: new TextEncoder().encode(p), encoding: 'utf8' as const },
-    { bytes: Uint8Array.from([...p].flatMap(ch => [ch.charCodeAt(0) & 255, ch.charCodeAt(0) >> 8])), encoding: 'utf16' as const }]);
-  let tail = new Uint8Array(0);
-  try {
-    for await (const chunk of inflate(afterHeader(source, h => { version = checkHeader(h); }))) {
-      for (const b of chunk) { if (b === 0) zeros++; else if (b === 0x7b) open++; else if (b === 0x7d) close++; else if (b === 0x22) quotes++; }
-      const data = new Uint8Array(tail.length + chunk.length); data.set(tail); data.set(chunk, tail.length);
-      for (const p of patterns) for (let i = data.indexOf(p.bytes[0]!); i >= 0 && i + p.bytes.length <= data.length; i = data.indexOf(p.bytes[0]!, i + 1)) {
-        if (!p.bytes.every((b, k) => data[i + k] === b)) continue;
-        const rest = data.subarray(i + p.bytes.length, i + p.bytes.length + 128);
-        const text = p.encoding === 'utf16' ? new TextDecoder('utf-16le').decode(rest.subarray(0, rest.length & ~1)) : new TextDecoder().decode(rest);
-        const name = /^[\p{L}\d_]+/u.exec(text)?.[0];
-        if (!name || name.length >= 60) continue;
-        const full = new TextDecoder(p.encoding === 'utf16' ? 'utf-16le' : 'utf-8').decode(p.bytes) + name, keyName = `${p.encoding}:${full}`;
-        const hit = found.get(keyName);
-        if (hit) hit.count++; else found.set(keyName, { name: full, encoding: p.encoding, firstOffset: inflated - tail.length + i, count: 1 });
-      }
-      tail = data.slice(Math.max(0, data.length - 300));
-      inflated += chunk.length;
-    }
-  } catch (error) {
-    if (error instanceof DtError) throw error;
-    throw new DtError('CORRUPT');
-  }
+async function extractDt(source: AsyncIterable<Uint8Array>, inflate: Inflater, options: ReadOptions = {}): Promise<DtExtract> {
+  const max = options.maxInflatedBytes ?? 64 * 1024 ** 2;
+  let version = '', data: Uint8Array;
+  try { data = await collect(inflate(afterHeader(source, h => { version = checkHeader(h); })), max); }
+  catch (e) { if (e instanceof DtError) throw e; throw new DtError('CORRUPT'); }
   if (!version) throw new DtError('NOT_A_DT');
-  return { version, inflatedBytes: inflated, zeroByteShare: inflated ? zeros / inflated : 0, braces: { open, close }, quotes, metadataNames: [...found.values()] };
+  if (version !== '3') throw new DtError('UNRECOGNIZED_LAYOUT');
+  const top = parseBinary(data);
+  const sections = new Map<string, BinaryNode[]>();
+  for (const n of top) { const a = list(n); const key = scalar(a[0]); if (key) sections.set(key === 'Folder' ? scalar(a[1]) ?? '' : key, a); }
+  const db = list(sections.get('DataBase')?.[1]);
+  if (!sections.has('Config') || !sections.has('Params') || !db.length) throw new DtError('UNRECOGNIZED_LAYOUT');
+  const config = await folder(sections.get('Config')?.[2], inflate, max);
+  const params = await folder(sections.get('Params')?.[2], inflate, max);
+  const names = new TextDecoder().decode(params.get('DBNames'));
+  const mappings = [...names.matchAll(/\{([0-9a-f-]{36}),"(\w+)",(\d+)\}/g)];
+  const fields = new Map(mappings.filter(m => m[2] === 'Fld').map(m => [m[1]!, `Fld${m[3]}`]));
+  const catalogs = new Map<string, { name: string; attrs: Map<string, string> }>();
+  for (const m of mappings) {
+    if (m[2] !== 'Reference' || !config.has(m[1]!)) continue;
+    const txt = new TextDecoder().decode(config.get(m[1]!)!);
+    const name = new RegExp('\\{0,0,' + m[1] + '\\},"([^"]+)"').exec(txt)?.[1]
+      ?? /"([А-ЯЁЎҚҒҲа-яёўқғҳA-Za-z_][^"]{1,60})"/.exec(txt)?.[1];
+    if (!name) continue;
+    const attrs = new Map<string, string>();
+    for (const a of txt.matchAll(/([0-9a-f-]{36})\},"([^"]+)",\s*\{1,"ru"/g)) {
+      const field = fields.get(a[1]!); if (field) attrs.set(field, a[2]!);
+    }
+    catalogs.set(`Reference${m[3]}`, { name, attrs });
+  }
+  const schema = list(list(db[0])[1]);
+  const order: { table: string; descriptor: BinaryNode[] }[] = [];
+  for (const n of schema.slice(1)) {
+    const t = list(n), table = scalar(t[0]); if (!table) throw new DtError('UNRECOGNIZED_LAYOUT');
+    order.push({ table, descriptor: t });
+    for (const st of list(t[5]).slice(1)) { const s = list(st); if (s.length) order.push({ table: `${table}.${scalar(s[0])}`, descriptor: s }); }
+  }
+  if (db.length !== order.length + 1) throw new DtError('UNRECOGNIZED_LAYOUT');
+  type RecordRow = { source: string; code: string | null; ref: string | null; values: Map<string, string | null> };
+  const records: RecordRow[] = [], objects: ObjectReport[] = [], structure: StructureReport[] = [];
+  let count = 0;
+  for (const [i, { table, descriptor }] of order.entries()) {
+    const catalog = catalogs.get(table), rows = list(db[i + 1]);
+    if (!catalog) continue;
+    const { name, attrs } = catalog;
+    if (!ALLOWED.has(name)) { objects.push({ name: `Справочник.${name}`, mode: 'skipped' }); continue; }
+    const columns = list(descriptor[4]).slice(1).map(list).filter(f => scalar(list(list(f[2])[1])[0]) !== '86').map(f => scalar(f[0])!);
+    const safeNames = columns.map(c => attrs.get(c) ?? c).filter(c => !SECRET.test(c));
+    objects.push({ name, mode: 'catalog', records: rows.length - 1, fields: safeNames });
+    for (const n of rows.slice(1)) {
+      if (++count > (options.maxRecords ?? 200_000)) throw new DtError('TOO_LARGE');
+      const row = list(n), values = new Map<string, string | null>(); let k = 0;
+      for (const col of columns) {
+        const flag = scalar(row[k++]); if (flag !== '0' && flag !== '1') throw new DtError('UNRECOGNIZED_LAYOUT');
+        const value = flag === '1' ? row[k++] : undefined;
+        if (flag === '1' && value === undefined) throw new DtError('TRUNCATED');
+        const attr = attrs.get(col) ?? col;
+        // Decode only mapped reference fields. Credentials and phone values remain raw byte spans.
+        if (!SECRET.test(attr) && SAFE_FIELDS.has(attr)) values.set(attr, scalar(value));
+      }
+      if (k !== row.length) throw new DtError('UNRECOGNIZED_LAYOUT');
+      const ref = values.get('ID') ?? values.get('Ref') ?? null;
+      const code = values.get('Code')?.trim() || ref;
+      records.push({ source: name, code: code ? `${name}/${code}` : null, ref, values });
+    }
+  }
+  if (!catalogs.size || !order.length) throw new DtError('UNRECOGNIZED_LAYOUT');
+  const refs = new Map(records.filter(r => r.ref).map(r => [r.ref!, r]));
+  const rows: ImportRow[] = [], priceSources = new Set<string>();
+  for (const r of records) {
+    const v = r.values, get = (...keys: string[]) => keys.map(k => v.get(k)).find(x => x != null && x !== '') ?? null;
+    if (r.source === 'МИХИЛАР') continue; // tax classifier, never a specialty/service group
+    const name = get('Description'), parent = refs.get(get('ParentID', 'Parent', 'Туман') ?? '');
+    const group = r.source === 'Анализ' && get('Folder') === '0';
+    const base: ImportRow = { object: 'service', source: r.source, code: r.code, nameUzCyrl: name,
+      nameUzLatn: get('НаименованиеЛат'), nameRu: get('НаименованиеРус'),
+      rejected: get('Marked', 'DeletionMark') === '1' ? 'DELETED' : !name ? 'NO_NAME' : !r.code ? 'NO_CODE' : null };
+    if (r.source === 'БУЛИМ') base.object = 'department';
+    else if (r.source === 'ВРАЧЛАР') { base.object = 'doctor'; base.doctorRoles = { 'Кабул': get('Кабул') === '1', 'Стационар': get('Стационар') === '1', 'Лабаратория': get('Лабаратория') === '1', 'УЗИ': get('УЗИ') === '1' }; }
+    else if (r.source === 'Туман') base.object = 'district';
+    else if (r.source === 'МФЙ') { base.object = 'mahalla'; base.district = parent?.source === 'Туман' ? parent.code : null; }
+    else if (r.source === 'Расходлар') base.object = 'expenseType';
+    else if (r.source === 'ХоналарТипи') base.object = 'roomType';
+    else if (group) base.object = 'serviceGroup';
+    if (base.object === 'service') {
+      base.kind = r.source === 'Анализ' ? 'lab' : r.source === 'Дорилар' ? 'medicine' : r.source === 'Товары' ? 'good' : inferKind(name ?? '');
+      base.trackStock = ['medicine', 'good'].includes(base.kind);
+      base.unit = get('УлБир', 'ЕдиницаИзмерения');
+      base.referenceRange = get('Норма');
+      base.group = parent?.source === 'Анализ' && parent.values.get('Folder') === '0' ? parent.code : null;
+      const dep = refs.get(get('БУЛИМ', 'Булим') ?? ''); base.department = dep?.source === 'БУЛИМ' ? dep.code : null;
+      const mxik = get('МИХИ'); base.mxikCode = refs.get(mxik ?? '')?.values.get('Description') ?? mxik;
+    }
+    const priceKey = r.source === 'МУОЛАЖА' ? 'НАРХИ' : r.source === 'Анализ' && !group ? 'Цена' : r.source === 'ХоналарТипи' ? 'КунликЁтокПули' : r.source === 'Товары' ? 'СотувНархи' : null;
+    const price = priceKey ? get(priceKey) : null;
+    if (price !== null) {
+      priceSources.add(`${r.source}.${priceKey}`); const parsed = parsePrice(price);
+      if ('rejected' in parsed) base.rejected ??= parsed.rejected; else base.priceUzs = parsed.priceUzs;
+    }
+    if (get('Folder') === '0' && !group) base.rejected ??= 'FOLDER';
+    rows.push(base);
+    if (base.object === 'roomType' && base.priceUzs && !base.rejected) rows.push({ ...base, object: 'service', code: `${base.code}/bed`, kind: 'bed' });
+  }
+  return { version, inflatedBytes: data.length, objects, structure, rows, priceSources: [...priceSources] };
+}
+const SAFE_FIELDS = new Set(['ID', 'Ref', 'Code', 'Description', 'Folder', 'DeletionMark', 'Parent', 'ParentID', 'Marked', 'БУЛИМ', 'Булим', 'МИХИ', 'УлБир', 'НАРХИ', 'Цена', 'Норма', 'КунликЁтокПули', 'СотувНархи', 'КиримНархи', 'Туман', 'Кабул', 'Стационар', 'Лабаратория', 'УЗИ', 'НаименованиеЛат', 'НаименованиеРус', 'ЕдиницаИзмерения']);
+
+/** No platform decoder/inflater exception can expose a partially extracted result. */
+export async function readDt(source: AsyncIterable<Uint8Array>, inflate: Inflater, options: ReadOptions = {}): Promise<DtExtract> {
+  try { return await extractDt(source, inflate, options); }
+  catch (error) { if (error instanceof DtError) throw error; throw new DtError('CORRUPT'); }
 }

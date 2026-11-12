@@ -32,16 +32,16 @@ test('administrator imports a synthetic 1C dump in the browser, previews, commit
 
     await page.getByRole('tab', { name: C('catalog.tab.import'), exact: true }).click();
     await page.getByLabel(C('catalog.import.file'), { exact: true }).setInputFiles(dump);
-    await expect(page.getByText(C('catalog.import.found', { count: 19 }), { exact: true })).toBeVisible();
+    await expect(page.getByText(C('catalog.import.found', { count: 17 }), { exact: true })).toBeVisible();
     await expect(page.getByText(`Справочник.БЕМОРЛАР: ${C('catalog.import.skipped')}`)).toBeVisible();
     await page.getByRole('button', { name: C('catalog.import.upload'), exact: true }).click();
     await expect(page.getByRole('heading', { name: C('catalog.import.preview'), exact: true })).toBeVisible();
-    await expect(page.getByText(C('catalog.import.rejectedTitle', { count: 5 }))).toBeVisible();
+    await expect(page.getByText(C('catalog.import.rejectedTitle', { count: 4 }))).toBeVisible();
     await page.screenshot({ path: 'work/browser-evidence/catalog-import-preview-360.png', fullPage: true });
     expect(await f.pool.query('SELECT count(*)::int n FROM services WHERE clinic_id=$1', [c]).then(r => r.rows[0].n)).toBe(0);
     await page.getByRole('button', { name: C('catalog.import.commit'), exact: true }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: C('catalog.import.commit'), exact: true }).click();
-    await expect(page.getByText(C('catalog.import.committed', { new: 13, changed: 0, prices: 5 }), { exact: true })).toBeVisible();
+    await expect(page.getByText(C('catalog.import.committed', { new: 13, changed: 0, prices: 4 }), { exact: true })).toBeVisible();
     expect(sent.join('\n')).not.toContain(PATIENT_MARKER); // the dump's patient records never left the browser
 
     await page.getByRole('tab', { name: C('catalog.tab.lists'), exact: true }).click();
@@ -49,6 +49,7 @@ test('administrator imports a synthetic 1C dump in the browser, previews, commit
     await page.getByRole('button', { name: C('catalog.find'), exact: true }).click();
     const item = page.locator('.catalog-items > li', { hasText: 'Нурланиш диагностика Ультратовуш' });
     await expect(item).toContainText('150 000 сўм');
+    await expect(item).toContainText('10902002002000003');
     await item.getByRole('button', { name: C('catalog.setPrice'), exact: true }).click();
     await page.getByLabel(C('catalog.price.amount'), { exact: true }).fill('175000');
     await page.locator('.catalog-panel').getByRole('button', { name: C('catalog.setPrice'), exact: true }).click();

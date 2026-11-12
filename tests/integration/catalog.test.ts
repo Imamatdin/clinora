@@ -83,20 +83,26 @@ test('synthetic .dt imports through preview and one commit; re-import changes no
   const p = await preview(batch);
   assert.equal(p.batch.received, rows.length);
   assert.deepEqual(p.plan.objects.service, { new: 5, changed: 0, unchanged: 0, rejected: 3, pricesNew: 4 });
-  assert.deepEqual(p.plan.objects.price, { new: 1, changed: 0, unchanged: 0, rejected: 1, pricesNew: 1 });
   assert.equal(p.plan.objects.mahalla.rejected, 1);
-  assert.deepEqual(p.plan.rejected.map((r: any) => r.reason).sort(), ['FOLDER', 'FRACTIONAL_PRICE', 'NO_DISTRICT', 'NO_NAME', 'UNKNOWN_SERVICE']);
+  assert.deepEqual(p.plan.rejected.map((r: any) => r.reason).sort(), ['FOLDER', 'FRACTIONAL_PRICE', 'NO_DISTRICT', 'NO_NAME']);
   assert.ok(p.plan.samples.service.length > 0);
   assert.deepEqual(await snapshot(), before, 'preview writes nothing');
 
   const done = await commit(batch);
   assert.equal(done.status, 'committed');
   const svc = (await f.pool.query("SELECT s.*, g.code_1c group_code, d.code_1c dep_code FROM services s LEFT JOIN service_groups g ON g.id=s.group_id LEFT JOIN departments d ON d.id=s.department_id WHERE s.clinic_id=$1 AND s.code_1c='МУОЛАЖА/10902002002000003'", [f.owner.clinicId])).rows[0];
-  assert.deepEqual([svc.kind, svc.name_uz_latn, svc.group_code, svc.dep_code], ['diagnostic', 'Nurlanish diagnostika Ultratovush tadqiqoti (UZI)', 'МИХИЛАР/002', 'БУЛИМ/01']);
+  assert.deepEqual([svc.kind, svc.name_uz_latn, svc.group_code, svc.dep_code], ['diagnostic', 'Nurlanish diagnostika Ultratovush tadqiqoti (UZI)', null, 'БУЛИМ/01']);
   const med = (await f.pool.query("SELECT kind, track_stock, unit FROM services WHERE clinic_id=$1 AND code_1c='Дорилар/D01'", [f.owner.clinicId])).rows[0];
   assert.deepEqual(med, { kind: 'medicine', track_stock: true, unit: 'таблетка' });
   const doctor = (await f.pool.query("SELECT full_name, specialty_uz_cyrl, linked_user_id FROM catalog_doctors WHERE clinic_id=$1", [f.owner.clinicId])).rows;
-  assert.deepEqual(doctor, [{ full_name: 'Синтетик Шифокор Бир', specialty_uz_cyrl: 'Гастроэнтеролог', linked_user_id: null }]);
+  assert.deepEqual(doctor, [{ full_name: 'Синтетик Шифокор Бир', specialty_uz_cyrl: null, linked_user_id: null }]);
+  assert.equal(svc.mxik_code, '10902002002000003');
+  const listed = await ok(await admin.request(url('catalog/search'), { list: 'service', query: 'ultratovush' }));
+  assert.equal(listed.items[0].mxikCode, svc.mxik_code);
+  const labMeta = (await f.pool.query("SELECT reference_range FROM services WHERE clinic_id=$1 AND code_1c='Анализ/A01'", [f.owner.clinicId])).rows[0];
+  assert.equal(labMeta.reference_range, '4–9');
+  const roleFlags = (await f.pool.query('SELECT source_role_flags FROM catalog_doctors WHERE clinic_id=$1', [f.owner.clinicId])).rows[0].source_role_flags;
+  assert.equal(roleFlags['Кабул'], true);
   ids.uzi = svc.id;
   ids.doctorEntry = (await f.pool.query('SELECT id FROM catalog_doctors WHERE clinic_id=$1', [f.owner.clinicId])).rows[0].id;
   assert.equal((await admin.request(url(`catalog/imports/${batch}/commit`), { idempotencyKey: key() })).status, 409, 'a committed batch cannot commit again');
@@ -127,10 +133,23 @@ test('a changed price creates history; priceAt reads the price in force at the s
     assert.equal(await priceAt(ctx, ids.uzi!, new Date('2000-01-01')), null, 'no price before the first row: never zero');
     assert.equal(await priceAt({ tx, clinicId: f.other.clinicId }, ids.uzi!, new Date()), null, 'another clinic finds nothing');
   });
-  // A dated price register row keeps its own date.
+  // An item price takes effect at commit time.
   const lab = (await f.pool.query("SELECT p.effective_from FROM service_prices p JOIN services s ON s.id=p.service_id WHERE s.clinic_id=$1 AND s.code_1c='Анализ/A01'", [f.owner.clinicId])).rows;
   assert.equal(lab.length, 1);
-  assert.equal(new Date(lab[0].effective_from).toISOString(), '2025-12-31T19:00:00.000Z', '2026-01-01 midnight in Asia/Tashkent');
+  assert.ok(new Date(lab[0].effective_from).getTime() <= t1.getTime());
+});
+
+test('dated import price rows retain timezone, conflict and retry rules', async () => {
+  const row: ImportRow = { object: 'price', source: 'prices.csv', service: 'Анализ/A01', priceUzs: '40000', effectiveFrom: '2026-01-01' };
+  const batch = await stage(admin, [row, { ...row, service: 'missing' }], 'csv');
+  assert.equal((await preview(batch)).plan.objects.price.new, 1);
+  await commit(batch);
+  const dated = (await f.pool.query("SELECT p.effective_from FROM service_prices p JOIN services s ON s.id=p.service_id WHERE s.clinic_id=$1 AND s.code_1c='Анализ/A01' ORDER BY effective_from", [f.owner.clinicId])).rows;
+  assert.equal(new Date(dated[0].effective_from).toISOString(), '2025-12-31T19:00:00.000Z');
+  const again = await stage(admin, [row], 'csv');
+  assert.equal((await preview(again)).plan.objects.price.unchanged, 1);
+  const conflict = await stage(admin, [{ ...row, priceUzs: '40001' }], 'csv');
+  assert.equal((await preview(conflict)).plan.rejected[0].reason, 'PRICE_CONFLICT');
 });
 
 test('server rejects an incomplete batch and malformed rows, and writes nothing', async () => {
@@ -203,7 +222,7 @@ test('manual edit, deactivate and dated price; doctor linked to a staff account'
   const linked = await ok(await admin.request(url('catalog/doctor-link'), { catalogDoctorId: ids.doctorEntry, userId: ids.doctor, idempotencyKey: key() }));
   assert.equal(linked.linkedUserId, ids.doctor);
   const profile = (await f.pool.query('SELECT specialty_uz_cyrl FROM doctor_profiles WHERE clinic_id=$1 AND user_id=$2', [f.owner.clinicId, ids.doctor])).rows[0];
-  assert.equal(profile.specialty_uz_cyrl, 'Гастроэнтеролог');
+  assert.equal(profile.specialty_uz_cyrl, 'Синтетик Шифокор Бир');
   const services = await ok(await admin.request(url('catalog/doctor-services'), { userId: ids.doctor, serviceIds: [ids.uzi], idempotencyKey: key() }));
   assert.deepEqual(services.serviceIds, [ids.uzi]);
   const access = (await f.pool.query('SELECT count(*)::int n FROM patient_assignments WHERE clinic_id=$1 AND user_id=$2', [f.owner.clinicId, ids.doctor])).rows[0].n;

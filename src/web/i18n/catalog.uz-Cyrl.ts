@@ -1,5 +1,6 @@
 /** Task 005 catalog screen (uz-Cyrl). All three files carry the same keys. */
 export const catalogUzCyrl = {
+  'catalog.mxik': 'МИХИ (ИКПУ)',
   'catalog.title': 'Каталог: хизматлар ва нархлар',
   'catalog.language': 'Тил',
   'catalog.loading': 'Юкланмоқда…',

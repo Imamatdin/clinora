@@ -1,2 +1,73 @@
-.cashier fieldset{border:0;padding:0}.cashier label{font-size:1rem;display:flex;flex-direction:column;gap:.4rem;margin:.7rem 0}.cashier input,.cashier select,.cashier button{min-height:48px;font-size:1rem;max-width:100%}.cashier button{margin:.3rem}.cashier .primary{display:block;width:100%;font-size:1.25rem}.cashier .keypad{display:grid;grid-template-columns:repeat(3,1fr);max-width:320px}.cashier dl>div{display:flex;justify-content:space-between}.cashier details{margin:1rem 0}.cashier summary{min-height:48px;cursor:pointer}.cashier [role=dialog]{padding:1rem;border:3px solid #204b5c}.cashier-print{max-width:76mm;font-size:16px;overflow-wrap:anywhere}
-@media print{@page{size:80mm auto;margin:2mm}body *{visibility:hidden}.cashier-print,.cashier-print *{visibility:visible}.cashier-print{position:absolute;inset:0;width:100%;max-width:76mm}button{display:none!important}}
+.cashier fieldset {
+  border: 0;
+  padding: 0;
+}
+.cashier label {
+  font-size: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.7rem 0;
+}
+.cashier input,
+.cashier select,
+.cashier button {
+  min-height: 48px;
+  font-size: 1rem;
+  max-width: 100%;
+}
+.cashier button {
+  margin: 0.3rem;
+}
+.cashier .primary {
+  display: block;
+  width: 100%;
+  font-size: 1.25rem;
+}
+.cashier .keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  max-width: 320px;
+}
+.cashier dl > div {
+  display: flex;
+  justify-content: space-between;
+}
+.cashier details {
+  margin: 1rem 0;
+}
+.cashier summary {
+  min-height: 48px;
+  cursor: pointer;
+}
+.cashier [role="dialog"] {
+  padding: 1rem;
+  border: 3px solid #204b5c;
+}
+.cashier-print {
+  max-width: 76mm;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 2mm;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .cashier-print,
+  .cashier-print * {
+    visibility: visible;
+  }
+  .cashier-print {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-width: 76mm;
+  }
+  button {
+    display: none !important;
+  }
+}

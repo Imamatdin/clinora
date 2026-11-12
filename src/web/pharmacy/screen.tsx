@@ -27,18 +27,18 @@ export function Pharmacy({ clinic, request, setDirty }:ModuleProps) {
     catch(e) {setError(errorText(e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE'));}finally{setBusy(false);}
   }
   const selected = items.find(i=>i.id===item);
-  return <section><h2>{t('pharmacy.title')}</h2><label>{t('pharmacy.language')}<select value={locale} onChange={e=>setLocale(e.target.value as Locale)}>{languages.map(l=><option key={l.id} value={l.id}>{l.label}</option>)}</select></label>
+  return <section><h2>{t('pharmacy.title')}</h2><label>{t('pharmacy.language')}<select aria-label={t('pharmacy.language')} value={locale} onChange={e=>setLocale(e.target.value as Locale)}>{languages.map(l=><option key={l.id} value={l.id}>{l.label}</option>)}</select></label>
     {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}{busy&&<p role="status">{t('pharmacy.loading')}</p>}
     <button disabled={busy} onClick={()=>{setBusy(true);load().catch(()=>setError(errorText('SERVICE_UNAVAILABLE'))).finally(()=>setBusy(false));}}>{t('pharmacy.refresh')}</button>
     {!busy&&!items.length&&<p>{t('pharmacy.empty')}</p>}
     <h3>{t('pharmacy.low')}</h3><ul>{items.filter(i=>BigInt(i.on_hand)<=BigInt(i.threshold)).map(i=><li key={i.id}>{i.name}: {i.on_hand} {i.unit}</li>)}</ul>
     <form onSubmit={submit} onChange={()=>{key.current=crypto.randomUUID();setDirty(true);}}>
-      <label>{t('pharmacy.item')}<select required value={item} onChange={e=>setItem(e.target.value)}>{items.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select></label>
+      <label>{t('pharmacy.item')}<select aria-label={t('pharmacy.item')} required value={item} onChange={e=>setItem(e.target.value)}>{items.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select></label>
       {selected&&<p>{t('pharmacy.onHand')}: {selected.on_hand} {selected.unit}</p>}
-      <label>{t('pharmacy.title')}<select value={mode} onChange={e=>setMode(e.target.value as typeof mode)}>{(['receipt','dispense','adjust','threshold'] as const).map(m=><option key={m} value={m}>{t(`pharmacy.${m}`)}</option>)}</select></label>
+      <label>{t('pharmacy.title')}<select aria-label={t('pharmacy.title')} value={mode} onChange={e=>setMode(e.target.value as typeof mode)}>{(['receipt','dispense','adjust','threshold'] as const).map(m=><option key={m} value={m}>{t(`pharmacy.${m}`)}</option>)}</select></label>
       <label>{t(mode==='threshold'?'pharmacy.threshold':'pharmacy.qty')}<input name="qty" type="number" step="1" min={mode==='adjust'?undefined:mode==='threshold'?0:1} required /></label>
       {mode==='receipt'&&<><label>{t('pharmacy.cost')}<input name="cost" inputMode="numeric" pattern="[0-9]+" required /></label><label>{t('pharmacy.supplier')}<input name="supplier" required maxLength={1000}/></label></>}
-      {mode==='dispense'&&<label>{t('pharmacy.visit')}<select name="visit" required>{visits.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}</select></label>}
+      {mode==='dispense'&&<label>{t('pharmacy.visit')}<select aria-label={t('pharmacy.visit')} name="visit" required>{visits.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}</select></label>}
       {['receipt','adjust'].includes(mode)&&<label>{t('pharmacy.note')}<input name="note" required={mode==='adjust'} maxLength={1000}/></label>}
       {['dispense','adjust'].includes(mode)&&clinic.roles.some(r=>['ceo','administrator'].includes(r))&&<label>{t('pharmacy.override')}<input name="override" maxLength={1000}/></label>}
       <button disabled={busy||!item}>{t('pharmacy.save')}</button>

@@ -42,3 +42,15 @@ Format: 8-byte header `1CIBDmpF`, then a raw deflate stream (zlib, wbits -15, fr
 - Cash out (expenses) and cash shifts are part of today's cashier work and belong in C5.
 - Pharmacy stock and surgery exist in the current system and are needed on day one (decided 12 Nov), so C10 is in the go-live scope.
 - The import feature the CEO asked for ("a clinic uploads its 1C data and the base builds itself") can read this configuration's `.dt` directly. Other clinics running different 1C configurations need their own mapping or an Excel export.
+
+## Inner format (observed on the real dumps, 12 November 2026)
+
+Task 005's reader assumed a text bracket layout and stops with `UNRECOGNIZED_LAYOUT` on both real files (inflated sizes 4.58 MB and 3.83 MB, dump version "3"). What the planner observed by inspecting the real files (structure only):
+
+- The inflated stream is a binary tagged serialization of the infobase's physical tables, not the configuration's object names. Tables are 1C's physical tables: `ReferenceNN` (catalogs), `DocumentNN` and `DocumentNN_VTxx` (documents and their table parts), `AccumRgNN`, `InfoRgNN`, `EnumNN`, plus system tables (`Params`, `Config`, `DBNames` mapping).
+- Table definitions come first (offsets up to about 3.14 MB in the 12.07 file): each field as a name token followed by a type letter and size, for example `ID` R (reference, 16 bytes), `Version`, `Marked` L (boolean), `PredefinedID`, `ParentID` R, `Folder` L, `Code` N or S, `Description` S(150), then configuration fields `Fld50`, `Fld51`... Indexes follow (`ByParentCode`, `ByDescr`, ...). Observed type letters after tag `0xcb`: `N` number, `S` string, `R` reference, `L` boolean, `B` binary, `V` version, `D`/`T` dates likely.
+- Row data follows. Value tags observed: `0x82` field separator; `0x9a <len>` short ASCII/binary string (length byte), used for codes and Latin names; `0x97 <len>` UTF-16LE string with a character count, used for Cyrillic and Russian names; `0xe2` followed by 16 bytes, a reference (GUID-like); `0x8b <n>` small integer; `0x8f` numeric with length (likely decimals such as prices); `0xfa`/`0xda <len>` name tokens in definitions; `0xa1`/`0xa2`/`0x81` flags.
+- A service row looks like: record number string, reference id, parent reference (16 zero bytes when empty), flags, small integer, `Code` (for example `10902002002000003`), name in Uzbek Cyrillic (UTF-16), name in Uzbek Latin (ASCII here), name in Russian (UTF-16).
+- Mapping from configuration objects (Справочник.МУОЛАЖА and so on) to `ReferenceNN` lives in the `DBNames` data (metadata UUID to table number); the configuration object names appear as UTF-16 strings in the metadata region together with their UUIDs. Prices are most likely in `FldNN` numeric fields of МУОЛАЖА/Анализ or in an information register; to be confirmed.
+
+Task 018 implements the real reader against these findings. The planner runs every candidate reader on the real files locally and reports counts and samples (no patient data) back to the builder, because the real files never leave Imamatdin's machine and the planner's workspace.

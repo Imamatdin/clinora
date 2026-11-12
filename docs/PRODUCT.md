@@ -1,58 +1,57 @@
 # Clinora product definition
 
-Updated 11 November 2026. This is the current planning baseline; newer explicit user corrections take precedence.
+Updated 12 November 2026 by the planner. Supersedes the 11 November baseline. Newer explicit corrections from Imamatdin take precedence.
 
-Clinora is a doctor-facing clinical assistant built around a persistent patient record. It should turn consultation conversations into accurate draft documentation, assist subsequent workflow steps, and transfer approved outputs to supported destination systems. A doctor reviews and approves clinical documents. The same permitted records must be available through Telegram, phone, and desktop.
+## What Clinora is now
 
-## Agreed direction
+Clinora is an operating system for private clinics in Uzbekistan. It runs the whole patient journey in one integrated system: registration, queues, outpatient visits, laboratory, inpatient stays, cashier, discounts, receipts, daily cash close, staff pay and the CEO dashboard. The full requirements are in `docs/SPEC-CMS.md`, which is the source of truth for scope.
 
-- Work in a new repository, selectively reusing suitable supplied components.
-- Build and deliver in working increments, with a clean, working demonstration for the upcoming President Tech Award presentation. The exact event date and demo duration are not yet supplied; do not invent them.
-- Support all three automation layers: live documentation, clinic workflow actions, and integration with existing systems. The exact actions and destination interfaces remain to be established.
-- Maintain a patient profile and dated clinical history: when a checkup happened, where, which doctor/specialty was involved, what was reported or examined, and what diagnosis or assessment was recorded.
-- Support different specialties through a shared core with specialty-specific templates and extensions. Broad configurability is not proof of reliability for every specialty.
-- Improve UI, authentication and doctor access, recurring onboarding behavior, inconsistent pricing presentation, and overall reliability.
-- The user reports that the founders have customers ready to pay. Treat this as a founder-reported commercial signal, not verified revenue, contracts, or a confirmed price.
+The clinical notebook built in tasks 001-002 stays. It becomes the doctor's visit notes inside the clinic system. AI documentation from conversation (the original Clinora idea) becomes a module on top of those notes after the clinic system is live. Telegram, patient portal and external integrations move after it as well. Nothing from the earlier scope is deleted; it is re-sequenced.
 
-## Patient record and accounts
+## First customer
 
-The user's 'per client account' is interpreted as a persistent patient identity and medical notebook, with eventual patient access to their own permitted record. This interpretation is explicit so it can be corrected. A clinical chart does not require a patient to create a login before receiving care. The mechanism for linking a patient login, handling guardians, and granting cross-clinic access remains open.
+- One private clinic (about 150 outpatients and 20+ inpatients per day) goes live first. Target handoff: 19 November 2026. The clinic paying for the system is the founders' traction evidence.
+- Users at that clinic: CEO, administrator, registrars, doctors, laboratory staff, cashiers, inpatient staff. Most are not technical. Few buttons, minimal typing, large touch targets, Uzbek Cyrillic UI.
+- Hardware: existing Windows PCs, phones, thermal receipt printers (model to be confirmed). Internet may drop.
 
-Working proposal: each clinic maintains its authorized patient records. Each encounter references the patient, clinic/location, clinician, specialty, occurrence time and timezone, status, and source. Store occurrence time separately from entry/update time so imported or retrospectively entered visits do not appear to have happened today. Preserve imported provenance and uncertain or date-only timestamps.
+## Non-negotiable rules for every builder
 
-The timeline groups encounters and associated documents, findings, diagnoses, laboratory results, referrals, and follow-up events. Diagnoses retain their original date, clinician, and status; do not display every historical diagnosis as a current active condition. Amendments add a traceable revision rather than erasing history.
+1. Money is stored and computed as integer UZS (`bigint` in PostgreSQL, `bigint` in TypeScript). No floats anywhere in money paths.
+2. A charge line stores the unit price in force when the service was recorded. Later price changes never change past charges.
+3. Payments, refunds, discounts and audit events are append-only. A correction is a new row (refund, void) that references the original, with actor and reason.
+4. Every payment request carries an idempotency key. A repeated submit records one payment.
+5. Revenue reports use money actually received, not service value.
+6. Every query and mutation is scoped to the actor's clinic and checked on the server against the actor's current roles. The frontend hides; the server decides.
+7. A doctor sees only patients routed to them. Full-clinic export is CEO-only.
+8. Historical business days are never overwritten. Every visit, charge and payment belongs to one business day.
+9. All UI strings go through the i18n dictionary. Default locale `uz-Cyrl`.
+10. Synthetic data in development and demos. Real clinic reference data (services, prices, doctors) may be imported once Imamatdin provides it. Real patient data only after the founders define the process.
 
-## Automation layers
+## Data model direction
 
-1. Conversation capture: record deliberately, transcribe, extract evidence-backed facts, handle corrections, update specialty fields, and prepare drafts.
-2. Workflow assistance: reuse confirmed facts across the clinic's forms, track missing requirements, prepare tasks/referrals/follow-ups from explicit clinician decisions, and expose items requiring review.
-3. Integration: export or send approved outputs to supported destinations, retaining external identifiers, sync status, errors, and reconciliation history. Manual export is an explicit interim handoff, not completed integration.
+Reuse the task-002 foundation: accounts, sessions, clinics, memberships, patients, patient_assignments, encounters, documents, document_versions, idempotency_records, audit_events.
 
-The architecture must support all three. Which external adapter is implemented first depends on the clinic's actual destination system and authorized interface. An internal contract-tested adapter or labeled simulator can establish the integration architecture without falsely claiming live connectivity.
+Add, through new migrations only:
 
-## Working architecture proposal
+- `membership_roles` (a member can hold several roles: ceo, administrator, registrar, doctor, laboratory, cashier, inpatient). Replace the single `memberships.role` check by reading roles from this table.
+- Staff sign-in by login name or phone, email optional. Clinic staff often have no email.
+- Registration fields on `patients`: clinic-unique patient number, full name, birth date, gender, phone, region, district, address, acquisition source.
+- `business_days` (one open day per clinic; open/close actor and time; close snapshot).
+- `visits`: operational and billing container for one arrival (outpatient or inpatient), linked to a business day. A visit has many encounters (one per doctor seen) and many charge lines.
+- `departments`, `service_categories`, `services`, `service_prices` (price history), doctor profiles and doctor-service links.
+- `queue_points`, `queue_counters`, `queue_tickets`: independent numbering per queue point per business day, unique per day and point, race-safe.
+- `charge_lines`, `discounts`, `payments`, `payment_allocations`, `receipts`.
+- `rooms`, `beds`, `admissions`, `bed_day_charges` (one charge per admission per date).
+- `doctor_split_rules` (versioned per doctor: percentage, basis, discount handling, which revenue counts) and payroll period snapshots.
+- `day_close_reports` (snapshot of the cash report at close).
 
-Use a TypeScript modular monolith with a responsive React workspace and a server API. Preserve compatible code where practical. Prefer a single authoritative relational store and a single migration history. PostgreSQL is the production target; the builder must document the local development setup and any inherited SQLite assumptions before reuse. Do not introduce microservices, separate copies of patient databases, or multiple incompatible auth systems to combine the prototypes.
+Routing a patient to a doctor creates the `patient_assignments` row, so the existing assigned-scope access check gives "doctor sees only their own patients" for free.
 
-Modules: identity and clinic access; patients and encounters; capture/transcription; evidence-backed extraction; templates/documents; approvals/audit; workflow jobs; integration adapters; patient portal; plan configuration. Infrastructure choices and deployment credentials are not settled. No dependency on a specific proprietary app builder is required for the new core.
+## Open inputs (do not block building)
 
-Each extracted field should carry source references, status, and revision. Useful states include reported, observed, uncertain, corrected, and clinician-confirmed. Do not invent confidence scores. A timestamped transcript reference allows the doctor to inspect the supporting text.
-
-The phone and desktop access the same saved encounter. Use versioned updates and an authenticated event mechanism for changes. Reconnect by fetching the current server version. Clinical details belong in the protected workspace; the bot can provide navigation and appropriately scoped notifications or summaries.
-
-## Working demonstration proposal
-
-Use a clearly fictional patient. An authorized doctor opens a dated patient history, starts a new encounter, captures a short consultation, sees the correct form update, corrects a fact, continues on the second device, reviews and approves a document, and reopens it from the timeline. Show one workflow task and an honestly labeled export or supported integration result.
-
-Test the same scenario with a correction, absent examination findings, interrupted capture, and repeated submission. Measure end-to-end completion and correction effort. A scripted successful consultation alone is not the release criterion.
-
-## Details that do not block the shared foundation
-
-- Actual clinic forms, required fields, and workflow recording.
-- First specialties to validate with participating clinicians.
-- Exact presentation date, devices, languages, and allotted time.
-- Which system receives final documents; authorized API/export options and credentials.
-- Patient account linking and which documents patients can see.
-- Verified pricing, hosting budget, and production data-handling arrangements.
-
-Keep these visible in the backlog. Do not repeatedly ask the user to redefine the overall vision. Implement reversible shared foundations while those details arrive.
+- Which modules the first clinic needs on 19 November (inpatient and laboratory expected, to be confirmed).
+- Thermal printer model and paper width; devices in use.
+- The clinic's actual split rules and pay basis.
+- Export of the 1C reference data (Imamatdin will provide CSV or JSON).
+- Hosting location and data-handling arrangement for real patients.
+- President's Tech Award date and what is shown there.

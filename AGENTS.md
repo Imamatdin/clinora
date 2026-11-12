@@ -1,5 +1,7 @@
 # Clinora implementation instructions
 
+**Current direction (12 November 2026):** Clinora is now a clinic management system. Read `docs/PRODUCT.md`, `docs/SPEC-CMS.md` and `docs/INCREMENTS.md` before any task; where they differ from the clinical-automation sections below, they win for sequencing. The rules below on authorization, records, synthetic data and honest verification still apply in full. Follow the speed rules in `docs/INCREMENTS.md` (short handoffs, no committed CI logs).
+
 ## Scope and coordination
 
 Read the shared brief and your assigned task before editing. Inspect the actual repository and its instructions; preserve unrelated work. The founders agreed that Imamatdin can work in a new repository and selectively reuse the supplied code. This pack does not assert that a new remote repository already exists.
@@ -36,7 +38,7 @@ Preserve manual corrections when new transcript segments arrive. Keep uncertaint
 
 One backend is the authority for phone, web, and Telegram clients. Do not pass off per-browser local storage as synchronization. Do not put clinical records in ordinary bot messages by default; use the authenticated workspace for detailed records.
 
-Keep onboarding dismissible and persistent per account. Use one configuration for plan prices and entitlements. The founders have not selected a canonical price in this conversation; do not invent one or implement billing against a guessed figure.
+Keep onboarding dismissible and persistent per account. Use one configuration for Clinora's own subscription plan prices and entitlements (this is about what clinics pay Clinora, not the clinic's patient billing, which is in scope per `docs/SPEC-CMS.md`). The founders have not selected a canonical price in this conversation; do not invent one or implement billing against a guessed figure.
 
 Deliver a readable clinical workspace, keyboard-accessible controls, usable phone layouts, and explicit loading, error, empty, recording, processing, and saved states. Avoid decorative space that hides essential work. Show demo data and simulated external services as such.
 

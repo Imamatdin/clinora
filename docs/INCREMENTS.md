@@ -1,36 +1,25 @@
-# Delivery increments
+# Delivery increments (clinic system)
 
-These increments preserve the whole product scope. They are task boundaries, not promises that every dependency can be completed within a calendar day. The upcoming presentation is next week according to the user; its exact date is unknown.
+Updated 12 November 2026. Increments are ordered by dependency. Each ends at a gate: the listed checks pass in CI on GitHub-hosted runners before the next increment that depends on it starts. Independent increments run in parallel on separate branches.
 
-| Increment | Delivered behavior | Evidence required |
+| # | Delivered behavior | Gate |
 | --- | --- | --- |
-| 0 | Reproducible new-repository foundation, selective reuse decision, threat model, and clean project checks | Fresh install; consistent lockfile; build/typecheck/test commands; copied-source manifest; documented auth and storage contracts |
-| 1 | Approved doctor can create a patient, start a dated encounter, save a draft, reopen it, and see the patient's timeline | Persistence across restart; clinic and patient access denials; no self-granted doctor privilege; correct occurrence dates; accessible empty/error states |
-| 2 | The same doctor accesses the same record from web and Telegram/mobile | Verified account linking; doctor versus patient distinction; revocation; second-device updates; conflict handling; no public record URLs |
-| 3 | Conversation updates a specialty template with evidence, corrections, and uncertainty | Real microphone/transcription test on intended devices; clinician-reviewed staged cases; duplicate/out-of-order handling; preserved manual edits |
-| 4 | Doctor reviews a specific document version, approves it, exports it, and can amend it later | Server approval checks; stale-version rejection; immutable approved content; audited amendments; source-consistent export |
-| 5 | Approved clinician instructions prepare or execute permitted workflow actions | Defined action/approval matrix; task status; failure/retry handling; no AI-invented treatment orders |
-| 6 | Outputs reach the selected external system, or a clearly labeled interim export path | Authorized adapter contract; external ID and reconciliation; duplicate prevention; measured manual handoff if integration is pending |
-| 7 | Patient accesses their own permitted record; founders demonstrate a coherent release | Identity linking and patient isolation tests; role-specific navigation; clinician feedback; presentation rehearsal and labeled backup recording |
+| C1 | Roles, staff sign-in by login/phone, administrator manages staff, business day open/close, role-based navigation, Uzbek Cyrillic shell | Wrong-role API calls return 403 for every new route; one open day per clinic enforced by the database; i18n has no hardcoded UI strings |
+| C2 | Billing core library: money type, invoice math, discounts, payment allocation, refunds, doctor split calculation, bed-day counting (pure TypeScript, no DB) | Unit and property tests cover every rule in the brief; no floats in money paths |
+| C3 | Catalog: departments, categories, services, price history, doctors and their services; CSV/JSON import | Charges resolve the price at record time; import is idempotent and reports rejected rows |
+| C4 | Registration, visits, routing, queue tickets with printing | 50 concurrent ticket requests for one point produce 50 distinct consecutive numbers; duplicate patient warning; routed doctor gains access, others do not |
+| C5 | Cashier: charge lines, discounts with reason and approver, partial payments, cash/card, refunds, receipts on 58/80 mm thermal paper | Double submit records one payment; balance identities hold (value - discount - paid = due); receipt prints from Chrome on Windows |
+| C6 | Doctor and laboratory workspaces: own queue, consultation status, visit notes (task-002 notebook), prescription PDF; lab confirms tests, charges post once | Doctor cannot read another doctor's patient; lab cannot touch payments; repeated lab confirm posts one charge |
+| C7 | Inpatient: admissions, rooms and beds, transfers, daily bed charges, configurable bed-day rule, discharge invoice | Spec example (5 bed days + services) totals 1,000,000 UZS exactly; rerunning the daily job adds nothing |
+| C8 | Day close, cashier cash report (printable), CEO dashboard, reports, doctor split and payroll report, CEO-only export (PDF/Excel) | Day close total equals sum of payments for that day; every dashboard number recomputes from records |
+| C9 | PWA install, offline-tolerant registration and queue, deployment, backups, go-live checklist with parallel run | Installs on Android and Windows; registration made offline syncs once without duplicates; restore from backup tested |
 
-The first visible demo should appear during increment 1. Do not defer all UI or integration testing until the end. Integrate the core consultation flow continuously; adapt sequencing when the chosen partner workflow makes an earlier dependency necessary.
+After C9: AI documentation from conversation on visit notes, Telegram, inpatient patient app, external integrations (the earlier increments 3-7).
 
-## Security and usability acceptance
+## Process rules (speed)
 
-- Signup cannot make a user a clinic-authorized doctor. An invitation or authorized clinic approval establishes scoped privileges; describe separately whether professional credentials were checked.
-- Unauthenticated, wrong-clinic, wrong-patient, and revoked users cannot access records through API, exports, event subscriptions, or background work.
-- Approving or exporting stale or edited-after-approval content fails safely or requests renewed approval.
-- Guidance does not reopen on ordinary navigation after dismissal. Settings persist per account across devices where appropriate.
-- Pricing reads from a shared plan catalogue. An unavailable catalogue shows an unavailable state rather than an invented price. Billing is not activated until founders settle plans.
-- No unexplained horizontal scrolling through essential workflow steps on target phone or desktop screens.
-- Acknowledged saves survive reload and server restart. Recording, transcription, extraction, and persistence states are distinct and visible.
-
-## Evaluation set
-
-Prepare clinician-reviewed staged consultations that cover mixed Uzbek/Russian speech, correction of duration or dosage, negation, missing examination, patient-reported medication versus a clinician order, historical versus new diagnosis, similar patient names, interrupted audio, stale edits, and repeated requests. Separate transcription errors from extraction and template-mapping errors.
-
-Report sample size, unsupported statements, missed facts, clinician correction time, time to an approved document, update latency, and provider cost per consultation where measured. Never claim savings without a comparable baseline. Synthetic cases and small samples do not establish clinical validation.
-
-## Review loop
-
-Planner issues one scoped task with contracts and acceptance checks. Builder implements and returns the handoff. Planner inspects evidence and issues targeted corrections or the next increment. Founders/clinicians review working behavior at useful milestones. Feedback may change form mappings or order of work without discarding the shared architecture.
+- Handoff: 60 lines maximum, using `HANDOFF_TEMPLATE.md` headings. Link CI run URLs; do not commit CI logs into `docs/verification/`.
+- Write a failing test first only for security or money defects. Otherwise write the tests alongside the code.
+- Keep heavy work (PostgreSQL, browser tests, builds) on GitHub-hosted runners. Imamatdin's laptop has 8 GB RAM.
+- Run the Windows job only on pull requests. Linux job on every push.
+- One task per branch. Rebase on `main` before opening the PR. Do not edit files owned by another active task.

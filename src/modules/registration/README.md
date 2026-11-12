@@ -13,7 +13,7 @@ transaction); routes in `src/server/routes/registration.ts`; screen in `src/web/
 | `createVisit` | `POST registration/visits` `{patientId, points:[{queuePointId, serviceIds}]}` | same |
 | `ticketsHtml` | `GET registration/visits/:id/tickets` (HTML, 80 mm) | same |
 | `myQueue` | `GET queue/mine` | doctor |
-| `callNext` | `POST queue/call-next` `{queuePointId?}` | doctor (own point), administrator, ceo |
+| `callNext` | `POST queue/call-next` `{queuePointId?}` | doctor (own point), administrator, ceo. One patient at a time (task 010): while the doctor has a called or in-progress ticket, returns it with `alreadyActive: true`; a per-doctor lock serializes devices and managers |
 | `setTicketStatus` | `POST queue/tickets/:id/status` `{status}` | same |
 
 Rules worth knowing before reuse (offline sync in task 016, doctor screen in C6):

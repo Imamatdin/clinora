@@ -13,7 +13,7 @@ type Client = ReturnType<typeof f.client>;
 let A: Client, B: Client, lab: Client, cashier: Client;
 const key = () => randomUUID();
 const ids = { a: randomUUID(), b: randomUUID(), lab: randomUUID(), cashier: randomUUID(), day: randomUUID(), pointA: randomUUID(), pointB: randomUUID(),
-  p1: randomUUID(), p2: randomUUID(), consult: randomUUID(), labTest: randomUUID(), unpriced: randomUUID(), medicine: randomUUID() };
+  p1: randomUUID(), p2: randomUUID(), p3: randomUUID(), consult: randomUUID(), labTest: randomUUID(), unpriced: randomUUID(), medicine: randomUUID() };
 const url = (p: string) => `/api/clinics/${f.owner.clinicId}/${p}`;
 const json = async (r: Response) => { const text = await r.text(); try { return JSON.parse(text); } catch { return text; } };
 
@@ -33,7 +33,7 @@ async function visitWithTicket(patient: string, point: string, number: number) {
     [line, c, visit, ids.consult, u, ticket]);
   return { visit, ticket, line };
 }
-let v1: Awaited<ReturnType<typeof visitWithTicket>>, v2: Awaited<ReturnType<typeof visitWithTicket>>;
+let v1: Awaited<ReturnType<typeof visitWithTicket>>, v2: Awaited<ReturnType<typeof visitWithTicket>>, v3: Awaited<ReturnType<typeof visitWithTicket>>;
 
 test.before(async () => {
   f = await httpFixture();
@@ -45,22 +45,24 @@ test.before(async () => {
   await f.pool.query("INSERT INTO doctor_profiles(clinic_id,user_id,specialty_uz_cyrl) VALUES($1,$2,'Терапевт'),($1,$3,'Кардиолог')", [c, ids.a, ids.b]);
   await f.pool.query("INSERT INTO business_days(id,clinic_id,business_date,status,opened_by) VALUES($1,$2,(now() AT TIME ZONE 'Asia/Tashkent')::date,'open',$3)", [ids.day, c, u]);
   await f.pool.query("INSERT INTO queue_points(id,clinic_id,kind,user_id,name_uz_cyrl) VALUES($1,$2,'doctor',$3,'Терапевт 1-хона'),($4,$2,'doctor',$5,'Кардиолог 2-хона')", [ids.pointA, c, ids.a, ids.pointB, ids.b]);
-  await f.pool.query("INSERT INTO patients(id,clinic_id,display_name,full_name,provenance) VALUES($1,$2,'Synthetic Bemor Bir','Synthetic Bemor Bir','{}'),($3,$2,'Synthetic Bemor Ikki','Synthetic Bemor Ikki','{}')", [ids.p1, c, ids.p2]);
+  await f.pool.query("INSERT INTO patients(id,clinic_id,display_name,full_name,provenance) VALUES($1,$2,'Synthetic Bemor Bir','Synthetic Bemor Bir','{}'),($3,$2,'Synthetic Bemor Ikki','Synthetic Bemor Ikki','{}'),($4,$2,'Synthetic Bemor Uch','Synthetic Bemor Uch','{}')", [ids.p1, c, ids.p2, ids.p3]);
   // Registration (task 007) routes P1 to A and P2 to B.
-  await f.pool.query('INSERT INTO patient_assignments(clinic_id,patient_id,user_id) VALUES($1,$2,$3),($1,$4,$5)', [c, ids.p1, ids.a, ids.p2, ids.b]);
+  await f.pool.query('INSERT INTO patient_assignments(clinic_id,patient_id,user_id) VALUES($1,$2,$3),($1,$4,$5),($1,$6,$3)', [c, ids.p1, ids.a, ids.p2, ids.b, ids.p3]);
   await f.pool.query(`INSERT INTO services(id,clinic_id,kind,name_uz_cyrl) VALUES($1,$2,'consultation','Терапевт кўриги'),($3,$2,'lab','Умумий қон таҳлили'),
     ($4,$2,'procedure','Нархсиз муолажа'),($5,$2,'medicine','Синтетик дори')`, [ids.consult, c, ids.labTest, ids.unpriced, ids.medicine]);
   for (const [s, price] of [[ids.consult, 100000], [ids.labTest, 45000], [ids.medicine, 1000]] as const)
     await f.pool.query("INSERT INTO service_prices(id,clinic_id,service_id,price_uzs,effective_from,set_by) VALUES($1,$2,$3,$4,'2026-01-01',$5)", [key(), c, s, price, u]);
   v1 = await visitWithTicket(ids.p1, ids.pointA, 1);
   v2 = await visitWithTicket(ids.p2, ids.pointB, 1);
+  v3 = await visitWithTicket(ids.p3, ids.pointA, 2);
   A = f.client(); B = f.client(); lab = f.client(); cashier = f.client();
   await A.login('doctor.a@example.test'); await B.login('doctor.b@example.test'); await lab.login('lab@example.test'); await cashier.login('cashier.010@example.test');
 });
 test.after(async () => { await f?.close(); });
 
 const ROUTES: [string, unknown][] = [
-  ['doctor/queue', undefined], ['doctor/queue/call-next', {}], [`doctor/tickets/${randomUUID()}/start`, {}], [`doctor/tickets/${randomUUID()}/requeue`, {}],
+  // The queue itself (queue/mine, queue/call-next, ticket status) is task 007's API, guarded in registration.test.ts.
+  [`doctor/tickets/${randomUUID()}/start`, {}],
   [`doctor/tickets/${randomUUID()}/complete`, {}], [`doctor/patients/${randomUUID()}`, undefined], ['doctor/catalog', undefined],
   [`doctor/encounters/${randomUUID()}`, undefined], [`doctor/encounters/${randomUUID()}/note`, {}], [`doctor/encounters/${randomUUID()}/approve`, {}],
   [`doctor/encounters/${randomUUID()}/orders`, {}], [`doctor/encounters/${randomUUID()}/prescription`, undefined], [`doctor/encounters/${randomUUID()}/prescription.pdf`, undefined],
@@ -82,12 +84,13 @@ test('every new route rejects anonymous, wrong-role and other-clinic callers bef
 });
 
 test('doctor sees only own queue; another doctor\'s patient, ticket and encounter read as 404', async () => {
-  const qa = await json(await A.request(url('doctor/queue')));
-  assert.deepEqual(qa.tickets.map((t: { id: string }) => t.id), [v1.ticket]);
-  assert.equal(qa.tickets[0].patientName, 'Synthetic Bemor Bir');
+  const qa = await json(await A.request(url('queue/mine')));
+  assert.deepEqual(qa.map((t: { id: string }) => t.id), [v1.ticket, v3.ticket]);
+  assert.equal(qa[0].patient.fullName, 'Synthetic Bemor Bir');
   assert.equal((await A.request(url(`doctor/patients/${ids.p2}`))).status, 404);
   assert.equal((await A.request(url(`doctor/patients/${ids.p1}`))).status, 200);
-  for (const op of ['start', 'complete', 'requeue']) assert.equal((await A.request(url(`doctor/tickets/${v2.ticket}/${op}`), { idempotencyKey: key() })).status, 404, op);
+  for (const op of ['start', 'complete']) assert.equal((await A.request(url(`doctor/tickets/${v2.ticket}/${op}`), { idempotencyKey: key() })).status, 404, op);
+  assert.equal((await A.request(url(`queue/tickets/${v2.ticket}/status`), { status: 'called', idempotencyKey: key() })).status, 404);
   const started = await json(await B.request(url(`doctor/tickets/${v2.ticket}/start`), { idempotencyKey: key() }));
   assert.equal((await A.request(url(`doctor/encounters/${started.encounterId}`))).status, 404);
   assert.equal((await A.request(url(`doctor/encounters/${started.encounterId}/note`), { idempotencyKey: key(), expectedRevision: 0, note: { reported: 'x', observed: '', assessment: '', plan: '' } })).status, 404);
@@ -95,14 +98,24 @@ test('doctor sees only own queue; another doctor\'s patient, ticket and encounte
   assert.equal((await A.request(url(`patients/${ids.p2}`))).status, 404);
 });
 
-test('call next calls one patient even from two devices; completing the consultation twice completes the line once', async () => {
-  const [x, y] = await Promise.all([A.request(url('doctor/queue/call-next'), { idempotencyKey: key() }), A.request(url('doctor/queue/call-next'), { idempotencyKey: key() })]);
-  const [rx, ry] = [await json(x), await json(y)];
-  assert.equal(rx.ticket.id, v1.ticket); assert.equal(ry.ticket.id, v1.ticket);
-  assert.deepEqual([rx.alreadyActive, ry.alreadyActive].sort(), [false, true]);
+let encounterA = '';
+test('call next (task 007 API) calls one patient even from several devices; completing the consultation twice completes the line once', async () => {
+  // Two patients wait for doctor A. Five presses at once, each with its own key, call exactly one of them.
+  const calls = await Promise.all([1, 2, 3, 4, 5].map(() => A.request(url('queue/call-next'), { idempotencyKey: key() })));
+  const bodies0 = await Promise.all(calls.map(json));
+  assert.deepEqual(bodies0.map(b => b.ticket.id), Array(5).fill(v1.ticket));
+  assert.equal(bodies0.filter(b => !b.alreadyActive).length, 1);
+  const statuses = async () => (await f.pool.query('SELECT id, status FROM queue_tickets WHERE id = ANY($1) ORDER BY number', [[v1.ticket, v3.ticket]])).rows.map(r => r.status);
+  assert.deepEqual(await statuses(), ['called', 'waiting']);
+  // A manager calling for the doctor's point does not call a second patient either.
+  const owner = f.client(); await owner.login();
+  const managerCall = await json(await owner.request(url('queue/call-next'), { queuePointId: ids.pointA, idempotencyKey: key() }));
+  assert.equal(managerCall.ticket?.id, v1.ticket, JSON.stringify(managerCall)); assert.equal(managerCall.alreadyActive, true);
+  assert.deepEqual(await statuses(), ['called', 'waiting']);
   const start = await json(await A.request(url(`doctor/tickets/${v1.ticket}/start`), { idempotencyKey: key() }));
   const again = await json(await A.request(url(`doctor/tickets/${v1.ticket}/start`), { idempotencyKey: key() }));
   assert.equal(again.encounterId, start.encounterId, 'one encounter per doctor per visit');
+  encounterA = start.encounterId;
   assert.equal((await f.pool.query('SELECT count(*)::int n FROM encounters WHERE visit_id=$1', [v1.visit])).rows[0].n, 1);
   const results = await Promise.all([1, 2].map(() => A.request(url(`doctor/tickets/${v1.ticket}/complete`), { idempotencyKey: key() })));
   assert.deepEqual(results.map(r => r.status), [200, 200]);
@@ -112,12 +125,12 @@ test('call next calls one patient even from two devices; completing the consulta
   assert.deepEqual(line, { status: 'completed', completed_by: ids.a, performer_user_id: ids.a });
   assert.equal((await f.pool.query("SELECT count(*)::int n FROM audit_events WHERE action='doctor.consultation_completed' AND resource_id=$1", [v1.ticket])).rows[0].n, 2);
   assert.equal((await f.pool.query('SELECT status FROM queue_tickets WHERE id=$1', [v1.ticket])).rows[0].status, 'completed');
+  // Only after the active patient is finished does call next move on.
+  assert.equal((await json(await A.request(url('queue/call-next'), { idempotencyKey: key() }))).ticket.id, v3.ticket);
 });
 
-let encounterA = '';
 test('note approval writes an immutable version; later edits are explicit amendments; the PDF follows the approved version', async () => {
-  const q = await json(await A.request(url('doctor/queue')));
-  encounterA = q.tickets[0].encounterId; assert.ok(encounterA);
+  assert.ok(encounterA);
   const base = url(`doctor/encounters/${encounterA}`);
   const rx = [{ medicine: 'Парацетамол 500 мг', dose: '1 таблетка', frequency: 'кунига 3 марта', duration: '5 кун', notes: 'овқатдан кейин' }];
   const note = { reported: 'Синтетик шикоят: 3 кун иситма', observed: '', assessment: 'J06.9 ЎРВИ (синтетик)', plan: 'Кўп суюқлик' };
@@ -222,6 +235,18 @@ test('doctor orders a lab test at the current price; lab enters versioned result
   const result = card.labs.find((l: { id: string }) => l.id === lineId);
   assert.equal(result.status, 'completed'); assert.equal(result.result.version, 2); assert.equal(result.result.values[0].value, '128');
   assert.equal(card.visits[0].diagnosis, 'J20.9');
+});
+
+test('a price set through the catalog (task 005) is the price the doctor sees and the price charged; earlier lines keep theirs', async () => {
+  const owner = f.client(); await owner.login();
+  const set = await owner.request(url('catalog/prices'), { serviceId: ids.labTest, priceUzs: '52000', idempotencyKey: key() });
+  assert.equal(set.status, 201);
+  const offered = (await json(await A.request(url('doctor/catalog')))).find((s: { id: string }) => s.id === ids.labTest);
+  assert.equal(offered.priceUzs, '52000');
+  const ordered = await json(await A.request(url(`doctor/encounters/${encounterA}/orders`), { idempotencyKey: key(), items: [{ serviceId: ids.labTest, quantity: 1 }] }));
+  assert.equal(ordered.lines[0].unitPriceUzs, '52000');
+  const prices = (await f.pool.query("SELECT unit_price_uzs::text p FROM charge_lines WHERE service_id=$1 AND source='doctor' ORDER BY created_at", [ids.labTest])).rows.map(r => r.p);
+  assert.deepEqual(prices, ['45000', '52000']);
 });
 
 test('lab cannot read notes or touch payments; doctor cannot edit lab results; revoked routing removes access', async () => {

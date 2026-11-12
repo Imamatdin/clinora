@@ -6,6 +6,7 @@ type ClinicalField = DocumentVersion['fields'][number];
 import { requireRole, recordAudit, type ClinicContext } from '../../server/roles.js';
 import { priceAt } from '../../server/repo/prices.js';
 import { Key, fail, once } from '../pharmacy/actions.js';
+import { setTicketStatus } from '../registration/actions.js';
 import { carriedFields, currentVersion, latestApproval, nextDraftKind, requireApprovable, type ApprovalRef } from '../documents/approvals.js';
 
 /*
@@ -59,64 +60,23 @@ async function patientInScope(c: ClinicContext, scope: Scope, patientId: string)
   if (!ok) fail('NOT_FOUND');
 }
 
-// ---------- Queue ----------
+// ---------- Visit start and completion ----------
+// The queue itself (today's tickets, call next, missed call) is task 007's API in src/modules/registration.
+// Ticket status changes here go through 007's setTicketStatus, so there is one status machine and one ownership rule.
 
-const TICKET_SELECT = `SELECT t.id, t.number, t.status, t.visit_id, t.called_at, t.started_at, t.completed_at, t.created_at,
-    v.patient_id, v.status visit_status, coalesce(p.full_name, p.display_name) patient_name, p.patient_no, qp.name_uz_cyrl point_name,
-    (SELECT e.id FROM encounters e WHERE e.clinic_id=t.clinic_id AND e.visit_id=t.visit_id AND e.clinician_id=qp.user_id) encounter_id
-  FROM queue_tickets t
-  JOIN queue_points qp ON qp.clinic_id=t.clinic_id AND qp.id=t.queue_point_id AND qp.kind='doctor' AND qp.user_id=$2
-  JOIN business_days d ON d.clinic_id=t.clinic_id AND d.id=t.business_day_id AND d.status='open'
-  JOIN visits v ON v.clinic_id=t.clinic_id AND v.id=t.visit_id
-  JOIN patients p ON p.clinic_id=v.clinic_id AND p.id=v.patient_id`;
-const ticketView = (r: Record<string, any>) => ({ id: r.id as string, number: r.number as number, status: r.status as string, point: r.point_name as string,
-  patientId: r.patient_id as string, patientName: r.patient_name as string, patientNo: r.patient_no as number | null, visitId: r.visit_id as string,
-  encounterId: (r.encounter_id ?? null) as string | null, calledAt: r.called_at, startedAt: r.started_at, completedAt: r.completed_at });
-const ORDER = `CASE t.status WHEN 'in_progress' THEN 0 WHEN 'called' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END,
-  CASE WHEN t.status IN ('completed','cancelled') THEN -t.number ELSE t.number END, t.created_at`;
-
-/** Today's tickets on this doctor's own queue points. */
-export async function myQueue(ctx: ClinicContext) {
-  const { c } = await doctor(ctx);
-  const day = (await c.tx.query("SELECT id, business_date::text date FROM business_days WHERE clinic_id=$1 AND status='open'", [c.clinicId])).rows[0];
-  if (!day) return { day: null, tickets: [] };
-  const rows = (await c.tx.query(`${TICKET_SELECT} WHERE t.clinic_id=$1 ORDER BY ${ORDER} LIMIT 300`, [c.clinicId, c.actorId])).rows;
-  return { day: { id: day.id as string, date: day.date as string }, tickets: rows.map(ticketView) };
-}
-
-/** Locks one of this doctor's tickets of the open day. */
+/** Locks one of this doctor's tickets of the open day, with what the visit screen needs. */
 async function myTicket(c: ClinicContext, ticketId: string) {
-  const row = (await c.tx.query(`${TICKET_SELECT} WHERE t.clinic_id=$1 AND t.id=$3 FOR UPDATE OF t`, [c.clinicId, c.actorId, ticketId])).rows[0];
+  const row = (await c.tx.query(`SELECT t.id, t.status, t.visit_id, v.patient_id, v.status visit_status, qp.name_uz_cyrl point_name
+    FROM queue_tickets t
+    JOIN queue_points qp ON qp.clinic_id=t.clinic_id AND qp.id=t.queue_point_id AND qp.kind='doctor' AND qp.user_id=$2
+    JOIN business_days d ON d.clinic_id=t.clinic_id AND d.id=t.business_day_id AND d.status='open'
+    JOIN visits v ON v.clinic_id=t.clinic_id AND v.id=t.visit_id
+    WHERE t.clinic_id=$1 AND t.id=$3 FOR UPDATE OF t`, [c.clinicId, c.actorId, ticketId])).rows[0];
   return row ?? fail('NOT_FOUND');
 }
-
-/** Calls the next waiting patient. While a patient is already called or in progress, returns that ticket instead. */
-export async function callNext(ctx: ClinicContext, raw: z.input<typeof KeyInput>) {
-  const { c } = await doctor(ctx); const input = KeyInput.parse(raw);
-  return once(c, 'doctor.call_next', input, async () => {
-    // Two devices of the same doctor pressing "call next" together call one patient.
-    await c.tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`doctor.queue:${c.clinicId}:${c.actorId}`]);
-    const active = (await c.tx.query(`${TICKET_SELECT} WHERE t.clinic_id=$1 AND t.status IN ('called','in_progress') ORDER BY ${ORDER} LIMIT 1`, [c.clinicId, c.actorId])).rows[0];
-    if (active) return { ticket: ticketView(active), alreadyActive: true };
-    const next = (await c.tx.query(`${TICKET_SELECT} WHERE t.clinic_id=$1 AND t.status='waiting' ORDER BY t.created_at, t.number LIMIT 1 FOR UPDATE OF t SKIP LOCKED`, [c.clinicId, c.actorId])).rows[0];
-    if (!next) return { ticket: null, alreadyActive: false };
-    await c.tx.query("UPDATE queue_tickets SET status='called', called_at=now() WHERE clinic_id=$1 AND id=$2", [c.clinicId, next.id]);
-    await recordAudit(c.tx, c.actorId, c.clinicId, 'doctor.ticket_called', next.id, { number: next.number });
-    return { ticket: { ...ticketView(next), status: 'called' }, alreadyActive: false };
-  });
-}
-
-/** A called patient who did not come returns to the waiting list. */
-export async function requeue(ctx: ClinicContext, ticketId: string, raw: z.input<typeof KeyInput>) {
-  const { c } = await doctor(ctx); const input = KeyInput.parse(raw);
-  return once(c, 'doctor.requeue', scoped(input, { ticketId }), async () => {
-    const t = await myTicket(c, ticketId);
-    if (t.status !== 'called') return fail('INVALID_TRANSITION');
-    await c.tx.query("UPDATE queue_tickets SET status='waiting', called_at=NULL WHERE clinic_id=$1 AND id=$2", [c.clinicId, ticketId]);
-    await recordAudit(c.tx, c.actorId, c.clinicId, 'doctor.ticket_requeued', ticketId);
-    return { ticketId, status: 'waiting' };
-  });
-}
+/** One step through 007's queue status machine. The outer action is idempotent, so the inner key only needs to be fresh. */
+const moveTicket = (c: ClinicContext, ticketId: string, status: 'in_progress' | 'completed') =>
+  setTicketStatus(c, ticketId, { status, idempotencyKey: randomUUID() });
 
 async function ensureEncounter(c: ClinicContext, t: Record<string, any>): Promise<{ encounterId: string; documentId: string }> {
   const found = (await c.tx.query(`SELECT e.id, d.id document_id FROM encounters e JOIN documents d ON d.clinic_id=e.clinic_id AND d.encounter_id=e.id
@@ -142,10 +102,7 @@ export async function startVisit(ctx: ClinicContext, ticketId: string, raw: z.in
     const t = await myTicket(c, ticketId);
     await patientInScope(c, scope, t.patient_id);
     if (t.status === 'cancelled' || t.visit_status !== 'open') return fail('INVALID_TRANSITION');
-    if (t.status === 'waiting' || t.status === 'called') {
-      await c.tx.query("UPDATE queue_tickets SET status='in_progress', started_at=now() WHERE clinic_id=$1 AND id=$2", [c.clinicId, ticketId]);
-      await recordAudit(c.tx, c.actorId, c.clinicId, 'doctor.consultation_started', ticketId);
-    }
+    if (t.status === 'waiting' || t.status === 'called') await moveTicket(c, ticketId, 'in_progress');
     const enc = await ensureEncounter(c, t);
     return { ticketId, patientId: t.patient_id as string, visitId: t.visit_id as string, ...enc };
   });
@@ -171,8 +128,8 @@ export async function completeConsultation(ctx: ClinicContext, ticketId: string,
       completedNow = !!(await c.tx.query(`UPDATE charge_lines SET status='completed', completed_by=$3, completed_at=now(), performer_user_id=coalesce(performer_user_id,$3)
         WHERE clinic_id=$1 AND id=$2 AND status='ordered'`, [c.clinicId, line.id, c.actorId])).rowCount;
     }
-    if (t.status === 'waiting' || t.status === 'called') await c.tx.query("UPDATE queue_tickets SET status='in_progress', started_at=now() WHERE clinic_id=$1 AND id=$2", [c.clinicId, ticketId]);
-    if (t.status !== 'completed') await c.tx.query("UPDATE queue_tickets SET status='completed', completed_at=now() WHERE clinic_id=$1 AND id=$2", [c.clinicId, ticketId]);
+    if (t.status === 'waiting' || t.status === 'called') await moveTicket(c, ticketId, 'in_progress');
+    if (t.status !== 'completed') await moveTicket(c, ticketId, 'completed');
     await recordAudit(c.tx, c.actorId, c.clinicId, 'doctor.consultation_completed', ticketId, { chargeLineId: line?.id ?? null, completedNow });
     return { ticketId, status: 'completed', chargeLineId: (line?.id ?? null) as string | null, completedNow };
   });
@@ -315,13 +272,20 @@ export async function approveNote(ctx: ClinicContext, encounterId: string, raw: 
 
 // ---------- Orders ----------
 
-/** Orderable services with the price in force now. Services without a price are not offered (never charged as zero). */
+/**
+ * Orderable services with the price in force now, read through the shared priceAt helper (the same rule the catalog
+ * and charging use). Services without a price are not offered: nothing is ever charged as zero.
+ */
 export async function catalog(ctx: ClinicContext) {
   const { c } = await doctor(ctx);
-  return (await c.tx.query(`SELECT s.id, s.name_uz_cyrl name, s.kind, pr.price_uzs::text price_uzs FROM services s
-    JOIN LATERAL (SELECT price_uzs FROM service_prices WHERE clinic_id=s.clinic_id AND service_id=s.id AND effective_from<=now() ORDER BY effective_from DESC LIMIT 1) pr ON true
-    WHERE s.clinic_id=$1 AND s.is_active AND s.kind = ANY($2) ORDER BY s.kind, s.name_uz_cyrl LIMIT 500`, [c.clinicId, ORDERABLE])).rows
-    .map(r => ({ id: r.id as string, name: r.name as string, kind: r.kind as string, priceUzs: r.price_uzs as string }));
+  const services = (await c.tx.query('SELECT id, name_uz_cyrl name, kind FROM services WHERE clinic_id=$1 AND is_active AND kind = ANY($2) ORDER BY kind, name_uz_cyrl LIMIT 500',
+    [c.clinicId, ORDERABLE])).rows;
+  const now = new Date(), out = [] as { id: string; name: string; kind: string; priceUzs: string }[];
+  for (const s of services) {
+    const price = await priceAt(c.tx, c.clinicId, s.id, now);
+    if (price) out.push({ id: s.id, name: s.name, kind: s.kind, priceUzs: price.priceUzs.toString() });
+  }
+  return out;
 }
 
 /** New ordered charge lines on the doctor's visit, priced by priceAt at the moment of ordering. */

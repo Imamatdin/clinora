@@ -5,8 +5,8 @@ import type { ModuleProps, WebModule } from '../modules.js';
 import { languages, money, saveLocale, savedLocale, translator, type DoctorKey, type Locale } from './i18n.js';
 import { VISIT_PANELS } from './panels.js';
 
-type Ticket = { id: string; number: number; status: string; point: string; patientId: string; patientName: string; patientNo: number | null; visitId: string; encounterId: string | null };
-type Queue = { day: { id: string; date: string } | null; tickets: Ticket[] };
+/** Task 007's queue API ticket (src/modules/registration: queue/mine, queue/call-next, queue/tickets/:id/status). */
+type Ticket = { id: string; number: number; status: string; queuePointId: string; visitId: string; patient: { id: string; patientNo: number | null; fullName: string } };
 type Rx = { medicine: string; dose: string; frequency: string; duration: string; notes: string };
 type Note = { reported: string; observed: string; assessment: string; plan: string };
 type Approval = { id: string; versionId: string; revision: number; approvedAt: string; current: boolean };
@@ -38,16 +38,16 @@ function useKeys() {
   };
 }
 
-function DoctorHome({ clinic, request, setDirty }: ModuleProps) {
+function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps) {
   const [locale, setLocale] = useState<Locale>(savedLocale), t = translator(locale);
-  const [queue, setQueue] = useState<Queue | null>(null), [open, setOpen] = useState<{ encounterId: string; patientId: string } | null>(null);
+  const [queue, setQueue] = useState<Ticket[] | null>(null), [open, setOpen] = useState<{ encounterId: string; patientId: string } | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
-  const keys = useKeys(), base = `/api/clinics/${clinic.id}/doctor`;
+  const keys = useKeys(), base = `/api/clinics/${clinic.id}/doctor`, queueBase = `/api/clinics/${clinic.id}/queue`;
   const run = async (work: () => Promise<void>) => {
     setBusy(true); setError(''); setNotice('');
     try { await work(); } catch (e) { setError(errorText(e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE')); } finally { setBusy(false); }
   };
-  const load = () => request<Queue>(`${base}/queue`).then(setQueue);
+  const load = () => request<Ticket[]>(`${queueBase}/mine`).then(setQueue);
   useEffect(() => { load().catch(() => setError(errorText('SERVICE_UNAVAILABLE'))); }, [clinic.id]);
   useEffect(() => {
     if (open) return;
@@ -56,19 +56,19 @@ function DoctorHome({ clinic, request, setDirty }: ModuleProps) {
   }, [clinic.id, open]);
   const post = async <R,>(path: string, body: Record<string, unknown> = {}) => {
     const scope = path + JSON.stringify(body);
-    const result = await request<R>(`${base}/${path}`, { ...body, idempotencyKey: keys.key(scope) });
+    const result = await request<R>(path, { ...body, idempotencyKey: keys.key(scope) });
     keys.done(scope); return result;
   };
   const callNext = () => run(async () => {
-    const r = await post<{ ticket: Ticket | null }>('queue/call-next');
+    const r = await post<{ ticket: Ticket | null }>(`${queueBase}/call-next`);
     if (!r.ticket) setNotice(t('doctor.noneWaiting'));
     await load();
   });
   const start = (ticket: Ticket) => run(async () => {
-    const r = await post<{ encounterId: string; patientId: string }>(`tickets/${ticket.id}/start`);
+    const r = await post<{ encounterId: string; patientId: string }>(`${base}/tickets/${ticket.id}/start`);
     setOpen({ encounterId: r.encounterId, patientId: r.patientId }); await load();
   });
-  const requeue = (ticket: Ticket) => run(async () => { await post(`tickets/${ticket.id}/requeue`); await load(); });
+  const requeue = (ticket: Ticket) => run(async () => { await post(`${queueBase}/tickets/${ticket.id}/status`, { status: 'waiting' }); await load(); });
 
   const language = <label className="dr-lang">{t('doctor.language')}<select aria-label={t('doctor.language')} value={locale} onChange={e => { const l = e.target.value as Locale; setLocale(l); saveLocale(l); }}>
     {languages.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}</select></label>;
@@ -80,12 +80,12 @@ function DoctorHome({ clinic, request, setDirty }: ModuleProps) {
     <VisitScreen key={open.encounterId} t={t} clinicId={clinic.id} base={base} request={request} encounterId={open.encounterId} patientId={open.patientId} setDirty={setDirty} />
   </section>;
 
-  const tickets = queue?.tickets ?? [], active = tickets.find(x => x.status === 'called' || x.status === 'in_progress');
+  const tickets = queue ?? [], active = tickets.find(x => x.status === 'called' || x.status === 'in_progress');
   const waiting = tickets.filter(x => x.status === 'waiting'), done = tickets.filter(x => x.status === 'completed');
   return <section className="dr">
     <div className="dr-head"><h2>{t('doctor.title')}</h2>{language}</div>
     {banners}
-    {!queue ? <p>{t('doctor.loading')}</p> : !queue.day ? <p className="empty">{t('doctor.noDay')}</p> : <>
+    {!queue ? <p>{t('doctor.loading')}</p> : !businessDay?.openDay && !tickets.length ? <p className="empty">{t('doctor.noDay')}</p> : <>
       <div className="dr-actions">
         <button className="primary big" disabled={busy || (!waiting.length && !active)} onClick={() => void callNext()}>{t('doctor.callNext')}</button>
         <span className="fine">{t('doctor.waitingCount', { count: waiting.length })}</span>
@@ -93,8 +93,8 @@ function DoctorHome({ clinic, request, setDirty }: ModuleProps) {
       </div>
       {active && <article className="dr-card dr-current" aria-label={t('doctor.current')}>
         <p className="eyebrow">{t('doctor.current')}</p>
-        <h3>{t('doctor.ticketNo', { number: active.number })} · {active.patientName}</h3>
-        <p className="fine">{active.patientNo ? t('doctor.patientNo', { number: active.patientNo }) + ' · ' : ''}{t(`doctor.status.${active.status}` as DoctorKey)}</p>
+        <h3>{t('doctor.ticketNo', { number: active.number })} · {active.patient.fullName}</h3>
+        <p className="fine">{active.patient.patientNo ? t('doctor.patientNo', { number: active.patient.patientNo }) + ' · ' : ''}{t(`doctor.status.${active.status}` as DoctorKey)}</p>
         <div className="dr-actions">
           <button className="primary big" disabled={busy} onClick={() => void start(active)}>{active.status === 'in_progress' ? t('doctor.open') : t('doctor.start')}</button>
           {active.status === 'called' && <button disabled={busy} onClick={() => void requeue(active)}>{t('doctor.requeue')}</button>}
@@ -102,9 +102,9 @@ function DoctorHome({ clinic, request, setDirty }: ModuleProps) {
       </article>}
       {!tickets.length && <p className="empty">{t('doctor.empty')}</p>}
       {waiting.length > 0 && <><h3>{t('doctor.waitingList')}</h3><ul className="dr-list">{waiting.map(x =>
-        <li key={x.id}><strong>{t('doctor.ticketNo', { number: x.number })}</strong><span>{x.patientName}</span></li>)}</ul></>}
+        <li key={x.id}><strong>{t('doctor.ticketNo', { number: x.number })}</strong><span>{x.patient.fullName}</span></li>)}</ul></>}
       {done.length > 0 && <><h3>{t('doctor.doneList')}</h3><ul className="dr-list">{done.map(x =>
-        <li key={x.id}><strong>{t('doctor.ticketNo', { number: x.number })}</strong><span>{x.patientName}</span>
+        <li key={x.id}><strong>{t('doctor.ticketNo', { number: x.number })}</strong><span>{x.patient.fullName}</span>
           <button className="small" disabled={busy} onClick={() => void start(x)}>{t('doctor.open')}</button></li>)}</ul></>}
     </>}
   </section>;

@@ -94,7 +94,7 @@ async function folder(node: BinaryNode | undefined, inflate: Inflater, max: numb
  * This is deliberate: patient/caretaker lists and unapproved attributes never enter a text decoder.
  * Bounded inflated input (real dumps are 4–5 MiB) is indexed once; nested metadata uses the same browser inflater.
  */
-export async function readDt(source: AsyncIterable<Uint8Array>, inflate: Inflater, options: ReadOptions = {}): Promise<DtExtract> {
+async function extractDt(source: AsyncIterable<Uint8Array>, inflate: Inflater, options: ReadOptions = {}): Promise<DtExtract> {
   const max = options.maxInflatedBytes ?? 64 * 1024 ** 2;
   let version = '', data: Uint8Array;
   try { data = await collect(inflate(afterHeader(source, h => { version = checkHeader(h); })), max); }
@@ -200,3 +200,9 @@ export async function readDt(source: AsyncIterable<Uint8Array>, inflate: Inflate
   return { version, inflatedBytes: data.length, objects, structure, rows, priceSources: [...priceSources] };
 }
 const SAFE_FIELDS = new Set(['ID', 'Ref', 'Code', 'Description', 'Folder', 'DeletionMark', 'Parent', 'ParentID', 'Marked', 'БУЛИМ', 'Булим', 'МИХИ', 'УлБир', 'НАРХИ', 'Цена', 'Норма', 'КунликЁтокПули', 'СотувНархи', 'КиримНархи', 'Туман', 'Кабул', 'Стационар', 'Лабаратория', 'УЗИ', 'НаименованиеЛат', 'НаименованиеРус', 'ЕдиницаИзмерения']);
+
+/** No platform decoder/inflater exception can expose a partially extracted result. */
+export async function readDt(source: AsyncIterable<Uint8Array>, inflate: Inflater, options: ReadOptions = {}): Promise<DtExtract> {
+  try { return await extractDt(source, inflate, options); }
+  catch (error) { if (error instanceof DtError) throw error; throw new DtError('CORRUPT'); }
+}

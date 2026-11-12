@@ -59,6 +59,13 @@ test('corrupt, truncated, unsupported and oversized files fail clearly', async (
   assert.throws(() => checkHeader(Buffer.from('1CIBDmpFX')), DtError);
 });
 
+test('malformed selected text fails clearly while skipped patient text is never interpreted', async () => {
+  const section = { name: 'Справочник.БЕМОРЛАР', records: [[['Наименование', '\ud800'] as [string, string]]] };
+  const safe = await read(synthDt([section]));
+  assert.equal(safe.rows.length, 0);
+  assert.equal(await code(read(synthDt([{ ...section, name: 'Справочник.МУОЛАЖА' }]))), 'CORRUPT');
+});
+
 test('prices, periods and kinds parse without floats or guesses', () => {
   assert.deepEqual(parsePrice('150000.00'), { priceUzs: '150000' });
   assert.deepEqual(parsePrice('1 250 000,00'), { priceUzs: '1250000' });

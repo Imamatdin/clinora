@@ -16,6 +16,7 @@ test('binary tags preserve integers, lengths, GUID bytes and combined structural
     0x95, ...Array.from({length: 16}, (_, i) => i), 0x96, 0xe1, 0x20
   ]);
   const root = parseBinary(b);
+  assert.ok(list(root[0]).every(n => typeof n === 'object' && !Array.isArray(n)), 'indexing retains numeric payloads as spans too');
   assert.deepEqual(list(root[0]).map(scalar), ['12', '255', '-128', '4660', '-2', '4294967295', '-1', '9223372036854775807', 'Ж', 'A', 'B', 'C', 'D', 'E', '000102030405060708090a0b0c0d0e0f']);
   assert.deepEqual(list(root[1]).map(scalar), ['0']);
   for (const cut of [Buffer.from([0x17, 1, 65]), Buffer.from([0x40]), Buffer.from([0x11, 0])]) assert.throws(() => parseBinary(cut), (e: unknown) => e instanceof DtError && e.code === 'TRUNCATED');

@@ -1,0 +1,18 @@
+.inpatient { max-width: 70rem; margin: auto; font-size: 1rem; }
+.inpatient header,.inpatient dl>div {display:flex;gap:1rem;justify-content:space-between;flex-wrap:wrap}
+.inpatient label {display:block;margin:.7rem 0}
+.inpatient label:has(input[type=checkbox]) {display:flex;align-items:center;gap:12px;min-height:48px}
+.inpatient input[type=checkbox] {width:24px;height:24px;flex:none}
+.inpatient input:not([type=checkbox]),.inpatient select {display:block;width:100%;min-height:48px;font:inherit;max-width:100%}
+.inpatient button {min-height:48px;font:inherit;white-space:normal;overflow-wrap:anywhere}
+.inpatient .invoice-pdf {display:inline-flex;align-items:center;min-height:48px;padding:10px;border:1px solid #bdcecc;border-radius:6px;color:#244b51}
+.inpatient fieldset {border:0;padding:0;min-width:0}
+.inpatient details {border:1px solid #c6d4db;border-radius:10px;padding:1rem;margin:1rem 0}
+.inpatient summary {cursor:pointer;min-height:48px;font-weight:600}
+.bed-map {display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.7rem;margin:1rem 0}
+.bed-map>div {background:#e4f5eb;padding:1rem;border-radius:10px;overflow-wrap:anywhere}
+.bed-map>div[data-occupied=true] {background:#fff0d2}
+.stays {display:grid;gap:.6rem;margin:1rem 0}
+.stay-detail {padding:1rem;border:1px solid #c6d4db;border-radius:10px}
+.inpatient dd {margin:0;font-variant-numeric:tabular-nums}
+.inpatient p[role=alert] {color:#9c1717}

@@ -101,6 +101,7 @@ export async function buildPlan(tx: Tx, clinicId: string, staged: { seq: number;
 
     const values: Record<string, unknown> = {};
     const setText = (column: string, value: string | null) => { if (value !== null) values[column] = value; };
+    if (object === 'doctor' && row.doctorRoles) values.source_role_flags = row.doctorRoles;
     if (object === 'doctor') { values.full_name = row.nameUzCyrl; setText('specialty_uz_cyrl', row.specialty); }
     else { values.name_uz_cyrl = row.nameUzCyrl; setText('name_uz_latn', row.nameUzLatn); setText('name_ru', row.nameRu); }
     if (row.code) values.code_1c = row.code;
@@ -116,7 +117,7 @@ export async function buildPlan(tx: Tx, clinicId: string, staged: { seq: number;
       // A service's kind is fixed once saved (trigger); an existing row keeps its kind.
       if (!existing) { values.kind = row.kind ?? 'procedure'; values.track_stock = row.trackStock; }
       else if (row.trackStock) values.track_stock = true;
-      setText('unit', row.unit);
+      setText('unit', row.unit); setText('mxik_code', row.mxikCode); setText('reference_range', row.referenceRange);
     }
     if (object === 'mahalla') {
       const district = resolve('district', row.district);
@@ -128,7 +129,7 @@ export async function buildPlan(tx: Tx, clinicId: string, staged: { seq: number;
     let id: string, outcome: Outcome;
     if (existing) {
       id = existing.id;
-      const changed = Object.entries(values).filter(([k, v]) => String(existing![k] ?? '') !== String(v ?? ''));
+      const changed = Object.entries(values).filter(([k, v]) => (k === 'source_role_flags' ? Object.entries(v as Record<string, boolean>).some(([key, value]) => existing![k]?.[key] !== value) : String(existing![k] ?? '') !== String(v ?? '')));
       outcome = changed.length ? 'changed' : 'unchanged';
       if (changed.length) plan.updates.push({ table: t.name, id, values: Object.fromEntries(changed) });
     } else {
@@ -161,7 +162,7 @@ function addPrice(plan: Plan, prices: Map<string, { at: string | null; priceUzs:
 }
 
 const COLUMN_TYPES: Record<string, string> = {
-  id: 'uuid', department_id: 'uuid', group_id: 'uuid', district_id: 'uuid', track_stock: 'boolean'
+  id: 'uuid', department_id: 'uuid', group_id: 'uuid', district_id: 'uuid', track_stock: 'boolean', source_role_flags: 'jsonb'
 };
 const typeOf = (c: string) => COLUMN_TYPES[c] ?? 'text';
 

@@ -51,7 +51,7 @@ export const DoctorServicesInput = z.object({ userId: id, serviceIds: z.array(id
 export type CatalogItem = {
   id: string; list: CatalogList; names: Names; code: string | null; active: boolean;
   departmentId?: string | null; groupId?: string | null; districtId?: string | null;
-  kind?: string; unit?: string; trackStock?: boolean; priceUzs?: string | null; priceFrom?: string | null;
+  mxikCode?: string | null; kind?: string; unit?: string; trackStock?: boolean; priceUzs?: string | null; priceFrom?: string | null;
   specialty?: string | null; linkedUserId?: string | null; linkedUserName?: string | null; serviceIds?: string[];
 };
 
@@ -89,7 +89,7 @@ function itemOf(list: CatalogList, r: Record<string, any>): CatalogItem {
     specialty: r.specialty_uz_cyrl, linkedUserId: r.linked_user_id, linkedUserName: r.linked_name ?? null, serviceIds: r.service_ids ?? [] };
   const item: CatalogItem = { ...base, names: names(r as { name_uz_cyrl: string; name_uz_latn: string | null; name_ru: string | null }) };
   if ('department_id' in r) item.departmentId = r.department_id;
-  if (list === 'service') Object.assign(item, { groupId: r.group_id, kind: r.kind, unit: r.unit, trackStock: r.track_stock,
+  if (list === 'service') Object.assign(item, { mxikCode: r.mxik_code ?? null, groupId: r.group_id, kind: r.kind, unit: r.unit, trackStock: r.track_stock,
     priceUzs: r.price_uzs ?? null, priceFrom: r.price_from ? new Date(r.price_from).toISOString() : null });
   if (list === 'mahalla') item.districtId = r.district_id;
   return item;

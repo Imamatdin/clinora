@@ -1,4 +1,5 @@
 @import './cashier/style.css';
+@import './inpatient/style.css';
 @import './registration/style.css';
 @import './catalog/style.css';
 @import './doctor/style.css';

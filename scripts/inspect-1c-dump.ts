@@ -4,10 +4,9 @@
 // counts and field names of the catalog objects, where prices are stored, structure (field names only)
 // of Мумкун and Каровчи, rejected-row reasons, and up to 5 sample services with prices. It prints no
 // patient, caretaker or document values: those objects are skipped by the reader without being decoded.
-// If the layout is not recognized it prints a byte-pattern probe instead (statistics and object names only).
-import { createReadStream } from 'node:fs';
-import { DtError, probeLayout } from '../src/modules/import1c/dt.js';
-import { nodeInflate, readDtFile } from '../src/modules/import1c/node.js';
+// Unsupported binary tags stop with an offset and tag; no record-byte diagnostic is printed.
+import { DtError } from '../src/modules/import1c/dt.js';
+import { readDtFile } from '../src/modules/import1c/node.js';
 
 const path = process.argv[2];
 if (!path) { console.error('Usage: node --import tsx scripts/inspect-1c-dump.ts <file.dt>'); process.exit(2); }
@@ -31,11 +30,6 @@ try {
   for (const r of x.rows.filter(r => r.object === 'service' && !r.rejected).slice(0, 5))
     console.log(`  ${r.code} | ${r.kind} | ${r.nameUzCyrl} | ${r.nameUzLatn ?? '-'} | ${r.nameRu ?? '-'} | ${r.priceUzs ?? 'no price'}`);
 } catch (error) {
-  console.error(error instanceof DtError ? `Reader stopped: ${error.code}` : 'Reader failed unexpectedly');
-  if (error instanceof DtError && ['UNRECOGNIZED_LAYOUT', 'TRUNCATED'].includes(error.code)) {
-    // Layout differs from the reader's assumption: print byte statistics and metadata names only, for the builder.
-    const probe = await probeLayout(createReadStream(path, { highWaterMark: 1 << 16 }) as AsyncIterable<Uint8Array>, nodeInflate);
-    console.log(JSON.stringify({ ...probe, metadataNames: probe.metadataNames.sort((a, b) => a.firstOffset - b.firstOffset) }, null, 1));
-  }
+  console.error(error instanceof DtError ? `Reader stopped: ${error.message}` : 'Reader failed unexpectedly');
   process.exit(1);
 }

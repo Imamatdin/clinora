@@ -43,6 +43,32 @@ export const VisitInput = z.object({
   points: z.array(z.object({ queuePointId: id, serviceIds: z.array(id).max(20) }).strict()).min(1).max(10),
   idempotencyKey: Key
 }).strict();
+export const OfflineInput = z.object({
+  patient: PatientInput.omit({ idempotencyKey: true }).optional(), patientId: id.optional(),
+  businessDayId: id, points: VisitInput.shape.points, idempotencyKey: Key,
+  provisionalCode: z.string().regex(/^R[A-F0-9]{8}-\d{2,10}$/).optional()
+}).strict().refine(v => !!v.patient !== !!v.patientId);
+
+/** One transaction for registration plus routing. A failed route leaves no half-registered patient.
+ * Replays resolve before day/catalog validation so a lost response remains recoverable after day close.
+ */
+export async function syncRegistration(ctx: ClinicContext, raw: z.input<typeof OfflineInput>) {
+  ctx = await authorize(ctx, REGISTRARS);
+  const input = OfflineInput.parse(raw);
+  return once(ctx, 'registration.offline', input, async () => {
+    const person = input.patient ? await registerPatient(ctx, { ...input.patient, idempotencyKey: input.idempotencyKey }) : null;
+    const visit = await createVisit(ctx, { patientId: person?.id ?? input.patientId!, points: input.points, idempotencyKey: input.idempotencyKey }, input.businessDayId);
+    return { ...visit, ...(input.provisionalCode ? { code: input.provisionalCode } : {}) };
+  });
+}
+/** Non-clinical call list survives a page reload; no queued registration fields are retained locally. */
+export async function offlineHistory(ctx: ClinicContext) {
+  ctx = await authorize(ctx, REGISTRARS);
+  const rows = (await ctx.tx.query(`SELECT response FROM idempotency_records
+    WHERE clinic_id=$1 AND actor_id=$2 AND operation='registration.offline' AND response ? 'code'
+      AND created_at>now()-interval '2 days' ORDER BY created_at DESC LIMIT 200`, [ctx.clinicId, ctx.actorId])).rows;
+  return rows.reverse().map(({ response: r }) => ({ code: r.code, visitId: r.visitId, businessDate: r.businessDate, tickets: r.tickets }));
+}
 export const CallNextInput = z.object({ queuePointId: id.optional(), idempotencyKey: Key }).strict();
 export const TicketStatusInput = z.object({ status: QueueTicketStatus, idempotencyKey: Key }).strict();
 
@@ -220,12 +246,12 @@ type PointRow = { id: string; kind: 'doctor' | 'department' | 'service'; user_id
  * price in force now, and a patient_assignments row for every routed doctor so the task-002
  * assigned-scope check lets that doctor, and only that doctor, read the patient.
  */
-export async function createVisit(ctx: ClinicContext, raw: z.input<typeof VisitInput>) {
+export async function createVisit(ctx: ClinicContext, raw: z.input<typeof VisitInput>, expectedBusinessDayId?: string) {
   ctx = await authorize(ctx, REGISTRARS);
   const input = VisitInput.parse(raw);
   return once(ctx, 'registration.visit', input, async () => {
     const day = await openDay(ctx);
-    if (!day) return fail('INVALID_TRANSITION');
+    if (!day || (expectedBusinessDayId && day.id !== expectedBusinessDayId)) return fail('INVALID_TRANSITION');
     const person = (await ctx.tx.query('SELECT id,patient_no FROM patients WHERE clinic_id=$1 AND id=$2 FOR SHARE', [ctx.clinicId, input.patientId])).rows[0];
     if (!person) return fail('NOT_FOUND');
     const wanted = [...new Set(input.points.map(p => p.queuePointId))];

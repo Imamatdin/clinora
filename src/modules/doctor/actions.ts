@@ -295,7 +295,7 @@ export async function orderServices(ctx: ClinicContext, encounterId: string, raw
     const e = await myEncounter(c, scope, encounterId);
     if (!e.visit_id) return fail('INVALID_TRANSITION');
     const open = (await c.tx.query(`SELECT 1 FROM visits v JOIN business_days d ON d.clinic_id=v.clinic_id AND d.id=v.business_day_id
-      WHERE v.clinic_id=$1 AND v.id=$2 AND v.status='open' AND d.status='open' FOR SHARE OF v, d`, [c.clinicId, e.visit_id])).rowCount;
+      WHERE v.clinic_id=$1 AND v.id=$2 AND v.status='open' AND d.status='open' FOR UPDATE OF v FOR SHARE OF d`, [c.clinicId, e.visit_id])).rowCount;
     if (!open) return fail('INVALID_TRANSITION');
     const at = new Date(), lines = [] as { id: string; serviceId: string; unitPriceUzs: string }[];
     for (const item of input.items) {

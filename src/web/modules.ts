@@ -6,6 +6,7 @@ import type { Role } from '../modules/identity/roles.js';
 import type { Request } from './api.js';
 import type { UiKey } from './i18n/index.js';
 import { cashierModule } from './cashier/screen.js';
+import { inpatientModule } from './inpatient/screen.js';
 import { registrationModule } from './registration/screen.js';
 import { catalogModule } from './catalog/screen.js';
 import { doctorModule } from './doctor/screen.js';
@@ -16,7 +17,7 @@ import { reportsModule } from './reports/screen.js';
 
 /** What the shell hands every feature screen. The server still authorizes every call. */
 export type ModuleProps = {
-  clinic: ClinicMembershipView; request: Request; day: CurrentDayView | null; myId: string;
+  clinic: ClinicMembershipView; request: Request; day: CurrentDayView | null; myId: string; offlineDeviceId?: string | null;
   reportDayId?: string|null;
   /** Mark unsaved input so the shell asks before navigating away. */
   setDirty: (dirty: boolean) => void;
@@ -36,7 +37,8 @@ export type WebModule = {
  * e.g. `registrationModule,` after importing it.
  */
 export const MODULES: readonly WebModule[] = [
-  dashboardModule, doctorModule, cashierModule, pharmacyModule, surgeryModule,
+  // A role lands on its first module here: CEO on the dashboard, doctor on the queue, inpatient on the ward; lab last so the administrator keeps the cashier home.
+  dashboardModule, doctorModule, cashierModule, pharmacyModule, inpatientModule, surgeryModule,
   registrationModule, catalogModule, labModule, reportsModule, payrollModule, exportModule,
 ];
 

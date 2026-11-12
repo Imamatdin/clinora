@@ -1,6 +1,6 @@
 # Task 003A: roles, staff sign-in, business day (increment C1)
 
-Assigned to: Claude Code. Planner: 12 November 2026.
+Assigned to: Claude Code (builder). Review: Codex. Planner: 12 November 2026.
 Base: `main` after PR #1 (task 002) is merged. Branch: `task-003a-roles`.
 Read first: `docs/PRODUCT.md`, `docs/SPEC-CMS.md` sections 2, 4 and 17, `docs/INCREMENTS.md`.
 

@@ -2,6 +2,8 @@
 
 **Current direction (12 November 2026):** Clinora is now a clinic management system. Read `docs/PRODUCT.md`, `docs/SPEC-CMS.md` and `docs/INCREMENTS.md` before any task; where they differ from the clinical-automation sections below, they win for sequencing. The rules below on authorization, records, synthetic data and honest verification still apply in full. Follow the speed rules in `docs/INCREMENTS.md` (short handoffs, no committed CI logs).
 
+**Roles:** the planner (a separate Claude chat) writes task briefs and accepts work. Claude Code builds. Codex reviews pull requests and reports findings without editing, unless Imamatdin assigns it a build task. Background from earlier planning: `docs/PLANNER-CONTEXT.md`.
+
 ## Scope and coordination
 
 Read the shared brief and your assigned task before editing. Inspect the actual repository and its instructions; preserve unrelated work. The founders agreed that Imamatdin can work in a new repository and selectively reuse the supplied code. This pack does not assert that a new remote repository already exists.

@@ -1,6 +1,6 @@
 # Task 003B: billing core library (increment C2)
 
-Assigned to: Codex. Planner: 12 November 2026.
+Assigned to: Claude Code (builder). Review: Codex. Planner: 12 November 2026.
 Base: `main` after PR #1 is merged. Branch: `task-003b-billing-core`.
 Read first: `docs/PRODUCT.md` (non-negotiable rules), `docs/SPEC-CMS.md` sections 7, 10, 11 and 13.
 
@@ -8,7 +8,7 @@ Read first: `docs/PRODUCT.md` (non-negotiable rules), `docs/SPEC-CMS.md` section
 
 A pure TypeScript library that every money feature will call: invoice totals, discounts, payment allocation, refunds, doctor revenue shares and inpatient bed days. No database, no HTTP, no UI. Exhaustively tested so the cashier, payroll and CEO reports can trust it.
 
-Owned files: `src/modules/billing/**` and `tests/billing-*.test.ts`. You may add `fast-check` as a dev dependency. Touch nothing else (task 003A is editing the server, migrations and web app in parallel).
+Owned files: `src/modules/billing/**` and `tests/billing-*.test.ts`. You may add `fast-check` as a dev dependency. Touch nothing else (task 003A edits the server, migrations and web app; run 003A and 003B in separate sessions or one after the other).
 
 ## Rules to implement
 

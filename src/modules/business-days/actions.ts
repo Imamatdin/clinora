@@ -3,6 +3,7 @@ import type pg from 'pg';
 import type { BusinessDayView, CurrentDayView } from '../../contracts/clinic.js';
 import { DomainError } from '../identity/access.js';
 import { recordAudit, type ClinicContext } from '../../server/roles.js';
+import { onBusinessDayOpen } from '../inpatient/actions.js';
 
 /*
  * Business-day server actions. The business date is always the clinic's local calendar date
@@ -34,6 +35,7 @@ export async function openDay(ctx: ClinicContext): Promise<BusinessDayView> {
     ON CONFLICT DO NOTHING RETURNING id`, [id, ctx.clinicId, ctx.actorId])).rows[0];
   if (!inserted) return fail('INVALID_TRANSITION');
   await recordAudit(ctx.tx, ctx.actorId, ctx.clinicId, 'business_day.opened', id);
+  await onBusinessDayOpen(ctx);
   return view((await ctx.tx.query(`${SELECT} WHERE d.id=$1`, [id])).rows[0]);
 }
 

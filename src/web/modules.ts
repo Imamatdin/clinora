@@ -4,6 +4,7 @@ import type { Role } from '../modules/identity/roles.js';
 import type { Request } from './api.js';
 import type { UiKey } from './i18n/index.js';
 import { cashierModule } from './cashier/screen.js';
+import { inpatientModule } from './inpatient/screen.js';
 
 /** What the shell hands every feature screen. The server still authorizes every call. */
 export type ModuleProps = {
@@ -27,6 +28,7 @@ export type WebModule = {
  */
 export const MODULES: readonly WebModule[] = [
   cashierModule,
+  inpatientModule,
 ];
 
 /** Placeholders per role for increments not yet built. A registered module with the same label hides its placeholder. */

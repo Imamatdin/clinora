@@ -57,7 +57,7 @@ for(const width of [1280,360])test(`inpatient admission, three days, transfer, d
     await expect(stay).toContainText(I('inpatient.discharged'));
     await expect(page.getByTestId('inpatient-due')).toHaveText(/400.000/);
     const print=page.getByRole('link',{name:I('inpatient.print'),exact:true});
-    const response=await page.request.get((await print.getAttribute('href'))!);expect(response.status()).toBe(200);expect(response.headers()['content-type']).toBe('application/pdf');
+    const response=await page.request.get(new URL((await print.getAttribute('href'))!,f.origin).toString());expect(response.status()).toBe(200);expect(response.headers()['content-type']).toBe('application/pdf');
     const bytes=await response.body();expect(bytes.subarray(0,5).toString()).toBe('%PDF-');
     await print.click();
     expect(bytes.toString('latin1')).toContain('/MediaBox [0 0 595.28 841.89]');

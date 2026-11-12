@@ -272,6 +272,6 @@ test('an approved note blocks a later assistant approval of the same document', 
     // Minimal assistant draft on the approved document; approval must refuse before writing anything.
     const draft = randomUUID();
     await tx.query("INSERT INTO assistant_drafts(id,clinic_id,patient_id,encounter_id,form_id) VALUES($1,$2,$3,$4,'gp-v1')", [draft, f.owner.clinicId, ids.p1, encounterA]);
-    return approve(tx, { userId: ids.a, sessionId: randomUUID(), expiresAt: new Date(Date.now() + 3600e3).toISOString() }, f.owner.clinicId, ids.p1, encounterA, { expectedDraftRevision: 0, fieldRevisions: {} });
+    return approve(tx, { userId: ids.a, sessionId: randomUUID(), expiresAt: new Date(Date.now() + 3600e3).toISOString() }, f.owner.clinicId, ids.p1, encounterA, { expectedDraftRevision: 0, expectedDocumentRevision: 0, fieldRevisions: {} });
   }), (e: Error & { code?: string }) => e.code === 'INVALID_TRANSITION');
 });

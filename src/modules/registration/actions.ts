@@ -89,12 +89,16 @@ const stable = (value: unknown): string => JSON.stringify(value, (_k, v) => v &&
  * Replays a stored result for the same clinic, actor, operation and key; a different payload under the
  * same key is IDEMPOTENCY_CONFLICT. The advisory lock makes a concurrent duplicate wait for the first.
  */
-async function once<T>(ctx: ClinicContext, operation: string, input: { idempotencyKey: string }, work: () => Promise<T>): Promise<T> {
+async function once<T>(ctx: ClinicContext, operation: string, input: { idempotencyKey: string }, work: () => Promise<T>,
+  /** Rechecks current access before a stored response is returned again (task 019). */ replay?: (stored: T) => Promise<T>): Promise<T> {
   const scope = [ctx.clinicId, ctx.actorId, operation, input.idempotencyKey];
   await ctx.tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [JSON.stringify(scope)]);
   const hash = createHash('sha256').update(stable(input)).digest('hex');
   const old = (await ctx.tx.query('SELECT payload_hash,response FROM idempotency_records WHERE clinic_id=$1 AND actor_id=$2 AND operation=$3 AND key=$4', scope)).rows[0];
-  if (old) return old.payload_hash === hash ? old.response as T : fail('IDEMPOTENCY_CONFLICT');
+  if (old) {
+    if (old.payload_hash !== hash) return fail('IDEMPOTENCY_CONFLICT');
+    return replay ? replay(old.response as T) : old.response as T;
+  }
   const result = await work();
   await ctx.tx.query('INSERT INTO idempotency_records(clinic_id,actor_id,operation,key,payload_hash,response) VALUES($1,$2,$3,$4,$5,$6)', [...scope, hash, JSON.stringify(result)]);
   return result;
@@ -346,14 +350,26 @@ export async function callNext(ctx: ClinicContext, raw: z.input<typeof CallNextI
     const [activeScope, activeParam] = forPoint && point.kind !== 'doctor' ? ['q.id=$2', input.queuePointId] : [`q.kind='doctor' AND q.user_id=$2`, forPoint ? point.user_id : ctx.actorId];
     const active = (await ctx.tx.query(`${TICKET_SELECT} WHERE t.clinic_id=$1 AND t.status IN ('called','in_progress') AND ${activeScope}
       ORDER BY t.called_at NULLS LAST, t.number LIMIT 1`, [ctx.clinicId, activeParam])).rows[0];
-    if (active) return { ticket: ticketView(active), alreadyActive: true };
+    if (active) {
+      // Task 019: the doctor's active ticket is shown only while its patient is still assigned to them.
+      // A revoked assignment still holds the one-patient-at-a-time slot but discloses nothing.
+      if (!forPoint && !await assigned(ctx, active.patient_id)) return { ticket: null, alreadyActive: true };
+      return { ticket: ticketView(active), alreadyActive: true };
+    }
     const next = (await ctx.tx.query(`${TICKET_SELECT} WHERE t.clinic_id=$1 AND t.status='waiting' AND ${scope}
       ORDER BY t.number, t.id LIMIT 1 FOR UPDATE OF t SKIP LOCKED`, [ctx.clinicId, ctx.actorId, input.queuePointId ?? null])).rows[0];
     if (!next) return { ticket: null, alreadyActive: false };
     await ctx.tx.query("UPDATE queue_tickets SET status='called',called_at=now() WHERE clinic_id=$1 AND id=$2", [ctx.clinicId, next.id]);
     await withAudit(ctx.tx, ctx, 'queue.ticket_called', next.id, { number: next.number });
     return { ticket: ticketView((await ctx.tx.query(`${TICKET_SELECT} WHERE t.clinic_id=$1 AND t.id=$2`, [ctx.clinicId, next.id])).rows[0]), alreadyActive: false };
+  }, async stored => {
+    // A replayed answer goes through the same rule as a fresh one: a doctor whose assignment was revoked gets no patient details.
+    if (!stored.ticket || manager(ctx) || await assigned(ctx, stored.ticket.patient.id)) return stored;
+    return { ticket: null, alreadyActive: stored.alreadyActive };
   });
+}
+async function assigned(ctx: ClinicContext, patientId: string): Promise<boolean> {
+  return !!(await ctx.tx.query('SELECT 1 FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3 FOR SHARE', [ctx.clinicId, patientId, ctx.actorId])).rowCount;
 }
 
 /**

@@ -177,6 +177,9 @@ test('Mini App init data: forged, expired, replayed and wrong-bot rejected; unli
   assert.equal((await ok.c.request(`/api/clinics/${f.owner.clinicId}/business-days/current`)).status, 200, 'normal session, roles checked per route');
   assert.equal((await ok.c.request(`/api/clinics/${f.owner.clinicId}/staff`)).status, 403, 'a Telegram id grants no extra role');
   assert.equal((await signIn(valid)).r.status, 401, 'replayed init data');
+  const reordered = new URLSearchParams([...new URLSearchParams(valid)].reverse()).toString();
+  assert.notEqual(reordered, valid);
+  assert.equal((await signIn(reordered)).r.status, 401, 'replayed init data with reordered fields');
   // Blocking ends the Mini App session on the next request and refuses new Mini App sign-ins.
   assert.equal((await owner.request(`/api/clinics/${f.owner.clinicId}/staff/${doctor.id}/status`, { status: 'blocked' })).status, 200);
   assert.equal((await ok.c.request('/api/auth/me')).status, 401);
@@ -239,6 +242,11 @@ test('enrolled PC: PIN switching, device clinic scope, idle lock, revocation and
   await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,status,granted_by) VALUES($1,$2,$3,'active',$4)", [randomUUID(), f.other.clinicId, bek.id, f.other.userId]);
   await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'cashier',$3)", [f.other.clinicId, bek.id, f.other.userId]);
   assert.equal((await pc.request(`/api/clinics/${f.other.clinicId}/business-days/current`)).status, 404);
+  // Task 019: the assistant transport routes (approve, PDF, audio upload) apply the same device clinic rule.
+  await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'doctor',$3)", [f.other.clinicId, bek.id, f.other.userId]);
+  const otherEnc = `/api/clinics/${f.other.clinicId}/assistant/patients/${randomUUID()}/encounters/${randomUUID()}`;
+  assert.equal((await pc.request(`${otherEnc}/approve`, {})).status, 404, 'assistant approve on another clinic from a shared PC');
+  assert.equal((await pc.request(`/api/clinics/${f.other.clinicId}/assistant/captures/${randomUUID()}/retry`, {})).status, 404);
   assert.deepEqual((await pc.me()).clinics.map((c: { id: string }) => c.id), [A]);
   // The session cookie is useless without the device cookie it was issued with.
   const stolen = browser(f); stolen.cookies.set('clinora_session', pc.cookies.get('clinora_session')!);

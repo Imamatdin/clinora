@@ -71,7 +71,7 @@ test('simulated capture drafts grounded proposals; review field by field; approv
   assert.equal(await docVersions(f, A1.encounterId), 0, 'unapproved proposals change nothing in the record');
 
   // Approval is blocked while any proposal is untouched.
-  assert.equal((await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, fieldRevisions: revisions(v) })).status, 409);
+  assert.equal((await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, expectedDocumentRevision: v.documentRevision, fieldRevisions: revisions(v) })).status, 409);
   // Doctor edits complaints, clears HPI, accepts the rest.
   const act = async (field: string, body: Record<string, unknown>) => {
     const cur = v.fields.find((x: { key: string }) => x.key === field);
@@ -92,14 +92,14 @@ test('simulated capture drafts grounded proposals; review field by field; approv
   assert.ok(complaints.held, 'new proposal is offered, not applied');
   assert.equal(v.fields.find((x: { key: string }) => x.key === 'hpi').status, 'cleared');
 
-  const stale = await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision - 1, fieldRevisions: revisions(v) });
+  const stale = await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision - 1, expectedDocumentRevision: v.documentRevision, fieldRevisions: revisions(v) });
   assert.equal(stale.status, 409, 'approving a stale draft revision is rejected');
-  const wrongField = await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, fieldRevisions: { ...revisions(v), plan: 1 } });
+  const wrongField = await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, expectedDocumentRevision: v.documentRevision, fieldRevisions: { ...revisions(v), plan: 1 } });
   assert.equal(wrongField.status, 409, 'approving unseen field versions is rejected');
-  assert.equal((await B.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, fieldRevisions: revisions(v) })).status, 404, 'doctor B cannot approve A\'s patient');
-  const ok = await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, fieldRevisions: revisions(v) });
+  assert.equal((await B.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, expectedDocumentRevision: v.documentRevision, fieldRevisions: revisions(v) })).status, 404, 'doctor B cannot approve A\'s patient');
+  const ok = await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, expectedDocumentRevision: v.documentRevision, fieldRevisions: revisions(v) });
   assert.equal(ok.status, 200); const approved = await ok.json();
-  const again = await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, fieldRevisions: revisions(v) });
+  const again = await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, expectedDocumentRevision: v.documentRevision, fieldRevisions: revisions(v) });
   assert.deepEqual(await again.json(), approved, 'a retried approval returns the same version');
   assert.equal(await docVersions(f, A1.encounterId), 1);
   const stored = (await f.pool.query('SELECT data FROM document_versions WHERE id=$1', [approved.versionId])).rows[0].data;
@@ -123,6 +123,49 @@ test('simulated capture drafts grounded proposals; review field by field; approv
   assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
   assert.equal((await B.client.request(A1.base + '/approved.pdf')).status, 404);
   assert.equal((await B.client.request(A1.base)).status, 404, 'doctor B cannot read doctor A\'s patient draft');
+});
+
+test('approval carries forward manual notebook fields and rx.lines, and a manual save in between is rejected as stale (task 019)', async t => {
+  const s = await setup(); t.after(() => s.f.close());
+  const { A, A1, C, f } = s;
+  assert.equal((await A.client.request(A1.base + '/simulated-capture', { clientKey: key() })).status, 201); await drainJobs();
+  let v = await view(A.client, A1.base);
+  assert.equal(v.documentRevision, 0);
+  for (const x of v.fields.filter((y: { status: string }) => y.status === 'proposed'))
+    assert.equal((await A.client.request(`${A1.base}/fields/${x.key}`, { action: 'accept', proposalId: null, expectedFieldRevision: x.fieldRevision })).status, 200);
+  v = await view(A.client, A1.base);
+  // Meanwhile the doctor saves the visit note by hand (task-002 notebook route).
+  const note = { reported: 'Қўлда ёзилган шикоят (синтетик).', observed: '', assessment: 'Қўлда баҳо.', plan: '' };
+  const saved = await A.client.request(`/api/clinics/${C}/patients/${A1.patientId}/encounters/${A1.encounterId}/draft`,
+    { expectedRevision: 0, note, templateId: 'clinora-visit-v1' }, { 'Idempotency-Key': key() });
+  assert.equal(saved.status, 200);
+  const stale = await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, expectedDocumentRevision: v.documentRevision, fieldRevisions: revisions(v) });
+  assert.equal(stale.status, 409, 'approval made against the note before the manual save is stale');
+  assert.equal((await stale.json()).error.code, 'STALE_VERSION');
+  assert.equal(await docVersions(f, A1.encounterId), 1, 'nothing written by the stale approval');
+  // A prescription saved in the doctor workspace (task 010 writes rx.lines next to the note fields).
+  const doc = (await f.pool.query('SELECT id, current_version_id FROM documents WHERE encounter_id=$1', [A1.encounterId])).rows[0];
+  const prev = (await f.pool.query('SELECT data FROM document_versions WHERE id=$1', [doc.current_version_id])).rows[0].data;
+  const rx = JSON.stringify([{ medicine: 'Парацетамол', dose: '500 мг', frequency: 'кунига 3 марта', duration: '3 кун', notes: '' }]);
+  const v2 = { ...prev, id: randomUUID(), revision: 2, parentVersionId: prev.id, fields: [...prev.fields.map((x: Record<string, unknown>) => ({ ...x, revision: 2 })),
+    { key: 'rx.lines', value: rx, category: 'clinician_instruction', status: 'proposed', origin: 'clinician', revision: 2, evidence: [], editedBy: A.userId, unresolvedConflict: null }] };
+  await f.pool.query('INSERT INTO document_versions(id,document_id,clinic_id,patient_id,revision,created_by,data) VALUES($1,$2,$3,$4,2,$5,$6)', [v2.id, doc.id, C, A1.patientId, A.userId, v2]);
+  await f.pool.query('UPDATE documents SET current_revision=2,current_version_id=$1 WHERE id=$2', [v2.id, doc.id]);
+
+  v = await view(A.client, A1.base);
+  assert.equal(v.documentRevision, 2);
+  const ok = await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, expectedDocumentRevision: v.documentRevision, fieldRevisions: revisions(v) });
+  assert.equal(ok.status, 200);
+  const approved = await ok.json();
+  assert.equal(approved.revision, 3);
+  const stored = (await f.pool.query('SELECT data FROM document_versions WHERE id=$1', [approved.versionId])).rows[0].data;
+  const byKey = new Map(stored.fields.map((x: { key: string }) => [x.key, x]));
+  assert.equal((byKey.get('reported') as { value: string }).value, note.reported, 'manual note survives approval');
+  assert.equal((byKey.get('assessment') as { value: string }).value, note.assessment);
+  assert.equal((byKey.get('rx.lines') as { value: string }).value, rx, 'prescription survives approval');
+  assert.ok(byKey.has('gp.complaints') && byKey.has('gp.diagnosis'), 'assistant fields are in the same version');
+  assert.equal(stored.parentVersionId, v2.id);
+  assert.ok(stored.fields.every((x: { status: string }) => x.status === 'clinician_confirmed'));
 });
 
 test('browser chunk upload: retries are idempotent, gaps rejected, one transcript per capture', async t => {
@@ -169,7 +212,7 @@ test('provider failure leaves a usable manual note; extraction failure keeps the
   assert.equal((await A.client.request(`${A1.base}/fields/examination`, { action: 'edit', expectedFieldRevision: 1, value: 'норма', category: 'not_examined' })).status, 422, 'not examined cannot carry a finding');
   assert.equal((await A.client.request(`${A1.base}/fields/labOrders`, { action: 'edit', expectedFieldRevision: 1, value: ['LAB-NOPE'], category: 'clinician_instruction' })).status, 422);
   v = await view(A.client, A1.base);
-  const ok = await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, fieldRevisions: revisions(v) });
+  const ok = await A.client.request(A1.base + '/approve', { expectedDraftRevision: v.draft.revision, expectedDocumentRevision: v.documentRevision, fieldRevisions: revisions(v) });
   assert.equal(ok.status, 200, 'manual note approves without any provider');
   const data = (await f.pool.query('SELECT data FROM document_versions WHERE id=$1', [(await ok.json()).versionId])).rows[0].data;
   assert.ok(data.fields.some((x: { key: string; value: unknown }) => x.key === 'gp.examination.notExamined' && x.value === true));
@@ -376,7 +419,7 @@ test('assistant routes: unauthenticated 401, non-doctor 403, other clinic 404, C
   assert.ok(assistantRoutes.length >= 13 && assistantRoutes.every(r => r.roles.join() === 'doctor'));
   assert.equal(isAssistantPath(`/api/clinics/${C}/assistant/config`, 'GET'), false);
   assert.equal(isAssistantPath(`${A1.base}/approve`, 'POST'), true);
-  assert.equal((await cashier.request(`${A1.base}/approve`, { expectedDraftRevision: 0, fieldRevisions: {} })).status, 403);
+  assert.equal((await cashier.request(`${A1.base}/approve`, { expectedDraftRevision: 0, expectedDocumentRevision: 0, fieldRevisions: {} })).status, 403);
   assert.equal((await cashier.request(`${A1.base}/approved.pdf`)).status, 403);
   assert.equal((await anon.request(`${A1.base}/approved.pdf`)).status, 401);
 });

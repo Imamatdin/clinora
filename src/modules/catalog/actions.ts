@@ -195,8 +195,10 @@ export async function setActive(ctx: ClinicContext, raw: z.input<typeof ActiveIn
   ctx = await authorize(ctx, CATALOG_WRITERS);
   const input = ActiveInput.parse(raw);
   return once(ctx, 'catalog.set_active', input, async () => {
-    const r = await ctx.tx.query(`UPDATE ${TABLE[input.list]} SET is_active=$3 WHERE clinic_id=$1 AND id=$2`, [ctx.clinicId, input.id, input.active]);
+    const r = await ctx.tx.query(`UPDATE ${TABLE[input.list]} SET is_active=$3 WHERE clinic_id=$1 AND id=$2${input.list === 'doctor' ? ' RETURNING *' : ''}`, [ctx.clinicId, input.id, input.active]);
     if (!r.rowCount) fail('NOT_FOUND');
+    // Task 019: a deactivated doctor stops receiving registrations; reactivating a linked doctor reopens their queue point.
+    if (input.list === 'doctor' && r.rows[0].linked_user_id) await syncDoctorPoint(ctx, r.rows[0].linked_user_id, input.active, r.rows[0]);
     await withAudit(ctx.tx, ctx, input.active ? 'catalog.item_activated' : 'catalog.item_deactivated', input.id, { list: input.list });
     return one(ctx, input.list, input.id);
   });
@@ -241,6 +243,7 @@ export async function linkDoctor(ctx: ClinicContext, raw: z.input<typeof LinkDoc
   return once(ctx, 'catalog.link_doctor', input, async () => {
     const doc = (await ctx.tx.query('SELECT * FROM catalog_doctors WHERE clinic_id=$1 AND id=$2 FOR UPDATE', [ctx.clinicId, input.catalogDoctorId])).rows[0];
     if (!doc) fail('NOT_FOUND');
+    if (doc.linked_user_id && doc.linked_user_id !== input.userId) await syncDoctorPoint(ctx, doc.linked_user_id, false, doc);
     if (input.userId) {
       const member = (await ctx.tx.query(`SELECT 1 FROM memberships m WHERE m.clinic_id=$1 AND m.user_id=$2 AND m.status='active'
         AND EXISTS (SELECT 1 FROM membership_roles r WHERE r.clinic_id=m.clinic_id AND r.user_id=m.user_id AND r.role='doctor') FOR SHARE`, [ctx.clinicId, input.userId])).rows[0];
@@ -252,10 +255,103 @@ export async function linkDoctor(ctx: ClinicContext, raw: z.input<typeof LinkDoc
           specialty_uz_cyrl=EXCLUDED.specialty_uz_cyrl, specialty_uz_latn=coalesce(EXCLUDED.specialty_uz_latn, doctor_profiles.specialty_uz_latn),
           specialty_ru=coalesce(EXCLUDED.specialty_ru, doctor_profiles.specialty_ru), is_active=true`,
       [ctx.clinicId, input.userId, doc.department_id, doc.specialty_uz_cyrl ?? doc.full_name, doc.specialty_uz_latn, doc.specialty_ru]);
+      // Task 019: a linked doctor can receive registrations at once: create or reactivate their queue point.
+      await syncDoctorPoint(ctx, input.userId, doc.is_active, doc);
     }
     await ctx.tx.query('UPDATE catalog_doctors SET linked_user_id=$3 WHERE clinic_id=$1 AND id=$2', [ctx.clinicId, doc.id, input.userId]);
     await withAudit(ctx.tx, ctx, input.userId ? 'catalog.doctor_linked' : 'catalog.doctor_unlinked', doc.id, input.userId ? { userId: input.userId } : null);
     return one(ctx, 'doctor', doc.id);
+  });
+}
+
+/**
+ * Keeps a doctor's queue point in step with the catalog doctor (task 019). Active: the doctor's existing point is
+ * reactivated, or one is created named after the doctor. Inactive or unlinked: every point of that doctor is deactivated
+ * and their doctor profile marked inactive. Tickets already issued are untouched.
+ */
+async function syncDoctorPoint(ctx: ClinicContext, userId: string, active: boolean, doc: { full_name: string; specialty_uz_cyrl: string | null }) {
+  if (!active) {
+    const r = await ctx.tx.query("UPDATE queue_points SET is_active=false WHERE clinic_id=$1 AND kind='doctor' AND user_id=$2 AND is_active RETURNING id", [ctx.clinicId, userId]);
+    await ctx.tx.query('UPDATE doctor_profiles SET is_active=false WHERE clinic_id=$1 AND user_id=$2', [ctx.clinicId, userId]);
+    for (const row of r.rows) await withAudit(ctx.tx, ctx, 'catalog.queue_point_deactivated', row.id, { userId });
+    return;
+  }
+  await ctx.tx.query('UPDATE doctor_profiles SET is_active=true WHERE clinic_id=$1 AND user_id=$2', [ctx.clinicId, userId]);
+  const existing = (await ctx.tx.query("SELECT id, is_active FROM queue_points WHERE clinic_id=$1 AND kind='doctor' AND user_id=$2 ORDER BY is_active DESC, id LIMIT 1 FOR UPDATE",
+    [ctx.clinicId, userId])).rows[0];
+  if (existing?.is_active) return;
+  if (existing) {
+    await ctx.tx.query('UPDATE queue_points SET is_active=true WHERE clinic_id=$1 AND id=$2', [ctx.clinicId, existing.id]);
+    await withAudit(ctx.tx, ctx, 'catalog.queue_point_activated', existing.id, { userId });
+    return;
+  }
+  const pointId = randomUUID(), label = doc.specialty_uz_cyrl ? `${doc.full_name} (${doc.specialty_uz_cyrl})` : doc.full_name;
+  await ctx.tx.query("INSERT INTO queue_points(id,clinic_id,kind,user_id,name_uz_cyrl) VALUES($1,$2,'doctor',$3,$4)", [pointId, ctx.clinicId, userId, label.slice(0, 300)]);
+  await withAudit(ctx.tx, ctx, 'catalog.queue_point_created', pointId, { userId, kind: 'doctor' });
+}
+
+// ---------- Queue points (task 019) ----------
+
+/** Service points (lab, ultrasound) take a service group; department points a department. Doctor points follow the doctor link. */
+export const QueuePointInput = z.object({
+  id: id.optional(), kind: z.enum(['service', 'department']), refId: id,
+  nameUzCyrl: name(), nameUzLatn: optionalName, nameRu: optionalName, idempotencyKey: Key
+}).strict();
+export const QueuePointActiveInput = z.object({ id, active: z.boolean(), idempotencyKey: Key }).strict();
+export type QueuePointView = { id: string; kind: 'doctor' | 'service' | 'department'; names: Names; active: boolean; refId: string | null; refNames: Names | null; doctorName: string | null };
+
+export async function queuePoints(ctx: ClinicContext): Promise<QueuePointView[]> {
+  ctx = await authorize(ctx, CATALOG_READERS);
+  const rows = (await ctx.tx.query(`SELECT q.*, a.display_name doctor_name,
+      coalesce(g.name_uz_cyrl, d.name_uz_cyrl) ref_uz_cyrl, coalesce(g.name_uz_latn, d.name_uz_latn) ref_uz_latn, coalesce(g.name_ru, d.name_ru) ref_ru
+    FROM queue_points q LEFT JOIN accounts a ON a.id=q.user_id
+    LEFT JOIN service_groups g ON g.clinic_id=q.clinic_id AND g.id=q.service_group_id
+    LEFT JOIN departments d ON d.clinic_id=q.clinic_id AND d.id=q.department_id
+    WHERE q.clinic_id=$1 ORDER BY q.is_active DESC, q.kind, q.name_uz_cyrl, q.id LIMIT 500`, [ctx.clinicId])).rows;
+  return rows.map(pointView);
+}
+const pointView = (r: Record<string, any>): QueuePointView => ({ id: r.id, kind: r.kind, names: names(r as { name_uz_cyrl: string; name_uz_latn: string | null; name_ru: string | null }), active: r.is_active,
+  refId: r.service_group_id ?? r.department_id ?? null, doctorName: r.doctor_name ?? null,
+  refNames: r.ref_uz_cyrl ? { uzCyrl: r.ref_uz_cyrl, uzLatn: r.ref_uz_latn, ru: r.ref_ru } : null });
+async function onePoint(ctx: ClinicContext, pointId: string) {
+  return (await queuePoints(ctx)).find(p => p.id === pointId) ?? fail('NOT_FOUND');
+}
+
+/** Creates or edits a service or department queue point. Doctor points cannot be edited here. */
+export async function saveQueuePoint(ctx: ClinicContext, raw: z.input<typeof QueuePointInput>): Promise<QueuePointView> {
+  ctx = await authorize(ctx, CATALOG_WRITERS);
+  const input = QueuePointInput.parse(raw);
+  return once(ctx, 'catalog.queue_point', input, async () => {
+    const refTable = input.kind === 'service' ? 'service_groups' : 'departments';
+    if (!(await ctx.tx.query(`SELECT 1 FROM ${refTable} WHERE clinic_id=$1 AND id=$2 AND is_active`, [ctx.clinicId, input.refId])).rowCount) fail('NOT_FOUND');
+    const [group, dept] = input.kind === 'service' ? [input.refId, null] : [null, input.refId];
+    const pointId = input.id ?? randomUUID();
+    if (input.id) {
+      const old = (await ctx.tx.query('SELECT kind FROM queue_points WHERE clinic_id=$1 AND id=$2 FOR UPDATE', [ctx.clinicId, input.id])).rows[0];
+      if (!old) fail('NOT_FOUND');
+      if (old.kind === 'doctor') fail('INVALID_TRANSITION');
+      await ctx.tx.query(`UPDATE queue_points SET kind=$3, service_group_id=$4, department_id=$5, name_uz_cyrl=$6, name_uz_latn=$7, name_ru=$8 WHERE clinic_id=$1 AND id=$2`,
+        [ctx.clinicId, pointId, input.kind, group, dept, input.nameUzCyrl, input.nameUzLatn, input.nameRu]);
+    } else {
+      await ctx.tx.query(`INSERT INTO queue_points(id,clinic_id,kind,service_group_id,department_id,name_uz_cyrl,name_uz_latn,name_ru) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [pointId, ctx.clinicId, input.kind, group, dept, input.nameUzCyrl, input.nameUzLatn, input.nameRu]);
+    }
+    await withAudit(ctx.tx, ctx, input.id ? 'catalog.queue_point_updated' : 'catalog.queue_point_created', pointId, { kind: input.kind });
+    return onePoint(ctx, pointId);
+  });
+}
+
+/** Opens or closes a service or department point for new registrations. A doctor point follows its catalog doctor. */
+export async function setQueuePointActive(ctx: ClinicContext, raw: z.input<typeof QueuePointActiveInput>): Promise<QueuePointView> {
+  ctx = await authorize(ctx, CATALOG_WRITERS);
+  const input = QueuePointActiveInput.parse(raw);
+  return once(ctx, 'catalog.queue_point_active', input, async () => {
+    const old = (await ctx.tx.query('SELECT kind FROM queue_points WHERE clinic_id=$1 AND id=$2 FOR UPDATE', [ctx.clinicId, input.id])).rows[0];
+    if (!old) fail('NOT_FOUND');
+    if (old.kind === 'doctor') fail('INVALID_TRANSITION');
+    await ctx.tx.query('UPDATE queue_points SET is_active=$3 WHERE clinic_id=$1 AND id=$2', [ctx.clinicId, input.id, input.active]);
+    await withAudit(ctx.tx, ctx, input.active ? 'catalog.queue_point_activated' : 'catalog.queue_point_deactivated', input.id, null);
+    return onePoint(ctx, input.id);
   });
 }
 

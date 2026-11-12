@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type MutableRefObject } from 'react';
 import { ApiFailure, type Request } from '../api.js';
 import { errorText } from '../i18n/index.js';
 import type { ModuleProps, WebModule } from '../modules.js';
@@ -43,6 +43,8 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
   const [queue, setQueue] = useState<Ticket[] | null>(null), [open, setOpen] = useState<{ encounterId: string; patientId: string } | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const keys = useKeys(), base = `/api/clinics/${clinic.id}/doctor`, queueBase = `/api/clinics/${clinic.id}/queue`;
+  /** Set by the open visit: asks save, discard or stay before leaving with unsaved notes (task 019). */
+  const leaveRef = useRef<LeaveGuard | null>(null);
   const run = async (work: () => Promise<void>) => {
     setBusy(true); setError(''); setNotice('');
     try { await work(); } catch (e) { setError(errorText(e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE')); } finally { setBusy(false); }
@@ -60,8 +62,8 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
     keys.done(scope); return result;
   };
   const callNext = () => run(async () => {
-    const r = await post<{ ticket: Ticket | null }>(`${queueBase}/call-next`);
-    if (!r.ticket) setNotice(t('doctor.noneWaiting'));
+    const r = await post<{ ticket: Ticket | null; alreadyActive: boolean }>(`${queueBase}/call-next`);
+    if (!r.ticket) setNotice(t(r.alreadyActive ? 'doctor.activeUnavailable' : 'doctor.noneWaiting'));
     await load();
   });
   const start = (ticket: Ticket) => run(async () => {
@@ -75,9 +77,12 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
   const banners = <div aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>;
 
   if (open) return <section className="dr">
-    <div className="dr-head"><button className="quiet" disabled={busy} onClick={() => { setDirty(false); setOpen(null); void load(); }}>{t('doctor.back')}</button>{language}</div>
+    <div className="dr-head"><button className="quiet" disabled={busy} onClick={() => {
+      const leave = () => { setDirty(false); setOpen(null); void load(); };
+      if (leaveRef.current) leaveRef.current(leave); else leave();
+    }}>{t('doctor.back')}</button>{language}</div>
     {banners}
-    <VisitScreen key={open.encounterId} t={t} clinicId={clinic.id} base={base} request={request} encounterId={open.encounterId} patientId={open.patientId} setDirty={setDirty} />
+    <VisitScreen key={open.encounterId} t={t} clinicId={clinic.id} base={base} request={request} encounterId={open.encounterId} patientId={open.patientId} setDirty={setDirty} leaveRef={leaveRef} />
   </section>;
 
   const tickets = queue ?? [], active = tickets.find(x => x.status === 'called' || x.status === 'in_progress');
@@ -131,13 +136,19 @@ function PatientCard({ t, card }: { t: T; card: Card }) {
   </aside>;
 }
 
-function VisitScreen({ t, clinicId, base, request, encounterId, patientId, setDirty }: { t: T; clinicId: string; base: string; request: Request; encounterId: string; patientId: string; setDirty: (d: boolean) => void }) {
+type LeaveGuard = (leave: () => void) => void;
+function VisitScreen({ t, clinicId, base, request, encounterId, patientId, setDirty, leaveRef }: { t: T; clinicId: string; base: string; request: Request; encounterId: string; patientId: string;
+  setDirty: (d: boolean) => void; leaveRef: MutableRefObject<LeaveGuard | null> }) {
   const [visit, setVisit] = useState<Visit | null>(null), [card, setCard] = useState<Card | null>(null), [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [note, setNote] = useState<Note>({ reported: '', observed: '', assessment: '', plan: '' }), [rx, setRx] = useState<Rx[]>([]), [reason, setReason] = useState('');
   const [dirty, setLocalDirty] = useState(false), [service, setService] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const keys = useKeys(), enc = `${base}/encounters/${encounterId}`;
   const markDirty = (d: boolean) => { setLocalDirty(d); setDirty(d); };
+  const [leaving, setLeaving] = useState<(() => void) | null>(null), form = useRef<HTMLFormElement>(null);
+  // Back goes through this guard: unsaved notes ask save, discard or stay; nothing unsaved leaves at once.
+  leaveRef.current = leave => { if (dirty) setLeaving(() => leave); else leave(); };
+  useEffect(() => () => { leaveRef.current = null; }, []);
   async function reload(resetEditor = true) {
     const [v, c] = await Promise.all([request<Visit>(enc), request<Card>(`${base}/patients/${patientId}`)]);
     setVisit(v); setCard(c);
@@ -159,11 +170,18 @@ function VisitScreen({ t, clinicId, base, request, encounterId, patientId, setDi
   if (!visit || !card) return error ? <p role="alert" className="error">{error}</p> : <p>{t('doctor.loading')}</p>;
 
   const approvedNow = !!visit.approval?.current, amending = !!visit.approval && !approvedNow;
-  const save = (e: FormEvent) => { e.preventDefault(); void run(async () => {
+  const saveNote = async (): Promise<boolean> => { let saved = false; await run(async () => {
     const prescription = rx.filter(l => RX_KEYS.some(k => l[k].trim()));
     const r = await post<{ revision: number }>('/note', { expectedRevision: visit.revision, note, prescription, ...(reason.trim() ? { amendmentReason: reason.trim() } : {}) });
-    await reload(); setNotice(t('doctor.saved', { revision: r.revision }));
-  }); };
+    await reload(); setNotice(t('doctor.saved', { revision: r.revision })); saved = true;
+  }); return saved; };
+  const save = (e: FormEvent) => { e.preventDefault(); void saveNote(); };
+  const stay = () => { setLeaving(null); requestAnimationFrame(() => document.getElementById('dr-note-reported')?.focus()); };
+  const saveAndLeave = async () => {
+    const leave = leaving; setLeaving(null);
+    if (!form.current?.reportValidity()) return; // Incomplete prescription lines: stay, the browser points at the field.
+    if (await saveNote()) leave?.();
+  };
   const approve = () => { if (confirm(t('doctor.approveConfirm'))) void run(async () => {
     const r = await post<{ revision: number }>('/approve', { expectedRevision: visit.revision });
     await reload(); setNotice(t('doctor.approvedNotice', { revision: r.revision }));
@@ -177,6 +195,14 @@ function VisitScreen({ t, clinicId, base, request, encounterId, patientId, setDi
   const setLine = (i: number, k: keyof Rx, value: string) => { setRx(old => old.map((l, j) => j === i ? { ...l, [k]: value } : l)); markDirty(true); };
 
   return <div className="dr-visit">
+    {leaving && <div className="modal-backdrop"><section role="alertdialog" aria-modal="true" aria-labelledby="dr-leave-title" aria-describedby="dr-leave-lead" className="modal" onKeyDown={e => {
+      const buttons = e.currentTarget.querySelectorAll('button');
+      if (e.key === 'Escape') stay();
+      if (e.key === 'Tab' && ((e.shiftKey && document.activeElement === buttons[0]) || (!e.shiftKey && document.activeElement === buttons[buttons.length - 1]))) { e.preventDefault(); (e.shiftKey ? buttons[buttons.length - 1] : buttons[0])?.focus(); }
+    }}><h2 id="dr-leave-title">{t('doctor.leaveTitle')}</h2><p id="dr-leave-lead">{t('doctor.leaveLead')}</p>
+      <button className="primary" disabled={busy || (approvedNow && !reason.trim())} onClick={() => void saveAndLeave()}>{t('doctor.leaveSave')}</button>
+      <button onClick={() => { const leave = leaving; setLeaving(null); markDirty(false); leave(); }}>{t('doctor.leaveDiscard')}</button>
+      <button autoFocus onClick={stay}>{t('doctor.leaveStay')}</button></section></div>}
     <div aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>
     <PatientCard t={t} card={card} />
     <div className="dr-main">
@@ -185,7 +211,7 @@ function VisitScreen({ t, clinicId, base, request, encounterId, patientId, setDi
           <span className={approvedNow ? 'tag ok' : 'tag'}>{approvedNow ? t('doctor.approvedTag', { revision: visit.approval!.revision })
             : amending ? t('doctor.amendingTag', { revision: visit.approval!.revision }) : t('doctor.draftTag')}</span></div>
         <p className="fine">{visit.encounter.specialty} · {visit.encounter.location}</p>
-        <form onSubmit={save}>
+        <form ref={form} onSubmit={save}>
           {NOTE_KEYS.map(k => <label key={k}>{t(`doctor.field.${k}` as DoctorKey)}
             <textarea id={`dr-note-${k}`} value={note[k]} rows={k === 'reported' ? 3 : 2} maxLength={16000} disabled={busy} placeholder={t('doctor.notRecorded')}
               onChange={e => { const value = e.target.value; setNote(old => ({ ...old, [k]: value })); markDirty(true); }} /></label>)}

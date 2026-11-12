@@ -10,6 +10,9 @@ import { registrationModule } from './registration/screen.js';
 import { catalogModule } from './catalog/screen.js';
 import { doctorModule } from './doctor/screen.js';
 import { labModule } from './lab/screen.js';
+import { dashboardModule,exportModule } from './ceo/dashboard.js';
+import { payrollModule } from './ceo/payroll.js';
+import { reportsModule } from './reports/screen.js';
 
 /** What the shell hands every feature screen. The server still authorizes every call. */
 export type ModuleProps = {
@@ -32,11 +35,8 @@ export type WebModule = {
  * e.g. `registrationModule,` after importing it.
  */
 export const MODULES: readonly WebModule[] = [
-  // A role lands on its first module here: doctor first (queue), lab last so CEO/administrator keep the cashier home.
-  doctorModule, cashierModule, pharmacyModule, surgeryModule,
-  registrationModule,
-  catalogModule,
-  labModule,
+  dashboardModule, doctorModule, cashierModule, pharmacyModule, surgeryModule,
+  registrationModule, catalogModule, labModule, reportsModule, payrollModule, exportModule,
 ];
 
 /** Placeholders per role for increments not yet built. A registered module with the same label hides its placeholder. */

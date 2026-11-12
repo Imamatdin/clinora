@@ -16,6 +16,7 @@ import { LockScreen, useIdleLock, type DeviceInfo } from './access/device.js';
 import { Devices, MyAccess } from './access/staff-access.js';
 import { InstallHint, registerServiceWorker } from './access/install.js';
 import './style.css';
+import './ceo/style.css';
 
 // Task 003C assistant inside the task 010 visit screen (one line per visit panel).
 registerVisitPanel({ id: 'assistant', Panel: ({ onChanged, ...p }) => <AssistantPanel {...p} onApproved={onChanged} /> });

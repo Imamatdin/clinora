@@ -6,6 +6,8 @@ import './core.js';
 import './access.js';
 import './assistant.js';
 import './cashier.js';
+import './reports.js';
+import './payroll.js';
 
 export { registeredRoutes } from './registry.js';
 export type { Route } from './types.js';

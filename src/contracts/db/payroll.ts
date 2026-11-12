@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DbBp, DbDate, DbId, DbInstant, DbUzs, ServiceKind } from './common.js';
+import { DbBp, DbDate, DbId, DbInstant, DbBigint, ServiceKind } from './common.js';
 
 /** Append-only. The rule in force on a date is the latest effective_from <= that date. */
 export const DoctorSplitRuleRow = z.object({
@@ -14,7 +14,7 @@ export const PayrollPeriodRow = z.object({
 /** Snapshot written while finalizing; immutable, and never inserted into a final period. */
 export const PayrollLineRow = z.object({
   id: DbId, clinic_id: DbId, period_id: DbId, user_id: DbId, charge_line_id: DbId, rule_id: DbId,
-  entitlement_uzs: DbUzs, from_receipts_uzs: DbUzs, clinic_funded_uzs: DbUzs
+  entitlement_uzs: DbBigint, from_receipts_uzs: DbBigint, clinic_funded_uzs: DbBigint
 });
 
 export type DoctorSplitRuleRow = z.infer<typeof DoctorSplitRuleRow>;

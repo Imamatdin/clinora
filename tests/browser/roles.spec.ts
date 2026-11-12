@@ -67,7 +67,8 @@ for (const width of [1280, 360]) test(`administrator opens the day and creates a
     await expect(header.locator('[data-state="open"]')).toHaveText(dayText);
     await expect(header.getByText('Синтетик Кассир', { exact: true })).toBeVisible();
     // A single-role cashier gets no section navigation, no staff screen and no day controls.
-    await expect(page.getByRole('navigation', { name: T('app.navigation') })).toHaveCount(0);
+    await expect(page.getByRole('navigation', { name: T('app.navigation') })).toHaveCount(1);
+    await expect(page.getByRole('button',{name:T('nav.staff'),exact:true})).toHaveCount(0);
     await expect(page.getByRole('button', { name: T('day.closeButton') })).toHaveCount(0);
     const status = await page.evaluate(async clinic => (await fetch(`/api/clinics/${clinic}/staff`)).status, f.owner.clinicId);
     expect(status).toBe(403);

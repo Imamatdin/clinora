@@ -17,6 +17,7 @@ export const routeShape = (path: string) => path.slice(0, 200)
   .replace(/\/[0-9]+(?=\/|$)/g, '/:n')
   .replace(/[^a-zA-Z0-9/_.:-]/g, '?');
 import { handleAssistant, startAssistantHousekeeping } from './assistant.js';
+import { dispatchReports } from '../modules/reports/notify.js';
 
 const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
@@ -83,6 +84,8 @@ export async function createApp(webDirectory?: string, config?: ApiConfig, optio
       if (await handleAssistant(req, res, config, requestId)) return; // Task 003C doctor assistant routes.
       try {
         const result = await api(req, config);
+        const close = /^\/api\/clinics\/([0-9a-f-]{36})\/business-days\/[0-9a-f-]{36}\/close$/.exec(path);
+        if (close && req.method === 'POST') await dispatchReports(config,close[1]!).catch(()=>{});
         if (result.cookie) res.setHeader('Set-Cookie', result.cookie);
         if (result.html !== undefined) { // Server-rendered print pages (queue tickets); same CSP as everything else.
           res.writeHead(result.status ?? 200, { 'Content-Type': 'text/html; charset=utf-8' });

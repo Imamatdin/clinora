@@ -16,6 +16,7 @@ test("cashier opens shift, partial cash and card, discount, refund, cash out, cl
     await page
       .getByRole("button", { name: T("auth.signIn"), exact: true })
       .click();
+    await page.getByRole('button',{name:T('module.payments'),exact:true}).click();
     await expect(
       page.getByRole("heading", { name: T("cashier.title"), exact: true }),
     ).toBeVisible();
@@ -103,6 +104,7 @@ test("cashier opens shift, partial cash and card, discount, refund, cash out, cl
       .click();
     expect(await page.evaluate(() => (window as any).__printed)).toBe(true);
     await page.reload();
+    await page.getByRole('button',{name:T('module.payments'),exact:true}).click();
     await expect(
       page.getByRole("button", { name: new RegExp(T("cashier.report")) }),
     ).toBeVisible();

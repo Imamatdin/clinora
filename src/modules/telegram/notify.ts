@@ -14,6 +14,10 @@ const Count = z.number().int().min(0).max(100000);
 const NoParams = z.object({}).strict();
 
 export const NOTICE_TEMPLATES = {
+  'day.closed': { params: z.object({collected:z.string().regex(/^\d{1,30}$/),refunds:z.string().regex(/^\d{1,30}$/),cashOuts:z.string().regex(/^\d{1,30}$/)}).strict(), text: {
+    'uz-Cyrl':'Иш куни ёпилди. Тушум: {collected} сўм. Қайтарилди: {refunds} сўм. Харажат: {cashOuts} сўм.',
+    'uz-Latn':'Ish kuni yopildi. Tushum: {collected} soʻm. Qaytarildi: {refunds} soʻm. Xarajat: {cashOuts} soʻm.',
+    ru:'Рабочий день закрыт. Поступления: {collected} сум. Возвраты: {refunds} сум. Расходы: {cashOuts} сум.' } },
   'queue.new_patient': { params: NoParams, text: {
     'uz-Cyrl': 'Навбатингизга янги бемор қўшилди. Тафсилотлар фақат иловада.',
     'uz-Latn': 'Navbatingizga yangi bemor qoʻshildi. Tafsilotlar faqat ilovada.',
@@ -34,7 +38,7 @@ export const NOTICE_TEMPLATES = {
     'uz-Cyrl': 'Clinora ҳисобингиз ушбу Telegram ҳисобига боғланди.',
     'uz-Latn': 'Clinora hisobingiz ushbu Telegram hisobiga bogʻlandi.',
     ru: 'Ваш аккаунт Clinora привязан к этому аккаунту Telegram.' } }
-} satisfies Record<string, { params: z.ZodType<Record<string, number>>; text: Record<BotLocale, string> }>;
+} satisfies Record<string, { params: z.ZodType<Record<string, number|string>>; text: Record<BotLocale, string> }>;
 export type NoticeTemplate = keyof typeof NOTICE_TEMPLATES;
 export type NoticeParams<T extends NoticeTemplate> = z.infer<(typeof NOTICE_TEMPLATES)[T]['params']>;
 
@@ -42,7 +46,7 @@ export type NoticeParams<T extends NoticeTemplate> = z.infer<(typeof NOTICE_TEMP
 export function renderNotice<T extends NoticeTemplate>(template: T, params: NoticeParams<T>, locale: BotLocale, appUrl: string) {
   if (!BOT_LOCALES.includes(locale)) throw new Error('Unknown locale');
   const definition = NOTICE_TEMPLATES[template];
-  const values = definition.params.parse(params) as Record<string, number>;
+  const values = definition.params.parse(params) as Record<string, number|string>;
   const text = definition.text[locale].replace(/\{(\w+)\}/g, (match, name: string) => name in values ? String(values[name]) : match);
   return { text, reply_markup: { inline_keyboard: [[{ text: botText(locale, 'open'), web_app: { url: appUrl } }]] } };
 }

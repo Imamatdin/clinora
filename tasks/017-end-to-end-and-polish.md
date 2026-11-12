@@ -14,7 +14,8 @@ One synthetic clinic day works end to end across all roles, every screen follows
 4. Translation completeness: every key present in uz-Cyrl, uz-Latn and ru (test fails on a missing key); Uzbek Latin text uses the official alphabet (oʻ, gʻ, sh, ch).
 5. Role home screens: each role lands on its main job; navigation shows only that role's modules.
 6. Demo data for the founders' presentation: `db:demo` produces a believable clinic day (patients in queues, a few admissions, some payments) so dashboards are not empty.
-7. Cheat sheets: one printable page per role in Uzbek Cyrillic generated from the app (`/help/<role>`), with the main steps and screenshots from the browser tests.
+7. Open items from task 010: (a) decide whether the old notebook form below the doctor's visit screen stays; preferred: fold its remaining functions into the visit screen and remove it. (b) An assistant approval while a doctor's manual draft is open must not leave the draft out silently: block the approval with a clear message until the draft is saved or discarded. (c) Lab results confirmed after their business day is closed: allow confirmation, post the charge to the current open business day with a reference to the original visit date; if no day is open, keep it pending until one opens.
+8. Cheat sheets: one printable page per role in Uzbek Cyrillic generated from the app (`/help/<role>`), with the main steps and screenshots from the browser tests.
 
 ## Acceptance
 Full-day browser test passes at 360 px and 1280 px; translation test passes; screenshots of every role home in all three languages attached as CI artifacts; handoff at most 60 lines listing every cross-module fix.

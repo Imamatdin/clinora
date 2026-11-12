@@ -27,6 +27,30 @@ The clinical notebook built in tasks 001-002 stays. It becomes the doctor's visi
 9. All UI strings go through the i18n dictionary. Default locale `uz-Cyrl`.
 10. Synthetic data in development and demos. Real clinic reference data (services, prices, doctors) may be imported once Imamatdin provides it. Real patient data only after the founders define the process.
 
+## Access and Telegram (decided 12 November 2026)
+
+- Phones: staff open Clinora as a Telegram Mini App from the clinic bot. The server validates Telegram's signed init data (HMAC with the bot token, freshness window) on every session start and checks current roles on every request. No password in daily phone use.
+- Linking: the administrator creates a staff account; Clinora issues a single-use, expiring invite link; tapping it in Telegram binds that Telegram user id to the staff account. A Telegram id alone never grants access; blocking the staff account ends access on the next request.
+- Clinic PCs: the installed web app (PWA) stays signed in per device for the shift; people switch user with a short PIN so every action is attributed to the right person.
+- One backend, one database, live updates across devices.
+- Bot messages carry notices and a button into the app, never diagnoses, results or patient details.
+
+## Ease-of-use rules (apply to every screen)
+
+The test: a 60-year-old doctor who only uses Telegram finishes the task on the first try without help.
+
+1. One main action per screen, one large button; secondary actions behind "More".
+2. Pick from searchable lists instead of typing wherever possible.
+3. Amounts and phone numbers use a large number pad; amounts display with space groups and `сўм`.
+4. Uzbek Cyrillic default; Russian and Uzbek Latin one tap away; use the clinic's own terms from its 1C.
+5. Body text at least 16 px, touch targets at least 48 px, high contrast, no icon-only buttons.
+6. Money actions confirm in words on one screen; other actions offer a short undo; errors say what to do next.
+7. Drafts autosave; registration and queue keep working offline with a visible banner and sync once.
+8. Skippable first-run walkthrough per role; printable one-page cheat sheet per role.
+9. Before go-live, two real staff per role complete their main tasks unaided. Targets: register a patient under 60 s, take a payment under 30 s.
+
+Human-readable version for the founders: the Claude Doc "Clinora: what we're building".
+
 ## Data model direction
 
 Reuse the task-002 foundation: accounts, sessions, clinics, memberships, patients, patient_assignments, encounters, documents, document_versions, idempotency_records, audit_events.

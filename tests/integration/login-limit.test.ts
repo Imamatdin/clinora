@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import type { ApiConfig } from '../../src/server/notebook.js';
 import { digest } from '../../src/server/security.js';
 import { httpFixture } from './fixture.js';
 
@@ -88,7 +89,7 @@ test('IP ceiling counts only failures, survives success and expires independentl
   assert.equal((await sign(f,'unknown.one','wrong')).status,401);
   const blocked=await sign(f,'unknown.two','wrong'); assert.equal(blocked.status,429); assert.ok(Number(blocked.headers.get('retry-after'))>0);
   assert.equal((await f.pool.query('SELECT attempts FROM login_limits WHERE key=$1',[ipKey])).rows[0].attempts,300);
-  f.config.trustProxyHops=1;
+  (f.config as ApiConfig).trustProxyHops=1;
   assert.equal((await f.client().request(path,{identifier:'owner@example.test',password:f.password},{'X-Forwarded-For':'192.0.2.1'})).status,200,'another client IP is unaffected');
   await f.pool.query("UPDATE login_limits SET reset_at=now()-interval '1 second' WHERE key=$1",[ipKey]);
   assert.equal((await sign(f,'owner@example.test')).status,200);

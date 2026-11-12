@@ -115,7 +115,7 @@ async function idempotent(tx: Tx, access: Access, operation: string, key: unknow
   await tx.query('INSERT INTO idempotency_records(clinic_id,actor_id,operation,key,payload_hash,response) VALUES($1,$2,$3,$4,$5,$6)', [...scope, hash, JSON.stringify(result)]);
   return result;
 }
-async function registrationThrottle(pool: pg.Pool, identity: string, ip: string) {
+async function throttle(pool: pg.Pool, identity: string, ip: string) {
   // TCP peer, or the proxy-appended X-Forwarded-For entry when TRUST_PROXY_HOPS is set (client-ip.ts).
   await transaction(pool, async tx => {
     for (const [key, limit] of [[digest('ip:' + ip), 40], [digest('id:' + identity), 8]] as const) {
@@ -140,7 +140,7 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
   if (publicAccess) return publicAccess;
   if (path === '/api/auth/register' && method === 'POST') {
     const input = parse(SignupInput, await jsonBody(req));
-    await registrationThrottle(config.pool, input.email.toLowerCase(), clientIp(req, config.trustProxyHops));
+    await throttle(config.pool, input.email.toLowerCase(), clientIp(req, config.trustProxyHops));
     const hash = await passwordHash(input.password);
     await config.pool.query('INSERT INTO accounts(id,email,display_name,password_hash) VALUES($1,$2,$3,$4) ON CONFLICT(email) DO NOTHING', [randomUUID(), input.email.toLowerCase(), input.displayName, hash]);
     return { status: 202, body: { message: 'If this address is available, an unprivileged account has been created. Sign in to continue.' } };

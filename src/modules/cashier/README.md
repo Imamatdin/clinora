@@ -38,3 +38,9 @@ actual printer/driver testing and deployment remain separate from browser tests.
 
 Verification: `npm run typecheck`, `npm run test:unit`, and on CI PostgreSQL,
 `npm run check`. Tests use isolated schemas and synthetic patients only.
+
+Task 021: approval failures use a separate per-approver, per-enrolled-device counter,
+with five failures causing a 15-minute cooldown. Password/Telegram sessions without
+an enrolled device use the requesting account as the scope (new sessions do not reset it).
+Shared-PC sign-in PIN counters are independent. A discount void stores the approving
+manager in voided_by; its audit event retains the requesting cashier.

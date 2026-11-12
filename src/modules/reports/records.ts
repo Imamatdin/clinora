@@ -34,6 +34,18 @@ export async function records(c: ClinicContext, p: Period, options: {outstanding
       LEFT JOIN bed_day_charges b ON b.clinic_id=l.clinic_id AND b.charge_line_id=l.id
       LEFT JOIN caretaker_day_charges k ON k.clinic_id=l.clinic_id AND k.charge_line_id=l.id
       LEFT JOIN report_charge_dates r ON r.clinic_id=l.clinic_id AND r.charge_line_id=l.id WHERE l.clinic_id=$1),
+    active_discounts AS MATERIALIZED (
+      SELECT d.* FROM discounts d,bounds t WHERE $4 AND d.clinic_id=$1 AND d.created_at<t.finish AND (d.voided_at IS NULL OR d.voided_at>=t.finish)
+    ), line_balances AS (
+      SELECT l.visit_id,sum(greatest(l.value-coalesce(CASE WHEN d.kind='fixed' THEN least(l.value,d.amount_uzs) ELSE floor(l.value*d.percent_bp/10000) END,0),0)) base
+      FROM (SELECT l.id,l.visit_id,CASE WHEN l.status='cancelled' AND l.cancelled_at<t.finish THEN 0 ELSE l.unit_price_uzs::numeric*l.quantity END value
+        FROM dated l,bounds t WHERE $4 AND l.service_date<=t.hi) l
+      LEFT JOIN active_discounts d ON d.charge_line_id=l.id GROUP BY l.visit_id
+    ), unsettled AS (
+      SELECT b.visit_id FROM line_balances b LEFT JOIN active_discounts d ON d.visit_id=b.visit_id AND d.charge_line_id IS NULL
+      WHERE b.base-coalesce(CASE WHEN d.kind='fixed' THEN least(b.base,d.amount_uzs) ELSE floor(b.base*d.percent_bp/10000) END,0)<>
+        coalesce((SELECT sum(CASE WHEN p.kind='payment' THEN p.amount_uzs ELSE -p.amount_uzs END) FROM payments p JOIN business_days day ON day.clinic_id=p.clinic_id AND day.id=p.business_day_id WHERE p.clinic_id=$1 AND p.visit_id=b.visit_id AND day.business_date<=$3::date),0)
+    ),
     activity AS (
       SELECT v.id FROM visits v JOIN business_days d ON d.clinic_id=v.clinic_id AND d.id=v.business_day_id,bounds t WHERE v.clinic_id=$1 AND d.business_date BETWEEN t.lo AND t.hi
       UNION SELECT l.visit_id FROM report_charge_dates r JOIN charge_lines l ON l.clinic_id=r.clinic_id AND l.id=r.charge_line_id,bounds t WHERE r.clinic_id=$1 AND r.business_date BETWEEN t.lo AND t.hi
@@ -41,9 +53,7 @@ export async function records(c: ClinicContext, p: Period, options: {outstanding
       UNION SELECT p.visit_id FROM payments p JOIN business_days d ON d.clinic_id=p.clinic_id AND d.id=p.business_day_id,bounds t WHERE p.clinic_id=$1 AND d.business_date BETWEEN t.lo AND t.hi
       UNION SELECT d.visit_id FROM discounts d,bounds t WHERE d.clinic_id=$1 AND (d.created_at>=t.start AND d.created_at<t.finish OR d.voided_at>=t.start AND d.voided_at<t.finish)
       UNION SELECT p.visit_id FROM cashier_allocation_adjustments a JOIN payments p ON p.clinic_id=a.clinic_id AND p.id=a.payment_id,bounds t WHERE a.clinic_id=$1 AND a.created_at>=t.start AND a.created_at<t.finish
-      UNION SELECT l.visit_id FROM dated l,bounds t WHERE $4 AND l.service_date<=t.hi GROUP BY l.visit_id
-        HAVING sum(CASE WHEN l.status='cancelled' AND l.cancelled_at<t.finish THEN 0 ELSE l.quantity*l.unit_price_uzs::numeric END)<>
-          coalesce((SELECT sum(CASE WHEN p.kind='payment' THEN p.amount_uzs ELSE -p.amount_uzs END) FROM payments p JOIN business_days d ON d.clinic_id=p.clinic_id AND d.id=p.business_day_id WHERE p.clinic_id=$1 AND p.visit_id=l.visit_id AND d.business_date<=$3::date),0)
+      UNION SELECT visit_id FROM unsettled
     ), selected AS (SELECT id FROM activity WHERE $5::uuid IS NULL OR EXISTS(SELECT 1 FROM charge_lines l WHERE l.clinic_id=$1 AND l.visit_id=activity.id AND l.performer_user_id=$5)),
     ps AS (SELECT p.*,d.business_date::text date FROM payments p JOIN business_days d ON d.id=p.business_day_id AND d.clinic_id=p.clinic_id,bounds t WHERE p.clinic_id=$1 AND p.visit_id IN(SELECT id FROM selected) AND d.business_date<=t.hi)
     SELECT

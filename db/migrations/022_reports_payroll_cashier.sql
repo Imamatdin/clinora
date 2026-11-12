@@ -51,7 +51,7 @@ BEGIN
     OR NEW.clinic_id<>OLD.clinic_id OR NEW.user_id<>OLD.user_id OR NEW.id<>OLD.id
     OR EXISTS(SELECT 1 FROM payroll_lines WHERE clinic_id=OLD.clinic_id AND rule_id=OLD.id)
     OR EXISTS(SELECT 1 FROM payroll_periods WHERE clinic_id=OLD.clinic_id AND status='final' AND to_date>=OLD.effective_from)
-    THEN RAISE EXCEPTION 'past and current rules are immutable' USING ERRCODE='restrict_violation'; END IF;
+    THEN RAISE EXCEPTION 'past and current rules are immutable (append-only)' USING ERRCODE='restrict_violation'; END IF;
   RETURN NEW;
 END $$;
 CREATE TRIGGER doctor_split_rules_future_only BEFORE UPDATE OR DELETE ON doctor_split_rules FOR EACH ROW EXECUTE FUNCTION payroll_future_rule_correction();

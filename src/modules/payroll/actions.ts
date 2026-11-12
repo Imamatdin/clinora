@@ -78,7 +78,7 @@ function aggregate(lines:Row[]) {
 export async function earnings(c:ClinicContext,p:Period) {
   const ctx=await requireRole(c.tx,c.actorId,c.clinicId,['ceo','doctor']);
   const doctor=ctx.roles.includes('ceo')?undefined:c.actorId;
-  const periods=(await c.tx.query(`SELECT * FROM payroll_periods WHERE clinic_id=$1 AND status='final' AND from_date <= $3 AND to_date >= $2 ORDER BY from_date`,[c.clinicId,p.from,p.to])).rows;
+  const periods=(await c.tx.query(`SELECT id,status,from_date,to_date,CASE WHEN $4::uuid IS NULL THEN daily_snapshot ELSE coalesce((SELECT jsonb_agg(l) FROM jsonb_array_elements(daily_snapshot) l WHERE l->>'user_id'=$4::text),'[]') END daily_snapshot FROM payroll_periods WHERE clinic_id=$1 AND status='final' AND from_date <= $3 AND to_date >= $2 ORDER BY from_date`,[c.clinicId,p.from,p.to,doctor??null])).rows;
   const exact=periods.length===1 && periods[0].from_date===p.from && periods[0].to_date===p.to;
   const lines=exact?(await c.tx.query(`SELECT l.*,a.display_name doctor FROM payroll_lines l JOIN accounts a ON a.id=l.user_id WHERE l.clinic_id=$1 AND l.period_id=$2 AND ($3::uuid IS NULL OR l.user_id=$3) ORDER BY a.display_name,l.charge_line_id`,[c.clinicId,periods[0].id,doctor??null])).rows:aggregate([
     ...periods.flatMap(period=>(period.daily_snapshot??[]).filter((l:Row)=>inRange(l.date,p)&&(!doctor||l.user_id===doctor))),

@@ -90,3 +90,4 @@ html.tg a,html.tg .link{color:var(--tg-link,#16685f)}
 html.tg footer{display:none}
 html.tg .secret{background:var(--tg-bg,#fff);color:var(--tg-text,#213c44);border-color:var(--tg-button,#16685f)}
 html.tg .invite-link{background:var(--tg-secondary-bg,#f3f6f5);color:var(--tg-text,#213c44)}
+@import './cashier/style.css';

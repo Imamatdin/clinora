@@ -9,7 +9,7 @@ President's Tech Award, 19 November 2026. Staging only, fictional patient only. 
 3. Check the banner at the top of the assistant panel:
    - no yellow banner = real speech recognition (Aisha) and real drafting (Gemini) are connected;
    - yellow **Симуляция режими** banner = keys are not connected; use the fallback path below and say so out loud.
-4. Phone: Telegram linked to `demo.doctor` (panel → **Telegram'ни боғлаш**), test one voice message.
+4. Phone: Telegram linked to `demo.doctor` (staff invite: **PIN ва Telegram** or the administrator's invite; one link for sign-in and voice notes), test one voice message.
 5. Keep the fallback recording (Mashxura reading the script below, recorded once on her phone) ready to play from a second phone next to the laptop microphone.
 
 ## On stage (about 2 minutes)

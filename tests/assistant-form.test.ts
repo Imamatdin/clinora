@@ -80,9 +80,11 @@ test('environment selects real adapters only with keys; simulation only when ask
   assert.equal(providersFromEnv({ ASSISTANT_SIMULATION: 'true' }).stt.simulated, true);
   assert.equal(providersFromEnv({ AISHA_API_KEY: 'k', ASSISTANT_SIMULATION: 'true' }).stt.name, 'aisha');
   assert.equal(providersFromEnv({ VERTEX_API_KEY: 'k' }).extractor.name, 'gemini-vertex');
-  assert.equal(providersFromEnv({ ASSISTANT_TELEGRAM_WEBHOOK_SECRET: 'short' }).webhookSecret, null);
-  assert.equal(providersFromEnv({ TELEGRAM_BOT_TOKEN: '1:a', TELEGRAM_BOT_USERNAME: 'b', TELEGRAM_WEBHOOK_SECRET: 'x'.repeat(40) }).telegram, null, 'task 004 bot is not reused');
-  assert.throws(() => providersFromEnv({ TELEGRAM_BOT_TOKEN: '1:a', ASSISTANT_TELEGRAM_BOT_TOKEN: '1:a', ASSISTANT_TELEGRAM_BOT_USERNAME: 'b' }), /different bot/);
+  // Task 015: voice audio is fetched through the clinic bot (task 004), validated by the same rules as sign-in.
+  assert.equal(providersFromEnv({}).telegram, null);
+  assert.ok(providersFromEnv({ TELEGRAM_BOT_TOKEN: '123456789:' + 'a'.repeat(35), TELEGRAM_BOT_USERNAME: 'clinora_bot', TELEGRAM_WEBHOOK_SECRET: 'x'.repeat(40) }).telegram, 'clinic bot downloads voice notes');
+  assert.throws(() => providersFromEnv({ TELEGRAM_BOT_TOKEN: '1:a' }), /TELEGRAM_BOT_TOKEN/, 'partial or malformed bot config fails loudly');
+  assert.equal(providersFromEnv({ ASSISTANT_TELEGRAM_BOT_TOKEN: '1:a', ASSISTANT_TELEGRAM_BOT_USERNAME: 'b' }).telegram, null, 'the old assistant bot is not used');
 });
 
 test('assistant strings: registered in the shell dictionary, same keys and placeholders in uz-Cyrl, uz-Latn and ru', () => {

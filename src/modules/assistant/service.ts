@@ -7,9 +7,9 @@ import { latestApproval } from '../documents/approvals.js';
 import { DomainError } from '../identity/access.js';
 import { transaction, type Tx } from '../../server/database.js';
 import { recordAudit, requireRole } from '../../server/roles.js';
-import { digest, token } from '../../server/security.js';
 import { CATEGORIES, FIELD_KEYS, FieldKeySchema, FORM_ID, displayValue, parseValue, validateProposals, type Category, type FieldKey, type FieldValue, type SegmentRef } from './form.js';
 import { ProviderError, type AssistantProviders } from './providers.js';
+import type { VoiceMessage, VoiceOutcome } from '../telegram/webhook.js';
 
 /*
  * Doctor assistant server actions (slice A1). Every action re-reads the actor's membership, doctor role
@@ -22,14 +22,6 @@ export type Actor = { userId: string; sessionId?: string; expiresAt?: string };
 export type Deps = { pool: pg.Pool; providers: AssistantProviders; origin: string };
 
 export const LIMITS = { chunkBytes: 2 * 1024 * 1024, captureBytes: 40 * 1024 * 1024, chunks: 240, voiceSeconds: 15 * 60, capturesPerHour: 60, attempts: 5, leaseSeconds: 180 };
-export const BOT_TEXT = {
-  voiceReceived: 'Овозли хабар қабул қилинди. Уни қабулга бириктириш учун Clinora иловасини очинг.',
-  linkPending: 'Telegram ҳисобингизни боғлашни Clinora иловасида тасдиқланг.',
-  notLinked: 'Бу Telegram ҳисоби Clinora ходимига боғланмаган. Клиника администраторига мурожаат қилинг.',
-  linkInvalid: 'Ҳавола яроқсиз ёки муддати ўтган. Илованинг ичида янги ҳавола олинг.',
-  tooLong: 'Овозли хабар жуда узун (15 дақиқагача). Қисқароқ хабар юборинг.',
-  open: 'Clinora иловасини очиш'
-} as const;
 
 // ---------- Access ----------
 
@@ -429,89 +421,35 @@ export async function purgeAudio(pool: pg.Pool) {
     DELETE FROM assistant_audio_chunks WHERE capture_id IN (SELECT id FROM old)`);
 }
 
-// ---------- Telegram linking and webhook ----------
+// ---------- Telegram voice inbox ----------
 
-export async function createLinkCode(tx: Tx, actor: Actor, clinicId: string, providers: AssistantProviders) {
-  await doctorAccess(tx, actor, clinicId, null);
-  if (!providers.telegram || !providers.webhookSecret) return fail('INTEGRATION_UNAVAILABLE');
-  const raw = token().slice(0, 40); // Telegram /start payloads allow up to 64 characters of [A-Za-z0-9_-].
-  await tx.query("INSERT INTO assistant_telegram_link_codes(id,clinic_id,user_id,code_hash,expires_at) VALUES($1,$2,$3,$4,now()+interval '15 minutes')", [randomUUID(), clinicId, actor.userId, digest('tglink:' + raw)]);
-  await recordAudit(tx, actor.userId, clinicId, 'assistant.telegram_link_code', actor.userId);
-  return { link: `https://t.me/${providers.telegram.username}?start=${raw}`, expiresInMinutes: 15 };
+/**
+ * Voice note from the clinic bot's webhook (task 004's, task 015). Runs inside the webhook's transaction,
+ * after the update id was recorded. The sender must have task 004's Telegram link to an active account
+ * with an active membership in the link's clinic; anyone else (unlinked, blocked, removed) gets the
+ * standard notice and nothing is stored. Captures wait in the doctor's inbox until the doctor attaches
+ * one to an open visit; nothing is transcribed before that.
+ */
+export async function receiveTelegramVoice(tx: Tx, voice: VoiceMessage): Promise<VoiceOutcome> {
+  const link = (await tx.query(`SELECT l.account_id, l.clinic_id FROM telegram_links l
+      JOIN accounts a ON a.id=l.account_id AND a.status='active'
+      JOIN memberships m ON m.clinic_id=l.clinic_id AND m.user_id=l.account_id AND m.status='active'
+     WHERE l.telegram_user_id=$1`, [voice.telegramUserId])).rows[0];
+  if (!link) return 'notLinked';
+  if (!await isActiveDoctor(tx, link.clinic_id, link.account_id)) return 'notDoctor';
+  if (voice.durationS > LIMITS.voiceSeconds || (voice.fileSize ?? 0) > 20 * 1024 * 1024) return 'tooLong';
+  const inserted = (await tx.query(`INSERT INTO assistant_captures(id,clinic_id,doctor_id,source,telegram_chat_id,telegram_message_id,telegram_file_id,duration_s,mime_type,status)
+    VALUES($1,$2,$3,'telegram',$4,$5,$6,$7,'audio/ogg','pending_attach') ON CONFLICT (telegram_chat_id,telegram_message_id) DO NOTHING RETURNING id`,
+    [randomUUID(), link.clinic_id, link.account_id, voice.chatId, voice.messageId, voice.fileId, voice.durationS])).rows[0];
+  if (!inserted) return 'duplicate'; // Same message under a new update id.
+  await recordAudit(tx, link.account_id, link.clinic_id, 'assistant.telegram_voice', inserted.id);
+  return 'received';
 }
-export async function linkStatus(tx: Tx, actor: Actor, clinicId: string) {
-  await doctorAccess(tx, actor, clinicId, null);
-  const l = (await tx.query("SELECT status,telegram_name FROM assistant_telegram_links WHERE clinic_id=$1 AND user_id=$2 AND status<>'revoked'", [clinicId, actor.userId])).rows[0];
-  return l ? { status: l.status, telegramName: l.telegram_name } : { status: 'none', telegramName: null };
+/** Whether this account has task 004's Telegram link (the panel's hint only; the webhook rechecks everything). */
+export async function telegramLinked(tx: Tx, actor: Actor): Promise<boolean> {
+  return !!(await tx.query('SELECT 1 FROM telegram_links WHERE account_id=$1', [actor.userId])).rows[0];
 }
-export async function confirmLink(tx: Tx, actor: Actor, clinicId: string) {
-  await doctorAccess(tx, actor, clinicId, null);
-  const l = (await tx.query("UPDATE assistant_telegram_links SET status='active', confirmed_at=now() WHERE clinic_id=$1 AND user_id=$2 AND status='pending' AND created_at > now() - interval '30 minutes' RETURNING id", [clinicId, actor.userId])).rows[0];
-  if (!l) return fail('INVALID_TRANSITION');
-  await recordAudit(tx, actor.userId, clinicId, 'assistant.telegram_linked', l.id);
-  return { status: 'active' };
-}
-export async function revokeLink(tx: Tx, actor: Actor, clinicId: string) {
-  await requireRole(tx, actor.userId, clinicId, ['doctor']);
-  const l = (await tx.query("UPDATE assistant_telegram_links SET status='revoked', revoked_at=now() WHERE clinic_id=$1 AND user_id=$2 AND status<>'revoked' RETURNING id", [clinicId, actor.userId])).rows[0];
-  if (l) await recordAudit(tx, actor.userId, clinicId, 'assistant.telegram_unlinked', l.id);
-  return { status: 'none' };
-}
-
-const Update = z.object({
-  update_id: z.number().int().nonnegative(),
-  message: z.object({
-    message_id: z.number().int(), chat: z.object({ id: z.number().int(), type: z.string() }).passthrough(),
-    from: z.object({ id: z.number().int().positive(), first_name: z.string().max(200).optional(), username: z.string().max(64).optional() }).passthrough().optional(),
-    text: z.string().max(4096).optional(),
-    voice: z.object({ file_id: z.string().max(300), duration: z.number().int().nonnegative(), mime_type: z.string().max(60).optional(), file_size: z.number().int().optional() }).passthrough().optional()
-  }).passthrough().optional()
-}).passthrough();
-type Reply = { chatId: number; text: string; button: boolean } | null;
-
-/** Telegram webhook. Caller has already verified the secret-token header. Replies carry no patient data. */
-export async function handleUpdate(deps: Deps, body: unknown): Promise<void> {
-  const parsed = Update.safeParse(body);
-  if (!parsed.success) return; // Acknowledge unknown shapes so Telegram does not redeliver them forever.
-  const u = parsed.data, msg = u.message;
-  const reply: Reply = await transaction(deps.pool, async tx => {
-    const fresh = (await tx.query('INSERT INTO assistant_telegram_updates(update_id) VALUES($1) ON CONFLICT DO NOTHING RETURNING update_id', [u.update_id])).rows[0];
-    if (!fresh || !msg || !msg.from || msg.chat.type !== 'private') return null;
-    const chatId = msg.chat.id, tgUser = msg.from.id;
-    const start = /^\/start ([A-Za-z0-9_-]{16,64})$/.exec(msg.text?.trim() ?? '');
-    if (start) {
-      const code = (await tx.query('SELECT * FROM assistant_telegram_link_codes WHERE code_hash=$1 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE', [digest('tglink:' + start[1])])).rows[0];
-      if (!code) return { chatId, text: BOT_TEXT.linkInvalid, button: false };
-      await tx.query('UPDATE assistant_telegram_link_codes SET consumed_at=now() WHERE id=$1', [code.id]);
-      if (!await jobStillAuthorizedMember(tx, code.clinic_id, code.user_id)) return { chatId, text: BOT_TEXT.linkInvalid, button: false };
-      const taken = (await tx.query("SELECT user_id FROM assistant_telegram_links WHERE telegram_user_id=$1 AND status<>'revoked'", [tgUser])).rows[0];
-      if (taken) return { chatId, text: BOT_TEXT.linkInvalid, button: false };
-      // A new pending link replaces an unconfirmed one; an active link must be unlinked first.
-      const active = (await tx.query("SELECT id FROM assistant_telegram_links WHERE clinic_id=$1 AND user_id=$2 AND status='active'", [code.clinic_id, code.user_id])).rows[0];
-      if (active) return { chatId, text: BOT_TEXT.linkInvalid, button: false };
-      await tx.query("UPDATE assistant_telegram_links SET status='revoked', revoked_at=now() WHERE clinic_id=$1 AND user_id=$2 AND status='pending'", [code.clinic_id, code.user_id]);
-      const name = [msg.from.first_name, msg.from.username ? '@' + msg.from.username : ''].filter(Boolean).join(' ').slice(0, 200);
-      await tx.query("INSERT INTO assistant_telegram_links(id,clinic_id,user_id,telegram_user_id,telegram_chat_id,telegram_name,code_id,status) VALUES($1,$2,$3,$4,$5,$6,$7,'pending')",
-        [randomUUID(), code.clinic_id, code.user_id, tgUser, chatId, name, code.id]);
-      return { chatId, text: BOT_TEXT.linkPending, button: true };
-    }
-    if (msg.voice) {
-      const link = (await tx.query("SELECT * FROM assistant_telegram_links WHERE telegram_user_id=$1 AND status='active'", [tgUser])).rows[0];
-      if (!link || !await jobStillAuthorizedMember(tx, link.clinic_id, link.user_id)) return { chatId, text: BOT_TEXT.notLinked, button: false };
-      if (msg.voice.duration > LIMITS.voiceSeconds || (msg.voice.file_size ?? 0) > 20 * 1024 * 1024) return { chatId, text: BOT_TEXT.tooLong, button: false };
-      const inserted = (await tx.query(`INSERT INTO assistant_captures(id,clinic_id,doctor_id,source,telegram_chat_id,telegram_message_id,telegram_file_id,duration_s,mime_type,status)
-        VALUES($1,$2,$3,'telegram',$4,$5,$6,$7,'audio/ogg','pending_attach') ON CONFLICT (telegram_chat_id,telegram_message_id) DO NOTHING RETURNING id`,
-        [randomUUID(), link.clinic_id, link.user_id, chatId, msg.message_id, msg.voice.file_id, msg.voice.duration])).rows[0];
-      if (!inserted) return null;
-      await recordAudit(tx, link.user_id, link.clinic_id, 'assistant.telegram_voice', inserted.id);
-      return { chatId, text: BOT_TEXT.voiceReceived, button: true };
-    }
-    return null;
-  });
-  // Sent after the update is durably recorded. A failed reply never loses the capture.
-  if (reply && deps.providers.telegram) await deps.providers.telegram.sendMessage(reply.chatId, reply.text, reply.button ? { text: BOT_TEXT.open, url: deps.origin + '/' } : undefined).catch(() => {});
-}
-async function jobStillAuthorizedMember(tx: Tx, clinicId: string, userId: string): Promise<boolean> {
+async function isActiveDoctor(tx: Tx, clinicId: string, userId: string): Promise<boolean> {
   return !!(await tx.query(`SELECT 1 FROM memberships m JOIN accounts a ON a.id=m.user_id WHERE m.clinic_id=$1 AND m.user_id=$2 AND m.status='active' AND m.clinical_access AND a.status='active'
     AND EXISTS(SELECT 1 FROM membership_roles r WHERE r.clinic_id=m.clinic_id AND r.user_id=m.user_id AND r.role='doctor')`, [clinicId, userId])).rows[0];
 }

@@ -1,5 +1,6 @@
 import { createSign } from 'node:crypto';
 import { FIELD_KEYS, FIELDS, LABS, CATEGORIES, type SegmentRef } from './form.js';
+import { telegramConfigFromEnv } from '../telegram/api.js';
 
 /**
  * Provider adapters for the doctor assistant. Every adapter sits behind an interface so tests and the
@@ -20,12 +21,11 @@ export interface NoteExtractor {
   /** Returns the provider's raw output. The caller validates it; nothing here is trusted. */
   extract(input: { segments: SegmentRef[]; today: string }): Promise<unknown>;
 }
-export interface TelegramBot {
-  readonly username: string;
-  sendMessage(chatId: number, text: string, button?: { text: string; url: string }): Promise<void>;
+/** Fetches a voice note's audio from the clinic bot (task 004's bot; its webhook is the only one, task 015). */
+export interface TelegramVoice {
   downloadVoice(fileId: string): Promise<{ data: Buffer; mimeType: string }>;
 }
-export type AssistantProviders = { stt: SpeechToText; extractor: NoteExtractor; telegram: TelegramBot | null; webhookSecret: string | null };
+export type AssistantProviders = { stt: SpeechToText; extractor: NoteExtractor; telegram: TelegramVoice | null };
 
 const timeoutError = (e: unknown) => e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
 async function call(url: string, init: RequestInit, ms: number): Promise<Response> {
@@ -216,15 +216,9 @@ export function geminiExtractor(auth: VertexAuth, model: string): NoteExtractor 
 
 // ---------- Telegram Bot API ----------
 
-export function telegramBot(token: string, username: string): TelegramBot {
+export function telegramVoice(token: string): TelegramVoice {
   const base = `https://api.telegram.org/bot${token}`;
   return {
-    username,
-    async sendMessage(chatId, text, button) {
-      await call(`${base}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        chat_id: chatId, text, ...(button ? { reply_markup: { inline_keyboard: [[{ text: button.text, url: button.url }]] } } : {})
-      }) }, 10000);
-    },
     async downloadVoice(fileId) {
       const meta = await (await call(`${base}/getFile?file_id=${encodeURIComponent(fileId)}`, {}, 10000)).json() as { ok?: boolean; result?: { file_path?: string; file_size?: number } };
       const path = meta.result?.file_path;
@@ -250,10 +244,11 @@ export function providersFromEnv(env: NodeJS.ProcessEnv = process.env): Assistan
     const account = JSON.parse(Buffer.from(env.VERTEX_SERVICE_ACCOUNT_JSON, 'base64').toString('utf8'));
     extractor = geminiExtractor({ kind: 'service_account', project: env.VERTEX_PROJECT, location: env.VERTEX_LOCATION || 'us-central1', account }, model);
   }
-  // A separate assistant bot until task 015 folds voice capture into task 004's bot: Telegram allows one
-  // webhook per bot, so sharing TELEGRAM_BOT_TOKEN would let one webhook silently replace the other.
-  const token = env.ASSISTANT_TELEGRAM_BOT_TOKEN, username = env.ASSISTANT_TELEGRAM_BOT_USERNAME, secret = env.ASSISTANT_TELEGRAM_WEBHOOK_SECRET;
-  if (token && env.TELEGRAM_BOT_TOKEN && token === env.TELEGRAM_BOT_TOKEN) throw new Error('ASSISTANT_TELEGRAM_BOT_TOKEN must name a different bot than TELEGRAM_BOT_TOKEN until task 015');
-  const telegram = token && username ? telegramBot(token, username) : null;
-  return { stt, extractor, telegram, webhookSecret: secret && /^[A-Za-z0-9_-]{32,256}$/.test(secret) ? secret : null };
+  // Voice notes arrive through the clinic bot (task 004) and its single webhook; the same validated token
+  // downloads the audio. The separate assistant bot of task 003C is gone (task 015).
+  if (env.ASSISTANT_TELEGRAM_BOT_TOKEN || env.ASSISTANT_TELEGRAM_WEBHOOK_SECRET) warnOnce('ASSISTANT_TELEGRAM_* is no longer used; the clinic bot (TELEGRAM_BOT_TOKEN) receives voice notes. Remove these variables.');
+  const bot = telegramConfigFromEnv(env, { call: async () => ({ ok: false, uncertain: false }) });
+  return { stt, extractor, telegram: bot ? telegramVoice(bot.botToken) : null };
 }
+let warned = false;
+function warnOnce(message: string) { if (!warned) { warned = true; console.warn(message); } }

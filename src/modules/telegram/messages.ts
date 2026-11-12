@@ -21,7 +21,10 @@ const uzCyrl = {
   linked: 'Тайёр. Clinora тизимини очиш учун пастдаги тугмани босинг.',
   notLinked: 'Бу Telegram ҳисоби Clinora тизимига боғланмаган. Администратордан таклиф ҳаволасини сўранг.',
   welcomeBack: 'Clinora тизимини очиш учун пастдаги тугмани босинг.',
-  telegramTaken: 'Бу Telegram ҳисоби бошқа ходимга боғланган. Администраторга мурожаат қилинг.'
+  telegramTaken: 'Бу Telegram ҳисоби бошқа ходимга боғланган. Администраторга мурожаат қилинг.',
+  voiceReceived: 'Овозли хабар қабул қилинди. Уни қабулга бириктириш учун Clinora тизимини очинг.',
+  voiceTooLong: 'Овозли хабар жуда узун (15 дақиқагача). Қисқароқ хабар юборинг.',
+  voiceNotDoctor: 'Овозли хабарлар фақат шифокор ёрдамчиси учун қабул қилинади.'
 };
 type BotText = Record<keyof typeof uzCyrl, string>;
 const uzLatn: BotText = {
@@ -34,7 +37,10 @@ const uzLatn: BotText = {
   linked: 'Tayyor. Clinora tizimini ochish uchun pastdagi tugmani bosing.',
   notLinked: 'Bu Telegram hisobi Clinora tizimiga bogʻlanmagan. Administratordan taklif havolasini soʻrang.',
   welcomeBack: 'Clinora tizimini ochish uchun pastdagi tugmani bosing.',
-  telegramTaken: 'Bu Telegram hisobi boshqa xodimga bogʻlangan. Administratorga murojaat qiling.'
+  telegramTaken: 'Bu Telegram hisobi boshqa xodimga bogʻlangan. Administratorga murojaat qiling.',
+  voiceReceived: 'Ovozli xabar qabul qilindi. Uni qabulga biriktirish uchun Clinora tizimini oching.',
+  voiceTooLong: 'Ovozli xabar juda uzun (15 daqiqagacha). Qisqaroq xabar yuboring.',
+  voiceNotDoctor: 'Ovozli xabarlar faqat shifokor yordamchisi uchun qabul qilinadi.'
 };
 const ru: BotText = {
   open: 'Открыть Clinora',
@@ -46,7 +52,10 @@ const ru: BotText = {
   linked: 'Готово. Нажмите кнопку ниже, чтобы открыть Clinora.',
   notLinked: 'Этот аккаунт Telegram не привязан к Clinora. Попросите у администратора ссылку-приглашение.',
   welcomeBack: 'Нажмите кнопку ниже, чтобы открыть Clinora.',
-  telegramTaken: 'Этот аккаунт Telegram привязан к другому сотруднику. Обратитесь к администратору.'
+  telegramTaken: 'Этот аккаунт Telegram привязан к другому сотруднику. Обратитесь к администратору.',
+  voiceReceived: 'Голосовое сообщение получено. Откройте Clinora, чтобы прикрепить его к приёму.',
+  voiceTooLong: 'Голосовое сообщение слишком длинное (до 15 минут). Отправьте покороче.',
+  voiceNotDoctor: 'Голосовые сообщения принимаются только для помощника врача.'
 };
 export const BOT_TEXT: Record<BotLocale, BotText> = { 'uz-Cyrl': uzCyrl, 'uz-Latn': uzLatn, ru };
 

@@ -1,7 +1,7 @@
 import { timingSafeEqual, createHash } from 'node:crypto';
 import { z } from 'zod';
 import type pg from 'pg';
-import { transaction } from '../../server/database.js';
+import { transaction, type Tx } from '../../server/database.js';
 import type { TelegramConfig } from './api.js';
 import { consumeInvite, InviteToken, openInvite } from './links.js';
 import { botLocale, botText, type BotLocale } from './messages.js';
@@ -9,7 +9,8 @@ import { botLocale, botText, type BotLocale } from './messages.js';
 /*
  * Telegram webhook. Authenticity comes only from the secret-token header Telegram sends with
  * every delivery (set via setWebhook). Each update_id is processed once; replies are sent after
- * the database commit and are never retried.
+ * the database commit and are never retried. Voice messages go to the handler the server passes in
+ * (the doctor assistant inbox, task 015) inside the same transaction as the update-id record.
  */
 
 /** Constant-time comparison of the X-Telegram-Bot-Api-Secret-Token header. */
@@ -23,18 +24,27 @@ const From = z.object({ id: z.number().int().positive().max(Number.MAX_SAFE_INTE
 const Chat = z.object({ id: z.number().int(), type: z.string() }).passthrough();
 export const Update = z.object({
   update_id: z.number().int().nonnegative(),
-  message: z.object({ from: From, chat: Chat, text: z.string().max(4096).optional() }).passthrough().optional(),
+  message: z.object({ message_id: z.number().int().optional(), from: From, chat: Chat, text: z.string().max(4096).optional(),
+    voice: z.object({ file_id: z.string().min(1).max(300), duration: z.number().int().nonnegative(), file_size: z.number().int().nonnegative().optional() }).passthrough().optional()
+  }).passthrough().optional(),
   callback_query: z.object({ id: z.string().max(128), from: From, data: z.string().max(64).optional(),
     message: z.object({ chat: Chat }).passthrough().optional() }).passthrough().optional()
 }).passthrough();
 export type Update = z.infer<typeof Update>;
+
+/** A voice note from a private chat, as Telegram reports it. The handler decides who it belongs to. */
+export type VoiceMessage = { telegramUserId: number; chatId: number; messageId: number; fileId: string; durationS: number; fileSize: number | null };
+/** `notLinked` is the standard notice for unlinked, blocked or removed staff; `duplicate` sends nothing. */
+export type VoiceOutcome = 'received' | 'duplicate' | 'notLinked' | 'notDoctor' | 'tooLong';
+export type VoiceHandler = (tx: Tx, voice: VoiceMessage) => Promise<VoiceOutcome>;
+const VOICE_TEXT = { received: 'voiceReceived', notLinked: 'notLinked', notDoctor: 'voiceNotDoctor', tooLong: 'voiceTooLong' } as const;
 
 type Outbound = { method: 'sendMessage' | 'answerCallbackQuery'; payload: Record<string, unknown> };
 
 const openButton = (locale: BotLocale, appUrl: string) => ({ inline_keyboard: [[{ text: botText(locale, 'open'), web_app: { url: appUrl } }]] });
 
 /** Processes one authenticated update. Returns what was sent, for observability in tests. */
-export async function handleUpdate(pool: pg.Pool, telegram: TelegramConfig, appUrl: string, raw: unknown): Promise<{ duplicate: boolean; sent: number }> {
+export async function handleUpdate(pool: pg.Pool, telegram: TelegramConfig, appUrl: string, raw: unknown, onVoice?: VoiceHandler): Promise<{ duplicate: boolean; sent: number }> {
   const parsed = Update.safeParse(raw);
   if (!parsed.success) return { duplicate: false, sent: 0 }; // Acknowledge and ignore: retries would not fix it.
   const update = parsed.data;
@@ -58,6 +68,15 @@ export async function handleUpdate(pool: pg.Pool, telegram: TelegramConfig, appU
           ? { chat_id: chat, text: botText(locale, 'welcomeBack'), reply_markup: openButton(locale, appUrl) }
           : { chat_id: chat, text: botText(locale, 'notLinked') } });
       }
+    }
+    if (message && message.chat.type === 'private' && message.voice && message.message_id !== undefined) {
+      const locale = botLocale(message.from.language_code), chat = message.chat.id;
+      // Without a handler (assistant not wired) a voice note is treated like any unlinked request: no capture.
+      const outcome: VoiceOutcome = onVoice ? await onVoice(tx, { telegramUserId: message.from.id, chatId: chat, messageId: message.message_id,
+        fileId: message.voice.file_id, durationS: message.voice.duration, fileSize: message.voice.file_size ?? null }) : 'notLinked';
+      if (outcome !== 'duplicate') out.push({ method: 'sendMessage', payload: outcome === 'received'
+        ? { chat_id: chat, text: botText(locale, VOICE_TEXT[outcome]), reply_markup: openButton(locale, appUrl) }
+        : { chat_id: chat, text: botText(locale, VOICE_TEXT[outcome]) } });
     }
     const callback = update.callback_query;
     if (callback && callback.message?.chat.type === 'private') {

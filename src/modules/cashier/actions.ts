@@ -124,7 +124,7 @@ export async function pay(c:ClinicContext,visitId:string,input:z.infer<typeof Pa
  await c.tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[c.clinicId+input.key]);
  const old=(await c.tx.query('SELECT * FROM payments WHERE clinic_id=$1 AND idempotency_key=$2',[c.clinicId,input.key])).rows[0];
  const refund='paymentId' in input;
- if(old){if(old.visit_id!==visitId||old.cash_shift_id!==input.shiftId||old.amount_uzs!==input.amount||old.kind!==(refund?'refund':'payment')||(refund?old.refund_of!==input.paymentId:old.method!==input.method))return fail('INVALID_INPUT');return (await c.tx.query('SELECT * FROM receipts WHERE clinic_id=$1 AND payment_id=$2',[c.clinicId,old.id])).rows[0];}
+ if(old){if(old.received_by!==c.actorId||old.visit_id!==visitId||old.cash_shift_id!==input.shiftId||old.amount_uzs!==input.amount||old.kind!==(refund?'refund':'payment')||(refund?old.refund_of!==input.paymentId:old.method!==input.method))return fail('INVALID_INPUT');const receipt=(await c.tx.query('SELECT * FROM receipts WHERE clinic_id=$1 AND payment_id=$2',[c.clinicId,old.id])).rows[0];if(refund&&receipt.snapshot.reason!==input.reason)return fail('INVALID_INPUT');return receipt;}
  if(refund)await authorization(c,'refund',visitId,input,approvalId);
  await visit(c,visitId);const s=await shift(c,input.shiftId);const before=await bill(c,visitId);const amount=uzs(input.amount);
  let method:string, allocations:{id:string;amount:bigint}[]=[];

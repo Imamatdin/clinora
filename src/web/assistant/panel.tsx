@@ -28,7 +28,7 @@ type Phase = { kind: 'idle' } | { kind: 'requesting' } | { kind: 'recording'; se
   | { kind: 'processing'; captureId: string; stage: string | null } | { kind: 'failed'; captureId: string | null; message: string };
 
 /** Assistant panel for the encounter the doctor has open. Every decision is checked again on the server. */
-export function AssistantPanel({ clinicId, patientId, encounterId, request, csrf }: { clinicId: string; patientId: string; encounterId: string; request: Request; csrf: () => string }) {
+export function AssistantPanel({ clinicId, patientId, encounterId, request }: { clinicId: string; patientId: string; encounterId: string; request: Request }) {
   const [locale, setLocaleState] = useState<ALocale>(loadLocale);
   const t = translator(locale);
   const root = `/api/clinics/${clinicId}/assistant`, base = `${root}/patients/${patientId}/encounters/${encounterId}`;
@@ -39,6 +39,8 @@ export function AssistantPanel({ clinicId, patientId, encounterId, request, csrf
   const [link, setLink] = useState<{ status: string; telegramName: string | null; url?: string } | null>(null);
   const recorder = useRef<{ rec: MediaRecorder; stream: MediaStream; timer: number } | null>(null);
   const alive = useRef(true);
+  // Raw audio uploads bypass the JSON client, so the panel fetches the session's CSRF token itself.
+  const csrf = useRef('');
 
   const setLocale = (l: ALocale) => { setLocaleState(l); try { localStorage.setItem('clinora.assistant.locale', l); } catch { /* per-viewer convenience only */ } };
   const show = (e: unknown) => { setError(e instanceof ApiFailure ? (e.code === 'STALE_VERSION' ? t('stale') : errorText(e.code)) : errorText('SERVICE_UNAVAILABLE')); };
@@ -68,10 +70,11 @@ export function AssistantPanel({ clinicId, patientId, encounterId, request, csrf
 
   async function upload(captureId: string, seq: number, blob: Blob) {
     const data = await blob.arrayBuffer(), sum = await sha256(data);
+    if (!csrf.current) csrf.current = (await request<{ csrf: string }>('/api/auth/me')).csrf;
     for (let attempt = 0; attempt < 4; attempt++) {
       try {
         const r = await fetch(`${root}/captures/${captureId}/chunks/${seq}`, { method: 'POST', body: data, signal: AbortSignal.timeout(30000),
-          headers: { 'Content-Type': blob.type.split(';')[0] || 'application/octet-stream', 'X-Chunk-Sha256': sum, 'X-CSRF-Token': csrf() } });
+          headers: { 'Content-Type': blob.type.split(';')[0] || 'application/octet-stream', 'X-Chunk-Sha256': sum, 'X-CSRF-Token': csrf.current } });
         if (r.ok) return;
         if (r.status < 500) throw new ApiFailure((await r.json().catch(() => null))?.error?.code ?? 'INVALID_INPUT');
       } catch (e) { if (e instanceof ApiFailure) throw e; }

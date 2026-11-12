@@ -4,6 +4,7 @@
  */
 import './core.js';
 import './access.js';
+import './assistant.js';
 
 export { registeredRoutes } from './registry.js';
 export type { Route } from './types.js';

@@ -16,7 +16,8 @@ import { ProviderError, type AssistantProviders } from './providers.js';
  * published only if the job still holds its lease and the doctor still has access.
  */
 const fail = (code: ConstructorParameters<typeof DomainError>[0]): never => { throw new DomainError(code); };
-export type Actor = { userId: string; sessionId: string; expiresAt: string };
+/** The verified caller. Session fields are present when the route needs a policy Principal (approval). */
+export type Actor = { userId: string; sessionId?: string; expiresAt?: string };
 export type Deps = { pool: pg.Pool; providers: AssistantProviders; origin: string };
 
 export const LIMITS = { chunkBytes: 2 * 1024 * 1024, captureBytes: 40 * 1024 * 1024, chunks: 240, voiceSeconds: 15 * 60, capturesPerHour: 60, attempts: 5, leaseSeconds: 180 };
@@ -44,7 +45,7 @@ export async function doctorAccess(tx: Tx, actor: Actor, clinicId: string, patie
     if (!inScope) return fail('NOT_FOUND');
   }
   return {
-    principal: { userId: actor.userId, sessionId: actor.sessionId, expiresAt: actor.expiresAt, accountStatus: 'active' },
+    principal: { userId: actor.userId, sessionId: actor.sessionId ?? '', expiresAt: actor.expiresAt ?? '', accountStatus: 'active' },
     membership: { id: m.id, userId: actor.userId, clinicId, role: 'clinician', status: 'active', revision: m.revision,
       grant: { by: m.granted_by, at: new Date(m.granted_at).toISOString() },
       patientScope: m.patient_scope === 'clinic' ? { kind: 'clinic' } : { kind: 'assigned', patientIds: patientId ? [patientId] : [] } }
@@ -156,6 +157,7 @@ export async function fieldAction(tx: Tx, actor: Actor, clinicId: string, patien
 
 export const ApproveInput = z.object({ expectedDraftRevision: z.number().int().min(0), fieldRevisions: z.record(z.string(), z.number().int().min(0)) }).strict();
 export async function approve(tx: Tx, actor: Actor, clinicId: string, patientId: string, encounterId: string, input: z.infer<typeof ApproveInput>) {
+  if (!actor.sessionId || !actor.expiresAt) return fail('UNAUTHENTICATED'); // Approval needs the verified session as its Principal.
   const access = await doctorAccess(tx, actor, clinicId, patientId);
   await requireEncounter(tx, clinicId, patientId, encounterId);
   const draft = await lockDraft(tx, clinicId, patientId, encounterId);

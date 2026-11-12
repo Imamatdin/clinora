@@ -198,7 +198,7 @@ function App() {
           <div className="page home compact" data-role="doctor"><h1>{t('home.doctor.title')}</h1><p className="muted">{t('home.doctor.lead')}</p>
             <RoleModules key={`${clinic.id}:doctor`} role="doctor" busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, setDirty }} /><Planned role="doctor" /></div>
           <Notebook clinic={clinic} request={request} dirty={dirty} setDirty={setDirty} guard={guard}
-            visitExtra={(patientId, encounterId) => <AssistantPanel key={encounterId} clinicId={clinic.id} patientId={patientId} encounterId={encounterId} request={request} csrf={() => csrf.current} />} />
+            visitExtra={(patientId, encounterId) => <AssistantPanel key={encounterId} clinicId={clinic.id} patientId={patientId} encounterId={encounterId} request={request} />} />
         </>}
       </>}
       {clinic && !sections.length && !invite && <main className="page"><p className="empty">{t('staff.noRoles')}</p></main>}

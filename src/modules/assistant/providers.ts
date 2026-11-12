@@ -250,6 +250,10 @@ export function providersFromEnv(env: NodeJS.ProcessEnv = process.env): Assistan
     const account = JSON.parse(Buffer.from(env.VERTEX_SERVICE_ACCOUNT_JSON, 'base64').toString('utf8'));
     extractor = geminiExtractor({ kind: 'service_account', project: env.VERTEX_PROJECT, location: env.VERTEX_LOCATION || 'us-central1', account }, model);
   }
-  const telegram = env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_BOT_USERNAME ? telegramBot(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_BOT_USERNAME) : null;
-  return { stt, extractor, telegram, webhookSecret: env.TELEGRAM_WEBHOOK_SECRET && env.TELEGRAM_WEBHOOK_SECRET.length >= 24 ? env.TELEGRAM_WEBHOOK_SECRET : null };
+  // A separate assistant bot until task 015 folds voice capture into task 004's bot: Telegram allows one
+  // webhook per bot, so sharing TELEGRAM_BOT_TOKEN would let one webhook silently replace the other.
+  const token = env.ASSISTANT_TELEGRAM_BOT_TOKEN, username = env.ASSISTANT_TELEGRAM_BOT_USERNAME, secret = env.ASSISTANT_TELEGRAM_WEBHOOK_SECRET;
+  if (token && env.TELEGRAM_BOT_TOKEN && token === env.TELEGRAM_BOT_TOKEN) throw new Error('ASSISTANT_TELEGRAM_BOT_TOKEN must name a different bot than TELEGRAM_BOT_TOKEN until task 015');
+  const telegram = token && username ? telegramBot(token, username) : null;
+  return { stt, extractor, telegram, webhookSecret: secret && /^[A-Za-z0-9_-]{32,256}$/.test(secret) ? secret : null };
 }

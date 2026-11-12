@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { validateProposals, parseValue, displayValue, type SegmentRef } from '../src/modules/assistant/form.js';
 import { aishaStt, geminiExtractor, simulatedExtractor, DEMO_TRANSCRIPT, extractionPrompt, providersFromEnv, ProviderError } from '../src/modules/assistant/providers.js';
-import { assistantDictionaries } from '../src/web/assistant/i18n.js';
+import { assistant } from '../src/web/i18n/assistant.uz-Cyrl.js';
+import { assistantUzLatn } from '../src/web/i18n/assistant.uz-Latn.js';
+import { assistantRu } from '../src/web/i18n/assistant.ru.js';
+import { uzCyrl } from '../src/web/i18n/uz-Cyrl.js';
 
 const seg = (speaker: SegmentRef['speaker'], text: string): SegmentRef => ({ id: randomUUID(), speaker, text });
 const patient = seg('patient', 'Икки кундан бери йўтал'), doctor = seg('doctor', 'Ўпкада хириллаш йўқ, босим 120 га 80'), normal = seg('doctor', 'Томоқ норма');
@@ -77,13 +80,22 @@ test('environment selects real adapters only with keys; simulation only when ask
   assert.equal(providersFromEnv({ ASSISTANT_SIMULATION: 'true' }).stt.simulated, true);
   assert.equal(providersFromEnv({ AISHA_API_KEY: 'k', ASSISTANT_SIMULATION: 'true' }).stt.name, 'aisha');
   assert.equal(providersFromEnv({ VERTEX_API_KEY: 'k' }).extractor.name, 'gemini-vertex');
-  assert.equal(providersFromEnv({ TELEGRAM_WEBHOOK_SECRET: 'short' }).webhookSecret, null);
+  assert.equal(providersFromEnv({ ASSISTANT_TELEGRAM_WEBHOOK_SECRET: 'short' }).webhookSecret, null);
+  assert.equal(providersFromEnv({ TELEGRAM_BOT_TOKEN: '1:a', TELEGRAM_BOT_USERNAME: 'b', TELEGRAM_WEBHOOK_SECRET: 'x'.repeat(40) }).telegram, null, 'task 004 bot is not reused');
+  assert.throws(() => providersFromEnv({ TELEGRAM_BOT_TOKEN: '1:a', ASSISTANT_TELEGRAM_BOT_TOKEN: '1:a', ASSISTANT_TELEGRAM_BOT_USERNAME: 'b' }), /different bot/);
 });
 
-test('assistant UI dictionaries: same keys in uz-Cyrl, uz-Latn and ru, none empty', () => {
-  const [cyrl, latn, ru] = [assistantDictionaries['uz-Cyrl'], assistantDictionaries['uz-Latn'], assistantDictionaries.ru];
-  assert.deepEqual(Object.keys(latn).sort(), Object.keys(cyrl).sort());
-  assert.deepEqual(Object.keys(ru).sort(), Object.keys(cyrl).sort());
-  for (const d of [cyrl, latn, ru]) for (const [k, v] of Object.entries(d)) assert.ok(String(v).trim(), k);
-  for (const [k, v] of Object.entries(latn)) assert.doesNotMatch(String(v), /\p{Script=Cyrillic}/u, `uz-Latn ${k} has no Cyrillic`);
+test('assistant strings: registered in the shell dictionary, same keys and placeholders in uz-Cyrl, uz-Latn and ru', () => {
+  const keys = Object.keys(assistant).sort();
+  assert.ok(keys.every(k => k.startsWith('assistant.') && k in uzCyrl), 'merged into the shell registry with the feature prefix');
+  const vars = (v: string) => [...v.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort();
+  for (const [name, dict] of [['uz-Latn', assistantUzLatn], ['ru', assistantRu]] as const) {
+    assert.deepEqual(Object.keys(dict).sort(), keys, name);
+    for (const k of keys) {
+      const v = (dict as Record<string, string>)[k]!;
+      assert.ok(v.trim(), `${name} ${k}`);
+      assert.deepEqual(vars(v), vars(assistant[k as keyof typeof assistant]), `${name} ${k} placeholders`);
+      if (name === 'uz-Latn') assert.doesNotMatch(v, /\p{Script=Cyrillic}/u, `uz-Latn ${k} has no Cyrillic`);
+    }
+  }
 });

@@ -4,6 +4,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { httpFixture, patientInput, encounterInput, key } from './fixture.js';
 import { simulatedExtractor, simulatedStt, type AssistantProviders, type NoteExtractor, type SpeechToText, type TelegramBot } from '../../src/modules/assistant/providers.js';
 import { BOT_TEXT, drainJobs } from '../../src/modules/assistant/service.js';
+import { setAssistantProviders } from '../../src/modules/assistant/runtime.js';
+import { registeredRoutes } from '../../src/server/routes/index.js';
+import { isAssistantPath } from '../../src/server/assistant.js';
 
 type Fixture = Awaited<ReturnType<typeof httpFixture>>;
 type Client = ReturnType<Fixture['client']>;
@@ -33,7 +36,7 @@ async function signIn(f: Fixture, identifier: string, password: string): Promise
 }
 async function setup(over: Partial<AssistantProviders> = {}) {
   const f = await httpFixture();
-  const p = providers(over); (f.config as Record<string, unknown>).assistant = p;
+  const p = providers(over); setAssistantProviders(p);
   const owner = await signIn(f, 'owner@example.test', f.password);
   const C = f.owner.clinicId;
   const doctor = async (login: string) => {
@@ -295,4 +298,12 @@ test('assistant routes: unauthenticated 401, non-doctor 403, other clinic 404, C
   assert.equal((await otherOwner.request(A1.base)).status, 404);
   const noCsrf = await fetch(f.config.origin + A1.base + '/simulated-capture', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: f.config.origin, Cookie: (s.A.client as unknown as { cookie: string }).cookie }, body: JSON.stringify({ clientKey: key() }) });
   assert.equal(noCsrf.status, 403);
+  // JSON routes sit on the shared registry; transport routes (upload, PDF, approve, job start) on the assistant handler. Both enforce the doctor role.
+  const assistantRoutes = registeredRoutes().filter(r => r.feature === 'assistant');
+  assert.ok(assistantRoutes.length >= 15 && assistantRoutes.every(r => r.roles.join() === 'doctor'));
+  assert.equal(isAssistantPath(`/api/clinics/${C}/assistant/config`, 'GET'), false);
+  assert.equal(isAssistantPath(`${A1.base}/approve`, 'POST'), true);
+  assert.equal((await cashier.request(`${A1.base}/approve`, { expectedDraftRevision: 0, fieldRevisions: {} })).status, 403);
+  assert.equal((await cashier.request(`${A1.base}/approved.pdf`)).status, 403);
+  assert.equal((await anon.request(`${A1.base}/approved.pdf`)).status, 401);
 });

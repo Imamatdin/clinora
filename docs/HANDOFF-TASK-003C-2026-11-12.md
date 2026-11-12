@@ -1,9 +1,9 @@
 # Clinora implementation handoff
 
-Date and time including timezone: 12 November 2026, ~14:45 Asia/Tashkent
+Date and time including timezone: 12 November 2026, Asia/Tashkent (rebased onto main after 008 and 004)
 Task and increment: 003C, doctor assistant first slice (A1)
-Repository and branch: Imamatdin/clinora, `claude/youthful-hypatia-pmnarw` (session branch; the brief named `task-003c-assistant`). Base `b9cee96`.
-Source commit or archive hashes: 89f2d2c, 66728bf, 58caf17, plus the commit adding this handoff. No PR opened yet (not requested).
+Repository and branch: Imamatdin/clinora, `claude/youthful-hypatia-pmnarw` (session branch; the brief named `task-003c-assistant`). Base `b93714b` (main with 008 and 004).
+Source commit or archive hashes: see the PR commit list; PR opened against `main`.
 
 ## Delivered behavior
 
@@ -19,8 +19,9 @@ Source commit or archive hashes: 89f2d2c, 66728bf, 58caf17, plus the commit addi
 ## Decisions and changes
 
 - Owned: `db/migrations/003_assistant.sql`, `src/modules/assistant/**`, `src/server/assistant.ts`, `src/web/assistant/**`, `tests/assistant-form.test.ts`, `tests/integration/assistant.test.ts`, `tests/browser/assistant.spec.ts`, `docs/demo/**`, `assets/fonts/` (DejaVu, licence included), `scripts/assistant-eval.mjs`.
-- Minimal shared edits: `app.ts` (route hook, audio purge timer), `notebook.ts` (`actorFor` exported), `notebook.tsx` (`visitExtra` slot), `main.tsx` (passes the panel), `scripts/demo.mjs` (one seed call), `package.json` (`pdfkit@0.17.2`, `@types/pdfkit`, eval script). `npm audit --omit=dev`: 0 vulnerabilities.
-- Telegram linking uses tables this task owns, because 004 is not merged. Webhook path is `/api/assistant/telegram/webhook`, so it can't collide with 004's. Merge both onto 004's link table once 004 lands.
+- 008 registries: JSON routes in `src/server/routes/assistant.ts` (one import line in `routes/index.ts`, role `doctor`); strings in `src/web/i18n/assistant.{uz-Cyrl,uz-Latn,ru}.ts` (uz-Cyrl merged via one line in `uz-Cyrl.ts`). `src/server/assistant.ts` keeps only what the JSON registry can't express: raw chunk upload, PDF response, approve (needs the session as policy Principal), job-starting routes, assistant webhook. The panel sits inside the open visit, not a role screen, so it uses the notebook `visitExtra` slot instead of `modules.ts`.
+- Other shared edits: `app.ts` (3 lines: hook, purge timer), `notebook.ts` (`actorFor` exported), `notebook.tsx` (slot), `main.tsx` (one prop), `scripts/demo.mjs` (one seed call), `package.json` (`pdfkit@0.17.2`, `@types/pdfkit`, eval script). `npm audit --omit=dev`: 0 vulnerabilities.
+- Telegram: assistant linking tables and `/api/assistant/telegram/webhook` stay until task 015. The assistant bot reads `ASSISTANT_TELEGRAM_*` and startup refuses 004's token, because one bot has one webhook and sharing it would silently disable 004's sign-in webhook or the assistant's.
 - Transcription runs only after a capture is attached to an encounter, so no unattached clinical text exists. Jobs run in-process with a durable lease (180 s, 5 attempts) and resume through lease expiry. They recheck the doctor's role and scope before publishing, and a discard defeats a late result.
 - Raw audio is purged 24 h after capture, or immediately on discard. That is an engineering default, not a legal retention claim.
 
@@ -28,17 +29,17 @@ Source commit or archive hashes: 89f2d2c, 66728bf, 58caf17, plus the commit addi
 
 | Command | Result | Establishes / does not |
 | --- | --- | --- |
-| `npm run check` locally (PostgreSQL 16, Chromium 1243) | exit 0: 39 unit, 26 integration, 8 browser | Approval and stale rejection, foreign citations, chunk retries/gaps/conflicts, Telegram dedupe and forged webhook, A/B isolation, revocation and discard mid-run, manual path, 401/403/404/CSRF. Browser: fake-mic recording through real upload at 1280 and 390 px, language switch, PDF |
-| GitHub Actions "Clinora checks" on this branch | runs 43191142004 and 43191473500 success; final run linked in the builder reply | The run for the handoff commit supersedes 43193096412 (cancel-in-progress) |
+| `npm run check` locally after rebase (PostgreSQL 16, Chromium 1243) | exit 0; counts in the PR | Approval and stale rejection, foreign citations, chunk retries/gaps/conflicts, Telegram dedupe and forged webhook, A/B isolation, revocation and discard mid-run, manual path, 401/403/404/CSRF. Browser: fake-mic recording through real upload at 1280 and 390 px, language switch, PDF |
+| GitHub Actions "Clinora checks" | pre-rebase run 43193228832 success; post-rebase run linked in the PR | |
 | Real Aisha / Gemini / Telegram | **Not run**: no keys in this session; aisha.group docs were unreachable from the sandbox | Aisha request and response shape follow public docs and are unverified against a live key; the Gemini express endpoint follows Google's reference |
 | Measured accuracy (10 cases, phone mic) | **Not measured** | No word-error, missed-field or latency numbers exist. Do not quote any |
 
 ## Remaining issues
 
-- Needs Imamatdin: Aisha key, Vertex credentials, bot token and webhook secret on staging; recordings of the 10 cases by real readers; Mashxura's fallback recording.
+- Needs Imamatdin: Aisha key, Vertex credentials, a second (assistant) bot token and secret on staging until 015; recordings of the 10 cases by real readers; Mashxura's fallback recording.
 - The notebook timeline and editor still say "unapproved, revision 0" for a visit approved through the assistant. A manual notebook save after approval adds a newer unapproved version (the approval still points at its exact version). Fix this in the C6 doctor workspace by reading `assistant_approvals`.
 - No amendment flow after approval yet. Speaker labels from Aisha are `unknown`, so clinician-only fields need a doctor-or-unknown segment (patient-only evidence is rejected).
-- The shell's i18n is still uz-Cyrl only; the panel carries its own three dictionaries.
+- The shell renders uz-Cyrl only; the panel switches among the three registered assistant dictionaries per viewer.
 
 ## Delivery state
 

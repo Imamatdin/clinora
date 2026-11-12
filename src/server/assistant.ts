@@ -2,9 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
 import { ERROR_STATUS, Id, type ErrorCode } from '../contracts/index.js';
 import { DomainError } from '../modules/identity/access.js';
-import { LABS, FORM_ID } from '../modules/assistant/form.js';
 import { renderApprovedPdf, type ApprovedRow } from '../modules/assistant/pdf.js';
-import { providersFromEnv, type AssistantProviders } from '../modules/assistant/providers.js';
+import { assistantProviders } from '../modules/assistant/runtime.js';
 import * as svc from '../modules/assistant/service.js';
 import { transaction } from './database.js';
 import type { ApiConfig } from './notebook.js';
@@ -12,13 +11,12 @@ import { actorFor } from './notebook.js';
 import { same } from './security.js';
 
 /**
- * HTTP layer for the doctor assistant (task 003C). Routes live under /api/clinics/:clinic/assistant/
- * plus the Telegram webhook /api/assistant/telegram/webhook. Same session, origin and CSRF rules as
- * the notebook. Long provider calls run after the request transaction commits.
+ * Transport-level assistant routes (task 003C) that the JSON route registry (server/routes/assistant.ts)
+ * cannot express: raw audio chunk upload, the PDF response, approval (needs the verified session as the
+ * policy Principal), routes that start a background job after their transaction commits, and the
+ * assistant bot's Telegram webhook. Same session, origin and CSRF rules as every other route.
  */
-export type AssistantConfig = ApiConfig & { assistant?: AssistantProviders };
-let envProviders: AssistantProviders | null = null;
-const providersOf = (config: AssistantConfig) => config.assistant ?? (envProviders ??= providersFromEnv());
+const providersOf = (_config?: unknown) => assistantProviders();
 const fail = (code: ErrorCode): never => { throw new DomainError(code); };
 
 async function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
@@ -34,19 +32,11 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => { const r = schema
 
 type Ctx = { tx: Parameters<typeof svc.draftView>[0]; actor: svc.Actor; clinic: string };
 type Out = { status?: number; body?: unknown; pdf?: Buffer; kick?: string | undefined };
-type Route = { method: 'GET' | 'POST'; pattern: RegExp; raw?: boolean; handle: (c: Ctx, p: string[], body: unknown, config: AssistantConfig) => Promise<Out> };
+type Route = { method: 'GET' | 'POST'; pattern: RegExp; raw?: boolean; handle: (c: Ctx, p: string[], body: unknown, config: ApiConfig) => Promise<Out> };
 const U = '([0-9a-fA-F-]{36})', ENC = `patients/${U}/encounters/${U}`;
 const kickIf = (c: { id: string; status: string }) => ['queued', 'processing'].includes(c.status) ? c.id : undefined;
 
 const ROUTES: Route[] = [
-  { method: 'GET', pattern: /^config$/, handle: async (c, _p, _b, config) => {
-    await svc.doctorAccess(c.tx, c.actor, c.clinic, null);
-    const p = providersOf(config);
-    return { body: { formId: FORM_ID, labs: LABS, stt: { name: p.stt.name, simulated: p.stt.simulated }, extractor: { name: p.extractor.name, simulated: p.extractor.simulated },
-      telegram: { available: !!(p.telegram && p.webhookSecret) } } };
-  } },
-  { method: 'GET', pattern: new RegExp(`^${ENC}$`), handle: async (c, [pt, e], _b, config) => ({ body: await svc.draftView(c.tx, c.actor, c.clinic, pt!, e!, providersOf(config)) }) },
-  { method: 'POST', pattern: new RegExp(`^${ENC}/captures$`), handle: async (c, [pt, e], b) => ({ status: 201, body: await svc.createCapture(c.tx, c.actor, c.clinic, pt!, e!, parse(svc.CaptureInput, b), 'browser') }) },
   { method: 'POST', pattern: new RegExp(`^${ENC}/simulated-capture$`), handle: async (c, [pt, e], b, config) => {
     // Demo fallback only: available when the simulated speech adapter is active, labelled in the interface.
     if (!providersOf(config).stt.simulated) fail('INTEGRATION_UNAVAILABLE');
@@ -54,10 +44,8 @@ const ROUTES: Route[] = [
     const cap = await svc.createCapture(c.tx, c.actor, c.clinic, pt!, e!, { clientKey, mimeType: 'audio/webm' }, 'simulated');
     return { status: 201, body: cap, kick: kickIf(cap) };
   } },
-  { method: 'POST', pattern: new RegExp(`^${ENC}/fields/([a-zA-Z]{2,20})$`), handle: async (c, [pt, e, key], b) => ({ body: await svc.fieldAction(c.tx, c.actor, c.clinic, pt!, e!, key!, parse(svc.FieldActionInput, b)) }) },
   { method: 'POST', pattern: new RegExp(`^${ENC}/approve$`), handle: async (c, [pt, e], b) => ({ body: await svc.approve(c.tx, c.actor, c.clinic, pt!, e!, parse(svc.ApproveInput, b)) }) },
   { method: 'GET', pattern: new RegExp(`^${ENC}/approved\\.pdf$`), handle: async (c, [pt, e]) => ({ pdf: await renderApprovedPdf(await svc.approvedDocument(c.tx, c.actor, c.clinic, pt!, e!) as ApprovedRow) }) },
-  { method: 'GET', pattern: /^captures\/pending$/, handle: async c => ({ body: await svc.pendingTelegram(c.tx, c.actor, c.clinic) }) },
   { method: 'POST', pattern: new RegExp(`^captures/${U}/chunks/(\\d{1,3})$`), raw: true, handle: async (c, [id, seq], b) => {
     const { data, checksum } = b as { data: Buffer; checksum: string };
     return { body: await svc.putChunk(c.tx, c.actor, c.clinic, id!, Number(seq), checksum, data) };
@@ -68,27 +56,27 @@ const ROUTES: Route[] = [
   } },
   { method: 'GET', pattern: new RegExp(`^captures/${U}$`), handle: async (c, [id]) => { const cap = await svc.captureStatus(c.tx, c.actor, c.clinic, id!); return { body: cap, kick: kickIf(cap) }; } },
   { method: 'POST', pattern: new RegExp(`^captures/${U}/retry$`), handle: async (c, [id]) => { const cap = await svc.retryCapture(c.tx, c.actor, c.clinic, id!); return { status: 202, body: cap, kick: kickIf(cap) }; } },
-  { method: 'POST', pattern: new RegExp(`^captures/${U}/discard$`), handle: async (c, [id]) => ({ body: await svc.discardCapture(c.tx, c.actor, c.clinic, id!) }) },
-  { method: 'POST', pattern: new RegExp(`^captures/${U}/attach$`), handle: async (c, [id], b) => { const cap = await svc.attachCapture(c.tx, c.actor, c.clinic, id!, parse(svc.AttachInput, b)); return { body: cap, kick: kickIf(cap) }; } },
-  { method: 'POST', pattern: /^telegram\/link-code$/, handle: async (c, _p, _b, config) => ({ status: 201, body: await svc.createLinkCode(c.tx, c.actor, c.clinic, providersOf(config)) }) },
-  { method: 'GET', pattern: /^telegram\/link$/, handle: async c => ({ body: await svc.linkStatus(c.tx, c.actor, c.clinic) }) },
-  { method: 'POST', pattern: /^telegram\/link\/confirm$/, handle: async c => ({ body: await svc.confirmLink(c.tx, c.actor, c.clinic) }) },
-  { method: 'POST', pattern: /^telegram\/link\/revoke$/, handle: async c => ({ body: await svc.revokeLink(c.tx, c.actor, c.clinic) }) }
+  { method: 'POST', pattern: new RegExp(`^captures/${U}/attach$`), handle: async (c, [id], b) => { const cap = await svc.attachCapture(c.tx, c.actor, c.clinic, id!, parse(svc.AttachInput, b)); return { body: cap, kick: kickIf(cap) }; } }
 ];
 
 const CLINIC_PATH = /^\/api\/clinics\/([0-9a-fA-F-]{36})\/assistant\/(.+)$/;
-export const isAssistantPath = (path: string) => path === '/api/assistant/telegram/webhook' || CLINIC_PATH.test(path);
+/** True only for the routes this handler owns; other assistant routes go through the clinic route registry. */
+export function isAssistantPath(path: string, method = 'GET'): boolean {
+  if (path === '/api/assistant/telegram/webhook') return method === 'POST';
+  const m = CLINIC_PATH.exec(path);
+  return !!m && ROUTES.some(r => r.method === method && r.pattern.test(m[2]!));
+}
 
 /** Handles assistant paths and writes the response. Returns false when the path is not an assistant route. */
-export async function handleAssistant(req: IncomingMessage, res: ServerResponse, config: AssistantConfig, requestId: string): Promise<boolean> {
+export async function handleAssistant(req: IncomingMessage, res: ServerResponse, config: ApiConfig, requestId: string): Promise<boolean> {
   const path = new URL(req.url ?? '/', config.origin).pathname, method = req.method ?? 'GET';
-  if (!isAssistantPath(path)) return false;
+  if (!isAssistantPath(path, method)) return false;
   const send = (status: number, value: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); };
   const failWith = (code: ErrorCode) => send(ERROR_STATUS[code], { error: { code, message: code, requestId } });
   try {
     const providers = providersOf(config);
     if (path === '/api/assistant/telegram/webhook') {
-      if (method !== 'POST' || !providers.webhookSecret) { failWith('NOT_FOUND'); return true; }
+      if (!providers.webhookSecret) { failWith('NOT_FOUND'); return true; }
       if (!same(String(req.headers['x-telegram-bot-api-secret-token'] ?? ''), providers.webhookSecret)) { failWith('UNAUTHENTICATED'); return true; }
       await svc.handleUpdate({ pool: config.pool, providers, origin: config.origin }, await json(req, 64 * 1024));
       send(200, { ok: true }); return true;

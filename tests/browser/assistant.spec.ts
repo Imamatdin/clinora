@@ -1,7 +1,14 @@
 import { test, expect, type Page } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import { processFixture, T } from './process-fixture.js';
-import { assistantDictionaries } from '../../src/web/assistant/i18n.js';
+import { assistant } from '../../src/web/i18n/assistant.uz-Cyrl.js';
+import { assistantUzLatn } from '../../src/web/i18n/assistant.uz-Latn.js';
+import { assistantRu } from '../../src/web/i18n/assistant.ru.js';
+import type { AKey } from '../../src/web/assistant/i18n.js';
+
+/** Panel strings by short key, from the registered feature dictionaries. */
+const strip = (d: Record<string, string>) => Object.fromEntries(Object.entries(d).map(([k, v]) => [k.slice('assistant.'.length), v])) as Record<AKey, string>;
+const assistantDictionaries = { 'uz-Cyrl': strip(assistant), 'uz-Latn': strip(assistantUzLatn), ru: strip(assistantRu) };
 
 // The compiled server picks providers from the environment: simulated adapters, labelled in the UI.
 process.env.ASSISTANT_SIMULATION = 'true';

@@ -58,7 +58,7 @@ function App() {
     setBusy(true); setError(''); setNotice('');
     try { await work(); } catch (e) {
       const code = e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE';
-      setError(errorText(code));
+      setError(e instanceof ApiFailure && e.unlockAt ? t('access.loginLockedUntil', { time: new Date(e.unlockAt).toLocaleTimeString('uz-Cyrl', { hour: '2-digit', minute: '2-digit', hour12: false }) }) : errorText(code));
       if (code === 'UNAUTHENTICATED') { setMe(null); csrf.current = ''; void refreshDevice(); }
       if (code === 'FORBIDDEN' || code === 'INVALID_TRANSITION') void refreshMe().catch(() => {});
     } finally { setBusy(false); }

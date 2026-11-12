@@ -14,6 +14,7 @@ import { clinicRoute } from './clinic-routes.js';
 import type { TelegramConfig } from '../modules/telegram/api.js';
 import { createSession, deviceFromRequest, publicAccessRoute, readCookie, sessionAccessRoute, sessionCookie, webhookRoute, type SessionVia } from './access.js';
 import { DEVICE_IDLE_MINUTES } from '../modules/devices/actions.js';
+import { accountLimitKey, passwordLogin } from '../modules/login/actions.js';
 import { clientIp } from './client-ip.js';
 
 const fail = (code: ConstructorParameters<typeof DomainError>[0]): never => { throw new DomainError(code); };
@@ -114,7 +115,7 @@ async function idempotent(tx: Tx, access: Access, operation: string, key: unknow
   await tx.query('INSERT INTO idempotency_records(clinic_id,actor_id,operation,key,payload_hash,response) VALUES($1,$2,$3,$4,$5,$6)', [...scope, hash, JSON.stringify(result)]);
   return result;
 }
-async function throttle(pool: pg.Pool, identity: string, ip: string) {
+async function registrationThrottle(pool: pg.Pool, identity: string, ip: string) {
   // TCP peer, or the proxy-appended X-Forwarded-For entry when TRUST_PROXY_HOPS is set (client-ip.ts).
   await transaction(pool, async tx => {
     for (const [key, limit] of [[digest('ip:' + ip), 40], [digest('id:' + identity), 8]] as const) {
@@ -139,7 +140,7 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
   if (publicAccess) return publicAccess;
   if (path === '/api/auth/register' && method === 'POST') {
     const input = parse(SignupInput, await jsonBody(req));
-    await throttle(config.pool, input.email.toLowerCase(), clientIp(req, config.trustProxyHops));
+    await registrationThrottle(config.pool, input.email.toLowerCase(), clientIp(req, config.trustProxyHops));
     const hash = await passwordHash(input.password);
     await config.pool.query('INSERT INTO accounts(id,email,display_name,password_hash) VALUES($1,$2,$3,$4) ON CONFLICT(email) DO NOTHING', [randomUUID(), input.email.toLowerCase(), input.displayName, hash]);
     return { status: 202, body: { message: 'If this address is available, an unprivileged account has been created. Sign in to continue.' } };
@@ -147,18 +148,20 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
   if (path === '/api/auth/login' && method === 'POST') {
     const input = parse(LoginInput, await jsonBody(req));
     const who = identifierKind('identifier' in input ? input.identifier : input.email);
-    // Unparseable identifiers are still throttled and still pay the KDF, like an unknown account.
-    await throttle(config.pool, who ? `${who.column}:${who.value}` : 'invalid', clientIp(req, config.trustProxyHops));
-    const account = who ? (await config.pool.query(`SELECT * FROM accounts WHERE ${who.column}=$1`, [who.value])).rows[0] : undefined;
-    const matches = await passwordMatches(input.password, account?.password_hash ?? dummyHash);
-    if (!matches || !account || account.status !== 'active') return fail('UNAUTHENTICATED');
-    // On an enrolled clinic PC a password sign-in becomes a device session (idle lock, bound to the
-    // device, limited to its clinic), and only that clinic's active members may sign in there.
-    const device = await deviceFromRequest(config.pool, req);
-    if (device && !(await config.pool.query("SELECT 1 FROM memberships WHERE clinic_id=$1 AND user_id=$2 AND status='active'", [device.clinicId, account.id])).rows[0]) return fail('UNAUTHENTICATED');
-    const via: SessionVia = device ? 'device' : 'password';
-    const raw = await createSession(config.pool, account.id, via, device?.id ?? null);
-    return { body: { ok: true }, cookie: sessionCookie(raw, via, config.secureCookies) };
+    const account = who ? (await config.pool.query(`SELECT id FROM accounts WHERE ${who.column}=$1`, [who.value])).rows[0] : undefined;
+    const key = account ? accountLimitKey(account.id) : digest('password-identifier:' + (who ? `${who.column}:${who.value}` : ('identifier' in input ? input.identifier : input.email).trim().toLowerCase()));
+    const raw = await passwordLogin(config.pool, key, clientIp(req, config.trustProxyHops), async tx => {
+      // Re-read under the limiter lock: a reset, block or concurrent attempt may have completed while waiting.
+      const current = account ? (await tx.query('SELECT * FROM accounts WHERE id=$1', [account.id])).rows[0] : undefined;
+      const matches = await passwordMatches(input.password, current?.password_hash ?? dummyHash);
+      if (!matches || !current || current.status !== 'active') return { ok: false };
+      const device = await deviceFromRequest(tx, req);
+      if (device && !(await tx.query("SELECT 1 FROM memberships WHERE clinic_id=$1 AND user_id=$2 AND status='active'", [device.clinicId, current.id])).rows[0]) return { ok: false };
+      const via: SessionVia = device ? 'device' : 'password';
+      const raw = await createSession(tx, current.id, via, device?.id ?? null);
+      return { ok: true, value: { raw, via } };
+    });
+    return { body: { ok: true }, cookie: sessionCookie(raw.raw, raw.via, config.secureCookies) };
   }
   return transaction(config.pool, async tx => {
     const actor = await actorFor(tx, req);

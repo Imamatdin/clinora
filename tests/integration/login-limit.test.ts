@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { digest } from '../../src/server/security.js';
 import { httpFixture } from './fixture.js';
 
 const path = '/api/auth/login';
@@ -13,6 +14,10 @@ async function person(f: Fixture, login: string) {
   await f.pool.query(`INSERT INTO memberships(id,clinic_id,user_id,status,granted_by) VALUES($1,$2,$3,'active',$4)`, [randomUUID(),f.owner.clinicId,id,f.owner.userId]);
   await f.pool.query(`INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'doctor',$3)`, [f.owner.clinicId,id,f.owner.userId]);
   return id;
+}
+async function personWithoutAliases(f: Fixture, login: string) {
+  await f.pool.query('UPDATE accounts SET phone=NULL,email=NULL WHERE login=$1',['staff.one']);
+  return person(f,login);
 }
 const sign = (f: Fixture, identifier: string, password = f.password) => f.client().request(path, { identifier, password });
 
@@ -57,15 +62,34 @@ test('manager unlock is clinic scoped, role checked, CSRF protected and audited'
   const f=await httpFixture(); t.after(()=>f.close()); const id=await person(f,'staff.one');
   const staff=f.client(); const login=await staff.request(path,{identifier:'staff.one',password:f.password}); assert.equal(login.status,200);
   const me=await (await staff.request('/api/auth/me')).json();
-  const admin=f.client(); await admin.login();
+  const adminId=await personWithoutAliases(f,'login.admin');
+  await f.pool.query("UPDATE membership_roles SET role='administrator' WHERE user_id=$1",[adminId]);
+  const admin=f.client(); assert.equal((await admin.request(path,{identifier:'login.admin',password:f.password})).status,200);
+  const adminMe=await (await admin.request('/api/auth/me')).json();
   const route=`/api/clinics/${f.owner.clinicId}/staff/${id}/login-unlock`;
   for(let i=0;i<10;i++) await sign(f,'staff.one','wrong');
   assert.equal((await staff.request(route,{}, {'X-CSRF-Token':me.csrf})).status,403);
   assert.equal((await admin.request(route,{}, {'X-CSRF-Token':'wrong'})).status,403);
   const other=f.client(); await other.login('other@example.test'); assert.equal((await other.request(route,{})).status,404);
   assert.equal((await sign(f,'staff.one')).status,429);
-  assert.equal((await admin.request(route,{})).status,200);
+  assert.equal((await admin.request(route,{}, {'X-CSRF-Token':adminMe.csrf})).status,200);
   assert.equal((await sign(f,'staff.one')).status,200);
   const rows=(await f.pool.query(`SELECT actor_id,clinic_id,resource_id FROM audit_events WHERE action='login.unlocked'`)).rows;
-  assert.deepEqual(rows,[{actor_id:f.owner.userId,clinic_id:f.owner.clinicId,resource_id:id}]);
+  assert.deepEqual(rows,[{actor_id:adminId,clinic_id:f.owner.clinicId,resource_id:id}]);
+});
+
+
+test('IP ceiling counts only failures, survives success and expires independently of the account', async t => {
+  const f=await httpFixture(); t.after(()=>f.close());
+  const ipKey=digest('password-ip:127.0.0.1');
+  await f.pool.query("INSERT INTO login_limits(key,attempts,reset_at) VALUES($1,299,now()+interval '15 minutes')",[ipKey]);
+  assert.equal((await sign(f,'owner@example.test')).status,200);
+  assert.equal((await f.pool.query('SELECT attempts FROM login_limits WHERE key=$1',[ipKey])).rows[0].attempts,299);
+  assert.equal((await sign(f,'unknown.one','wrong')).status,401);
+  const blocked=await sign(f,'unknown.two','wrong'); assert.equal(blocked.status,429); assert.ok(Number(blocked.headers.get('retry-after'))>0);
+  assert.equal((await f.pool.query('SELECT attempts FROM login_limits WHERE key=$1',[ipKey])).rows[0].attempts,300);
+  f.config.trustProxyHops=1;
+  assert.equal((await f.client().request(path,{identifier:'owner@example.test',password:f.password},{'X-Forwarded-For':'192.0.2.1'})).status,200,'another client IP is unaffected');
+  await f.pool.query("UPDATE login_limits SET reset_at=now()-interval '1 second' WHERE key=$1",[ipKey]);
+  assert.equal((await sign(f,'owner@example.test')).status,200);
 });

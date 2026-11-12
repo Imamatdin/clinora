@@ -1,3 +1,4 @@
+import { accountLimitKey } from '../login/actions.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { Id } from '../../contracts/index.js';
@@ -131,14 +132,16 @@ export async function unlockPin(ctx: ClinicContext, userId: string): Promise<{ l
 }
 
 /** Access summary per staff member for the manager's staff screen. */
-export async function staffAccess(ctx: ClinicContext): Promise<{ userId: string; telegramLinked: boolean; invitePending: boolean; pinSet: boolean; pinLocked: boolean }[]> {
+export async function staffAccess(ctx: ClinicContext): Promise<{ userId: string; telegramLinked: boolean; invitePending: boolean; pinSet: boolean; pinLocked: boolean; loginUnlockAt: string | null }[]> {
   const rows = (await ctx.tx.query(`SELECT m.user_id,
       EXISTS(SELECT 1 FROM telegram_links l WHERE l.account_id=m.user_id) linked,
       EXISTS(SELECT 1 FROM telegram_invites i WHERE i.account_id=m.user_id AND i.clinic_id=m.clinic_id AND i.consumed_at IS NULL AND i.revoked_at IS NULL AND i.expires_at>now()) pending,
       p.account_id IS NOT NULL pin_set, coalesce(p.locked_at IS NOT NULL,false) pin_locked
     FROM memberships m LEFT JOIN account_pins p ON p.account_id=m.user_id
     WHERE m.clinic_id=$1 AND m.status IN ('active','blocked') ORDER BY m.user_id`, [ctx.clinicId])).rows;
-  return rows.map(r => ({ userId: r.user_id, telegramLinked: r.linked, invitePending: r.pending, pinSet: r.pin_set, pinLocked: r.pin_locked }));
+  const limits = (await ctx.tx.query('SELECT key,locked_until FROM password_login_limits WHERE locked_until>now() AND key=ANY($1::text[])', [rows.map(r => accountLimitKey(r.user_id))])).rows;
+  const locked = new Map(limits.map(r => [r.key, r.locked_until.toISOString() as string]));
+  return rows.map(r => ({ loginUnlockAt: locked.get(accountLimitKey(r.user_id)) ?? null, userId: r.user_id, telegramLinked: r.linked, invitePending: r.pending, pinSet: r.pin_set, pinLocked: r.pin_locked }));
 }
 
 export async function myAccess(ctx: ClinicContext): Promise<{ telegramLinked: boolean; pinSet: boolean; pinLocked: boolean }> {

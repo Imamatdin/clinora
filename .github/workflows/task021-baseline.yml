@@ -1,5 +1,5 @@
 name: Task 021 regression baseline
-on: workflow_dispatch
+on: [push, workflow_dispatch]
 permissions:
   contents: read
 jobs:
@@ -24,3 +24,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node --import tsx --test tests/reports.test.ts tests/integration/task021.test.ts
+

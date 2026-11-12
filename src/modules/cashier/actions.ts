@@ -496,14 +496,28 @@ export async function pay(
     if (amount > BigInt(original.amount_uzs) - returned)
       return fail("INVALID_INPUT");
     const lots = await paymentLots(c, input.paymentId);
-    let remaining: bigint = amount;
-    for (const lot of lots) {
-      const available = BigInt(lot.amount);
-      const n = remaining < available ? remaining : available;
-      if (n > 0n) allocations.push({ id: lot.id, amount: n });
-      remaining -= n;
-    }
-    if (remaining !== 0n) return fail("INVALID_TRANSITION");
+    const available = uzs(
+      lots.reduce((sum, lot) => sum + BigInt(lot.amount), 0n),
+    );
+    const reversed = calculateInvoice(
+      [...lots]
+        .reverse()
+        .map((lot) => ({
+          id: lot.id,
+          unitPrice: uzs(lot.amount),
+          quantity: 1,
+          status: "completed" as const,
+          category: "refund",
+        })),
+      [],
+      [
+        { id: "original", kind: "payment", amount: available },
+        { id: "reversal", kind: "refund", amount },
+      ],
+    );
+    allocations = reversed.lines
+      .map((l) => ({ id: l.id, amount: l.value - l.allocatedPaid }))
+      .filter((l) => l.amount > 0n);
   } else {
     method = input.method;
     if (amount > before.invoice.due) return fail("INVALID_INPUT");

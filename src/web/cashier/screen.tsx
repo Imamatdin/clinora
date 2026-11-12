@@ -21,6 +21,7 @@ export function Cashier({ clinic, request }: ModuleProps) {
     [shift, setShift] = useState(""),
     [query, setQuery] = useState(""),
     [matches, setMatches] = useState<Row[]>([]),
+    [searched, setSearched] = useState(false),
     [visit, setVisit] = useState(""),
     [bill, setBill] = useState<Row | null>(null);
   const [amount, setAmount] = useState(""),
@@ -175,12 +176,16 @@ export function Cashier({ clinic, request }: ModuleProps) {
             e.preventDefault();
             void run(async () => {
               setMatches(await request<Row[]>(base + "/search", { query }));
+              setSearched(true);
             });
           }}
         >
           {field("cashier.search", query, setQuery)}
           <button>{t("cashier.find")}</button>
         </form>
+        {searched && !matches.length && (
+          <p role="status">{t("cashier.empty")}</p>
+        )}
         {matches.map((p) => (
           <button
             key={p.id}

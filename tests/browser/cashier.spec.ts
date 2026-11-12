@@ -38,7 +38,9 @@ test("cashier opens shift, partial cash and card, discount, refund, cash out, cl
       .getByRole("button", { name: T("cashier.find"), exact: true })
       .click();
     await page.getByRole("button", { name: /Synthetic Aliyev/ }).click();
-    await expect(page.getByRole("heading", {name:"Synthetic Aliyev", exact:true})).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Synthetic Aliyev", exact: true }),
+    ).toBeVisible();
     const amount = page
       .getByLabel(T("cashier.amount"), { exact: true })
       .first();

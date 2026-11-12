@@ -5,6 +5,7 @@ import { httpFixture } from './fixture.js';
 import { transaction } from '../../src/server/database.js';
 import { requireRole } from '../../src/server/roles.js';
 import { dispense } from '../../src/modules/pharmacy/actions.js';
+import { passwordHash } from '../../src/server/security.js';
 
 let f:Awaited<ReturnType<typeof httpFixture>>,client:ReturnType<typeof f.client>;
 const ids={day:randomUUID(),patient:randomUUID(),visit:randomUUID(),medicine:randomUUID(),operation:randomUUID(),pharmacist:randomUUID()};
@@ -24,6 +25,19 @@ test.before(async()=>{
   await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'pharmacy',$3)",[c,ids.pharmacist,u]);
 });
 test.after(async()=>{await f?.close();});
+test('every new route rejects unauthenticated, wrong-role and cross-clinic calls before parsing the body',async()=>{
+  const user=key(),c=f.owner.clinicId,u=f.owner.userId;
+  await f.pool.query("INSERT INTO accounts(id,email,display_name,password_hash) VALUES($1,'cashier.task012@example.test','Synthetic Cashier',$2)",[user,await passwordHash(f.password)]);
+  await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,status,granted_by) VALUES($1,$2,$3,'active',$4)",[key(),c,user,u]);
+  await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'cashier',$3)",[c,user,u]);
+  const wrong=f.client(),foreign=f.client(),anonymous=f.client();await wrong.login('cashier.task012@example.test');await foreign.login('other@example.test');
+  for(const [path,body] of [ ['pharmacy/stock',undefined],['pharmacy/visits',undefined],[`pharmacy/stock/${ids.medicine}/history`,undefined],['surgery/options',undefined],
+    ['pharmacy/receipts',{}],['pharmacy/dispense',{}],['pharmacy/adjustments',{}],['pharmacy/threshold',{}],['surgery',{}] ] as const){
+    assert.equal((await anonymous.request(url(path),body)).status,401,path);
+    assert.equal((await wrong.request(url(path),body)).status,403,path);
+    assert.equal((await foreign.request(url(path),body)).status,404,path);
+  }
+});
 test('receipt replay, last-unit concurrency, price snapshot, atomic dispense and payload conflicts',async()=>{
   const receipt={serviceId:ids.medicine,qty:1,unitCostUzs:'9007199254740993',supplier:'Synthetic',idempotencyKey:key()};
   assert.equal((await client.request(url('pharmacy/receipts'),receipt)).status,201);
@@ -58,6 +72,27 @@ test('adjustment reasons, threshold and movement history persist; foreign clinic
   const before=(await f.pool.query('SELECT count(*) FROM charge_lines')).rows[0].count;
   assert.equal((await other.request(`/api/clinics/${f.other.clinicId}/pharmacy/dispense`,{visitId:ids.visit,serviceId:ids.medicine,qty:1,idempotencyKey:key()})).status,404);
   assert.equal((await f.pool.query('SELECT count(*) FROM charge_lines')).rows[0].count,before);
+});
+test('a service without a price cannot consume stock or create an orphan charge',async()=>{
+  const service=key(),c=f.owner.clinicId,u=f.owner.userId;
+  await f.pool.query("INSERT INTO services(id,clinic_id,kind,name_uz_cyrl,track_stock) VALUES($1,$2,'good','Синтетик товар',true)",[service,c]);
+  assert.equal((await client.request(url('pharmacy/receipts'),{serviceId:service,qty:1,unitCostUzs:'1000',supplier:'Synthetic',idempotencyKey:key()})).status,201);
+  assert.equal((await client.request(url('pharmacy/dispense'),{serviceId:service,visitId:ids.visit,qty:1,idempotencyKey:key()})).status,409);
+  assert.equal((await f.pool.query('SELECT sum(qty)::text n FROM stock_movements WHERE service_id=$1',[service])).rows[0].n,'1');
+  assert.equal((await f.pool.query('SELECT count(*)::int n FROM charge_lines WHERE service_id=$1',[service])).rows[0].n,0);
+});
+test('doctor dispersion is assigned-patient only and cached responses do not bypass revoked assignments',async()=>{
+  const actor=key(),c=f.owner.clinicId,u=f.owner.userId;
+  await f.pool.query("INSERT INTO accounts(id,email,display_name,password_hash) VALUES($1,'doctor.task012@example.test','Synthetic doctor',$2)",[actor,await passwordHash(f.password)]);
+  await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,status,granted_by) VALUES($1,$2,$3,'active',$4)",[key(),c,actor,u]);
+  await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'doctor',$3)",[c,actor,u]);
+  const doctor=f.client();await doctor.login('doctor.task012@example.test');
+  const input={serviceId:ids.medicine,visitId:ids.visit,qty:1,idempotencyKey:key()};
+  assert.equal((await doctor.request(url('pharmacy/dispense'),input)).status,403);
+  await f.pool.query('INSERT INTO patient_assignments(clinic_id,patient_id,user_id) VALUES($1,$2,$3)',[c,ids.patient,actor]);
+  assert.equal((await doctor.request(url('pharmacy/dispense'),input)).status,201);
+  await f.pool.query('DELETE FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3',[c,ids.patient,actor]);
+  assert.equal((await doctor.request(url('pharmacy/dispense'),input)).status,403);
 });
 test('surgery charges join the patient bill, replay once, reject foreign notes and mismatched admission',async()=>{
   const input={visitId:ids.visit,serviceId:ids.operation,surgeonId:f.owner.userId,performedAt:new Date().toISOString(),idempotencyKey:key()};

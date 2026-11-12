@@ -32,7 +32,10 @@ export async function surgeryOptions(ctx: ClinicContext) {
     JOIN memberships m ON m.clinic_id=p.clinic_id AND m.user_id=p.user_id WHERE p.clinic_id=$1 AND p.is_active AND m.status='active'
     AND EXISTS(SELECT 1 FROM membership_roles r WHERE r.clinic_id=p.clinic_id AND r.user_id=p.user_id AND r.role='doctor') ORDER BY a.display_name`, [ctx.clinicId])).rows;
   const visits = await visitOptions(ctx);
-  return { services, surgeons, visits };
+  const notes = (await ctx.tx.query(`SELECT d.id,e.visit_id,e.created_at FROM documents d
+    JOIN encounters e ON e.clinic_id=d.clinic_id AND e.id=d.encounter_id
+    WHERE d.clinic_id=$1 AND e.visit_id=ANY($2::uuid[]) ORDER BY e.created_at DESC`, [ctx.clinicId,visits.map(v=>v.id)])).rows;
+  return { services, surgeons, visits, notes };
 }
 export async function visitOptions(ctx: ClinicContext) {
   ctx = await requireRole(ctx.tx,ctx.actorId,ctx.clinicId,[...SURGERY,'pharmacy']);

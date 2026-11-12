@@ -4,6 +4,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { ERROR_STATUS, type ErrorCode } from '../contracts/index.js';
 import { api, type ApiConfig } from './notebook.js';
+import { LoginLimited } from '../modules/login/actions.js';
 import { DomainError } from '../modules/identity/access.js';
 import { migrationsCurrent } from './database.js';
 
@@ -84,7 +85,10 @@ export async function createApp(webDirectory?: string, config?: ApiConfig, optio
         if (result.cookie) res.setHeader('Set-Cookie', result.cookie);
         json(result.status ?? 200, result.body);
       } catch (error) {
-        if (error instanceof DomainError) fail(error.code);
+        if (error instanceof LoginLimited) {
+          res.setHeader('Retry-After', String(Math.max(1, Math.ceil((Date.parse(error.unlockAt) - Date.now()) / 1000))));
+          json(429, { error: { code: error.code, message: error.code, requestId, unlockAt: error.unlockAt } });
+        } else if (error instanceof DomainError) fail(error.code);
         else if (error && typeof error === 'object' && 'code' in error && error.code === '23505') fail('INVALID_INPUT');
         else fail('SERVICE_UNAVAILABLE'); // Never expose SQL or clinical values.
       }

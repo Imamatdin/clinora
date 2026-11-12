@@ -3,7 +3,7 @@ import qrcode from 'qrcode-generator';
 import { ApiFailure, type Request } from '../api.js';
 import { errorText, formatDate, t } from '../i18n/index.js';
 
-export type StaffAccessRow = { userId: string; telegramLinked: boolean; invitePending: boolean; pinSet: boolean; pinLocked: boolean };
+export type StaffAccessRow = { userId: string; telegramLinked: boolean; invitePending: boolean; pinSet: boolean; pinLocked: boolean; loginUnlockAt: string | null };
 export type Invite = { link: string; expiresAt: string };
 
 /** QR code drawn as SVG rectangles: no data: URLs or inline HTML, so the CSP stays strict. */
@@ -50,7 +50,9 @@ export function AccessActions({ clinicId, userId, name, request, canManage }: { 
       <span className={`chip ${row.telegramLinked ? 'ok' : ''}`}>{row.telegramLinked ? t('access.linked') : row.invitePending ? t('access.pending') : t('access.notLinked')}</span>
       <span className={`chip ${row.pinLocked ? 'blocked' : row.pinSet ? 'ok' : ''}`}>{row.pinLocked ? t('access.pinLocked') : row.pinSet ? t('access.pinSet') : t('access.noPin')}</span>
     </span>
+    {row.loginUnlockAt && <p role="status">{t('access.loginLockedUntil', { time: new Date(row.loginUnlockAt).toLocaleTimeString('uz-Cyrl', { hour: '2-digit', minute: '2-digit', hour12: false }) })}</p>}
     {canManage && <div className="actions">
+      {row.loginUnlockAt && <button disabled={busy} onClick={() => void run(async () => { await request(`${base}/${userId}/login-unlock`, {}); setNotice(t('access.loginUnlocked')); await load(); })}>{t('access.unlockLogin')}</button>}
       <button disabled={busy} onClick={() => void run(async () => { setInvite(await request<Invite>(`${base}/${userId}/telegram-invite`, {})); await load(); })}>{t('access.invite')}</button>
       {row.telegramLinked && <button disabled={busy} onClick={() => { if (confirm(t('access.unlinkConfirm', { name }))) void run(async () => { await request(`${base}/${userId}/telegram-unlink`, {}); setNotice(t('access.unlinked')); await load(); }); }}>{t('access.unlink')}</button>}
       {row.pinLocked && <button disabled={busy} onClick={() => void run(async () => { await request(`${base}/${userId}/pin-unlock`, {}); setNotice(t('access.pinUnlocked')); await load(); })}>{t('access.unlockPin')}</button>}

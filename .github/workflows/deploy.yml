@@ -1,0 +1,129 @@
+name: Deploy staging
+# Runs after "Clinora checks" succeeds for a push to main. Order: secret scan of the repository,
+# build, secret scan of the image, push, migrate (Cloud Run job), deploy new revision (traffic
+# moves only after /readyz passes), smoke test the public URL, roll back automatically on failure.
+# Stays skipped until the repository variable GCP_PROJECT_ID is set (docs/DEPLOY.md).
+on:
+  workflow_run:
+    workflows: ["Clinora checks"]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+env:
+  SERVICE: clinora-staging
+  MIGRATE_JOB: clinora-staging-migrate
+  DB_SECRET: clinora-staging-database-url
+  DOMAIN: next.clinoraa.uz
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.18.4
+  TRIVY_IMAGE: aquasec/trivy:0.56.2
+jobs:
+  deploy:
+    # No manual trigger: every deploy must follow a green check run of the same commit.
+    if: >-
+      vars.GCP_PROJECT_ID != '' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: staging
+      url: https://next.clinoraa.uz
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      RUNTIME_SA: ${{ vars.GCP_RUNTIME_SA }}
+      SQL_CONNECTION: ${{ vars.GCP_SQL_CONNECTION }}
+      COMMIT: ${{ github.event.workflow_run.head_sha }}
+      TELEGRAM_BOT_USERNAME: ${{ vars.GCP_TELEGRAM_BOT_USERNAME }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.COMMIT }}
+          fetch-depth: 0
+      - name: Secret scan (repository history)
+        run: docker run --rm -v "$PWD:/repo" "$GITLEAKS_IMAGE" detect --source /repo --redact --no-banner
+      - name: Build image
+        run: |
+          echo "IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/clinora/clinora:${COMMIT}" >> "$GITHUB_ENV"
+          docker build --pull -t "clinora:${COMMIT}" .
+      - name: Secret scan (image layers)
+        run: |
+          docker save "clinora:${COMMIT}" -o "$RUNNER_TEMP/image.tar"
+          docker run --rm -v "$RUNNER_TEMP:/scan" "$TRIVY_IMAGE" image --input /scan/image.tar \
+            --scanners secret --exit-code 1 --quiet
+          rm "$RUNNER_TEMP/image.tar"
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Push image
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker tag "clinora:${COMMIT}" "$IMAGE"
+          docker push "$IMAGE"
+      - name: Record serving revision (rollback target)
+        run: |
+          prev="$(gcloud run services describe "$SERVICE" --region "$REGION" --format 'value(status.traffic[0].revisionName)' 2>/dev/null || true)"
+          echo "PREVIOUS_REVISION=${prev}" >> "$GITHUB_ENV"
+          echo "Serving before deploy: ${prev:-none (first deploy)}"
+      - name: Migrate (failure stops the deploy; previous revision keeps serving)
+        run: |
+          gcloud run jobs deploy "$MIGRATE_JOB" --region "$REGION" --image "$IMAGE" \
+            --args dist/server/server/migrate-cli.js --service-account "$RUNTIME_SA" \
+            --set-cloudsql-instances "$SQL_CONNECTION" --set-secrets "DATABASE_URL=${DB_SECRET}:latest" \
+            --max-retries 0 --task-timeout 10m --quiet
+          gcloud run jobs execute "$MIGRATE_JOB" --region "$REGION" --wait --quiet
+      - name: Deploy revision (traffic shifts only after /readyz passes)
+        run: |
+          export COMMIT_LABEL="${COMMIT:0:12}"
+          # shellcheck disable=SC2016 # literal list: envsubst replaces only these names
+          envsubst '${SERVICE} ${COMMIT_LABEL} ${SQL_CONNECTION} ${RUNTIME_SA} ${IMAGE} ${DOMAIN} ${DB_SECRET}' \
+            < deploy/gcp/service.yaml > "$RUNNER_TEMP/service.yaml"
+          if [ -n "$TELEGRAM_BOT_USERNAME" ]; then
+            # Secret values stay in Secret Manager; only their names and the public bot username go in the spec.
+            cat > "$RUNNER_TEMP/telegram-env.yaml" <<YAML
+                      - name: TELEGRAM_BOT_USERNAME
+                        value: ${TELEGRAM_BOT_USERNAME}
+                      - name: TELEGRAM_BOT_TOKEN
+                        valueFrom:
+                          secretKeyRef:
+                            name: clinora-staging-telegram-bot-token
+                            key: latest
+                      - name: TELEGRAM_WEBHOOK_SECRET
+                        valueFrom:
+                          secretKeyRef:
+                            name: clinora-staging-telegram-webhook-secret
+                            key: latest
+          YAML
+            sed -i "/# @telegram-env/{
+          r $RUNNER_TEMP/telegram-env.yaml
+          d
+          }" "$RUNNER_TEMP/service.yaml"
+          fi
+          gcloud run services replace "$RUNNER_TEMP/service.yaml" --region "$REGION" --quiet
+      - name: Smoke test public URL
+        id: smoke
+        run: |
+          url="https://${DOMAIN}"
+          if ! curl -fsS --max-time 10 "$url/readyz" >/dev/null 2>&1; then
+            # Before the domain and certificate are live, test the service's own URL instead.
+            url="$(gcloud run services describe "$SERVICE" --region "$REGION" --format 'value(status.url)')"
+            echo "::warning::${DOMAIN} not answering yet; smoke-testing ${url}"
+          fi
+          for i in 1 2 3 4 5; do curl -fsS --max-time 10 "$url/readyz" && break; sleep 6; [ "$i" = 5 ] && exit 1; done
+          curl -fsS --max-time 10 "$url/healthz"
+          headers="$(curl -fsSI --max-time 10 "$url/")"
+          grep -qi '^strict-transport-security: max-age=31536000' <<<"$headers"
+          grep -qi '^content-security-policy:' <<<"$headers"
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$url/.env")" = 404
+      - name: Roll back on failed smoke test
+        if: failure() && steps.smoke.outcome == 'failure' && env.PREVIOUS_REVISION != ''
+        run: |
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-revisions "${PREVIOUS_REVISION}=100" --quiet
+          echo "::error::Smoke test failed; traffic returned to ${PREVIOUS_REVISION}"

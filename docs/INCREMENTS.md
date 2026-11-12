@@ -28,3 +28,4 @@ After C9, C10 and A1: the rest of the agent layer (proposals for prescriptions, 
 - Keep heavy work (PostgreSQL, browser tests, builds) on GitHub-hosted runners. Imamatdin's laptop has 8 GB RAM.
 - Run the Windows job only on pull requests. Linux job on every push.
 - One task per branch. Rebase on `main` before opening the PR. Do not edit files owned by another active task.
+- Parallel work (after task 008): schema is fixed by `docs/DATA-MODEL.md`; each feature owns `src/modules/<feature>/**`, `src/server/routes/<feature>.ts`, `src/web/<feature>/**`, `src/web/i18n/<feature>.*` and its tests, and touches shared registries with one line. A missing column means a new migration of your own, never an edit to another migration.

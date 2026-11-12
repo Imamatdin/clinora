@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ModuleProps, WebModule } from '../modules.js';
+import { CashierPrint } from './print.js';
 import { t, errorText } from '../i18n/index.js';
 import { formatUzs, uzs } from '../../modules/billing/index.js';
 type Row=Record<string,any>;
@@ -43,7 +44,7 @@ export function Cashier({clinic,request}:ModuleProps){
  {field('cashier.counted',counted,setCounted,true)}<button disabled={!shift} onClick={()=>{if(window.confirm(t('cashier.closeConfirm',{amount:money(counted)})))void run(async()=>{setPrintable(await request<Row>(`${base}/shifts/${shift}/close`,{counted}));setShift('');await load();});}}>{t('cashier.close')}</button>
  {data.shifts.filter((s:Row)=>s.status==='closed').map((s:Row)=><button key={s.id} onClick={()=>setPrintable(s.close_report)}>{t('cashier.report')} · {new Date(s.opened_at).toLocaleDateString()}</button>)}
  </fieldset>
- {printable&&<><button onClick={()=>window.print()}>{t('cashier.print')}</button><article className="cashier-print"><h3>{t('cashier.title')}</h3>{printable.patient&&<p>{printable.patient.full_name} · {printable.patient.patient_no}</p>}{printable.receiptNo&&<p>№ {printable.receiptNo} · {printable.issuedAt}</p>}{printable.lines?.map((l:Row)=><p key={l.id}>{l.name} × {l.quantity} · {money(l.unit_price_uzs)}</p>)}{Object.entries(printable).filter(([k])=>['amount','expected','counted','difference','opening','cashPayments','cashRefunds','cashOuts','amount_uzs','note'].includes(k)).map(([k,v])=><p key={k}>{t(({'expected':'cashier.expected','counted':'cashier.counted','difference':'cashier.difference',note:'cashier.note'} as Record<string,string>)[k] as 'cashier.amount'||'cashier.amount')} : {String(v)}</p>)}</article></>}
+ {printable&&<><button onClick={()=>window.print()}>{t('cashier.print')}</button><CashierPrint value={printable}/></>}
  </section>;
 }
 export const cashierModule:WebModule={id:'cashier',label:'module.payments',roles:['cashier','ceo','administrator'],Screen:Cashier};

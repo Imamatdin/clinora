@@ -1,4 +1,5 @@
 export const cashier={
+ 'cashier.cashPayments':'Нақд тушум','cashier.cashRefunds':'Нақд қайтарилган','cashier.cashOuts':'Касса чиқимлари',
  'cashier.title':'Касса', 'cashier.desk':'Касса жойи','cashier.opening':'Бошланғич нақд пул','cashier.open':'Сменани очиш',
  'cashier.shift':'Смена','cashier.search':'Бемор рақами, телефон ёки навбат рақами','cashier.find':'Топиш',
  'cashier.amount':'Сумма','cashier.method':'Тўлов тури','cashier.cash':'Нақд','cashier.card':'Карта','cashier.transfer':'Ўтказма',

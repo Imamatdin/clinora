@@ -20,7 +20,7 @@ test('cashier opens shift, partial cash and card, discount, refund, cash out, cl
  await page.getByText(T('cashier.out'),{exact:true}).first().click();await page.getByLabel(T('cashier.amount'),{exact:true}).last().fill('10000');await page.getByLabel(T('cashier.note'),{exact:true}).fill('Synthetic supply');await page.getByRole('button',{name:T('cashier.out'),exact:true}).click();
  await expect(page.getByRole('status')).toContainText(T('cashier.saved'));
  await page.getByLabel(T('cashier.counted'),{exact:true}).fill('150000');await page.getByRole('button',{name:T('cashier.close'),exact:true}).click();
- await expect(page.locator('.cashier-print')).toContainText('150000');
+ await expect(page.locator('.cashier-print')).toContainText('150 000');
  await page.evaluate(()=>{(window as any).__printed=false;window.print=()=>{(window as any).__printed=true;};});await page.getByRole('button',{name:T('cashier.print'),exact:true}).click();expect(await page.evaluate(()=>(window as any).__printed)).toBe(true);
  await page.reload();await expect(page.getByRole('button',{name:new RegExp(T('cashier.report'))})).toBeVisible();
  }finally{await f.close();}

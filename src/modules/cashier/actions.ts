@@ -26,7 +26,7 @@ const audited = (c:ClinicContext,action:string,id:string)=>withAudit(c.tx,c,`cas
 export async function guard(c:ClinicContext) { await requireRole(c.tx,c.actorId,c.clinicId,['cashier','ceo','administrator']); }
 async function visit(c:ClinicContext,visitId:string) {
  const r=(await c.tx.query('SELECT * FROM visits WHERE clinic_id=$1 AND id=$2 FOR UPDATE',[c.clinicId,visitId])).rows[0];
- if(!r)return fail('NOT_FOUND'); return r;
+ if(!r)return fail('NOT_FOUND'); if(r.status==='cancelled')return fail('INVALID_TRANSITION');return r;
 }
 async function shift(c:ClinicContext,shiftId:string) {
  const r=(await c.tx.query(`SELECT s.* FROM cash_shifts s JOIN business_days d ON d.id=s.business_day_id AND d.clinic_id=s.clinic_id

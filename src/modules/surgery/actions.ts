@@ -11,7 +11,7 @@ export async function recordSurgery(ctx: ClinicContext, raw: z.input<typeof Surg
   const visit = await visitForCharge(ctx,input.visitId);
   return once(ctx,'surgery.record',input,async () => {
     const at = new Date(input.performedAt);
-    if (at > new Date() || at < visit.created_at) return fail('INVALID_INPUT');
+    if (at > new Date()) return fail('INVALID_INPUT');
     await requireRole(ctx.tx,input.surgeonId,ctx.clinicId,['doctor']);
     if (!ctx.roles.some(r => ['ceo','administrator','inpatient'].includes(r)) && input.surgeonId !== ctx.actorId) return fail('FORBIDDEN');
     if (!(await ctx.tx.query("SELECT 1 FROM doctor_profiles WHERE clinic_id=$1 AND user_id=$2 AND is_active FOR SHARE", [ctx.clinicId,input.surgeonId])).rowCount) return fail('INVALID_INPUT');

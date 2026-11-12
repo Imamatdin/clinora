@@ -95,7 +95,9 @@ test('doctor dispensing is assigned-patient only and cached responses do not byp
   assert.equal((await doctor.request(url('pharmacy/dispense'),input)).status,403);
 });
 test('surgery charges join the patient bill, replay once, reject foreign notes and mismatched admission',async()=>{
-  const input={visitId:ids.visit,serviceId:ids.operation,surgeonId:f.owner.userId,performedAt:new Date().toISOString(),idempotencyKey:key()};
+  await f.pool.query("INSERT INTO service_prices(id,clinic_id,service_id,price_uzs,effective_from,set_by) VALUES($1,$2,$3,99000,now(),$4)",[key(),f.owner.clinicId,ids.operation,f.owner.userId]);
+  // A late-entered operation keeps its actual time and historical price, even if registration came later.
+  const input={visitId:ids.visit,serviceId:ids.operation,surgeonId:f.owner.userId,performedAt:new Date(Date.now()-7200000).toISOString(),idempotencyKey:key()};
   const r=await client.request(url('surgery'),input);assert.equal(r.status,201);const result=await r.json();
   assert.deepEqual(await (await client.request(url('surgery'),input)).json(),result);
   const bill=(await f.pool.query(`SELECT c.* FROM charge_lines c JOIN visits v ON v.clinic_id=c.clinic_id AND v.id=c.visit_id WHERE v.patient_id=$1 AND c.source='surgery'`,[ids.patient])).rows;

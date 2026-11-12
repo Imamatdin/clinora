@@ -18,9 +18,15 @@ export function useRegistrationOutbox(owner: string | null, base: string, reques
       await navigator.locks.request('clinora-registration-sync', async () => {
         if (!alive.current || latestOwner.current !== owner) return;
         try {
-          const user = await request<{ id: string; session: { deviceId: string | null } }>('/api/auth/me');
+          const user = await request<{ id: string; session: { deviceId: string | null }; clinics: { id: string; roles: string[] }[] }>('/api/auth/me');
           // /auth/me already reconciled storage. Never let a stale tab clear a new person's outbox.
           if (!owner.startsWith(`${user.id}:${user.session.deviceId}:`)) return;
+          if (!user.clinics.some(c => owner.endsWith(`:${c.id}`) && c.roles.some(r => ['registrar', 'administrator', 'ceo'].includes(r)))) {
+            await clearOutbox(true); return;
+          }
+          const history = await request<Synced[]>(`${base}/offline/history`);
+          if (!alive.current || latestOwner.current !== owner) return;
+          setSynced(history);
           setOffline(false);
         } catch (e) {
           if (e instanceof ApiFailure && e.code === 'UNAUTHENTICATED') { await clearOutbox(); setSynced([]); }
@@ -31,11 +37,11 @@ export function useRegistrationOutbox(owner: string | null, base: string, reques
           if (!alive.current || latestOwner.current !== owner) return;
           if (entry.error || !entry.points.length) break; // Preserve FIFO, including unfinished routing.
           try {
-            const { id, code, labels, error: _error, ...payload } = entry;
-            const result = await request<Omit<Synced, 'code'>>(`${base}/offline`, { ...payload, idempotencyKey: id });
+            const { id, code, createdAt: _createdAt, labels, error: _error, ...payload } = entry;
+            const result = await request<Omit<Synced, 'code'>>(`${base}/offline`, { ...payload, provisionalCode: code, idempotencyKey: id });
             await changeEntry(owner, id, () => null);
             if (!alive.current || latestOwner.current !== owner) return;
-            setSynced(old => [...old, { ...result, code }]); setOffline(false);
+            setSynced(old => [...old.filter(row => row.code !== code), { ...result, code }]); setOffline(false);
           } catch (e) {
             const code = e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE';
             if (code === 'UNAUTHENTICATED' || code === 'FORBIDDEN') { await clearOutbox(); setItems([]); setSynced([]); return; }
@@ -64,7 +70,7 @@ export function useRegistrationOutbox(owner: string | null, base: string, reques
 /** Printed in the current shell: no fetch, no HTML interpolation, no names or clinical data. */
 export function LocalTickets({ entry, locale, clinicName, t }: { entry: OfflineEntry; locale: Locale; clinicName: string; t: ReturnType<typeof translator> }) {
   return createPortal(<div className="offline-print">{entry.labels.map((label, index) => <article className="ticket" key={index}>
-    <strong>{clinicName}</strong><p>{pickName(label, locale)}</p><p className="number">{entry.code}</p><p>{t('registration.offline.provisional')}</p>
+    <strong>{clinicName}</strong><p>{pickName(label, locale)}</p><p className="number">{entry.code}</p><p>{new Date(entry.createdAt).toLocaleString(locale)}</p><p>{t('registration.offline.provisional')}</p>
   </article>)}</div>, document.body);
 }
 

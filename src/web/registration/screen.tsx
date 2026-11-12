@@ -183,7 +183,7 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
 
   const card = (p: Patient) => <span className="registration-card-body">
     <strong>{p.fullName}</strong>
-    <span>{t('registration.patientNo', { no: p.patientNo })}{p.birthDate && ` · ${formatDate(p.birthDate)} · ${t('registration.age', { age: age(p.birthDate) ?? '' })}`}</span>
+    <span>{p.patientNo ? t('registration.patientNo', { no: p.patientNo }) : local?.code}{p.birthDate && ` · ${formatDate(p.birthDate)} · ${t('registration.age', { age: age(p.birthDate) ?? '' })}`}</span>
     {p.phone && <span>{p.phone}</span>}
     {p.lastVisit && <span className="muted">{t('registration.lastVisit', { date: formatDate(p.lastVisit) })}</span>}
   </span>;

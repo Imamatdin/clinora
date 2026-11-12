@@ -26,7 +26,7 @@ export function createRequest(csrf: () => string): Request {
       response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) });
     } catch { throw new ApiFailure('SERVICE_UNAVAILABLE'); }
     const value = await response.json().catch(() => null);
-    if (!response.ok && (response.status === 401 || response.status === 403)) await clearOutbox(response.status === 401);
+    if (response.status === 401) await clearOutbox(true);
     if (!response.ok) throw new ApiFailure(value?.error?.code ?? 'SERVICE_UNAVAILABLE', value?.error?.unlockAt);
     if (path === '/api/auth/me') await checkOutboxUser(value);
     if (idempotent) retry = null;

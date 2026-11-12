@@ -1,5 +1,4 @@
-import type {
- registration } from './registration.uz-Cyrl.js';
+import type { registration } from './registration.uz-Cyrl.js';
 export const registrationRu: Record<keyof typeof registration, string> = {
   "registration.offline.banner": "Нет интернета. Офлайн работают только регистрация и очередь.",
   "registration.offline.enroll": "Для работы офлайн попросите администратора зарегистрировать компьютер.",

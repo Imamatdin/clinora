@@ -230,7 +230,7 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
     if (parts[0] !== 'api' || parts[1] !== 'clinics' || !Id.safeParse(parts[2]).success) return fail('NOT_FOUND');
     const clinic = parts[2]!;
     // Offline replay is limited to a currently enrolled shared PC, never a phone/password session.
-    if (parts.slice(3).join('/') === 'registration/offline' && actor.via !== 'device') return fail('FORBIDDEN');
+    if (parts[3] === 'registration' && parts[4] === 'offline' && actor.via !== 'device') return fail('FORBIDDEN');
     const routed = await clinicRoute(tx, actor.userId, clinic, parts.slice(3).join('/'), method, req, jsonBody);
     if (routed) return routed;
     const access = await accessFor(tx, actor, clinic);

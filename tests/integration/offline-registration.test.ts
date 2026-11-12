@@ -22,10 +22,14 @@ test('enrolled-device replay is atomic, day-bound, idempotent and checks current
     const path = `/api/clinics/${c}/registration/offline`;
     const person = (name: string) => ({ fullName: name, birthDate: '1990-01-01', gender: 'female', phone: null, districtId: null, mahallaId: null, address: null, source: 'walk_in' });
     const input = (name: string) => ({ patient: person(name), businessDayId: day, points: [{ queuePointId: g.pointA, serviceIds: [g.consultA] }], idempotencyKey: randomUUID() });
-    const a = input('Synthetic Offline One');
+    const a = { ...input('Synthetic Offline One'), provisionalCode: 'R0123ABCD-01' };
     const [one, two] = await Promise.all([req(path, a), req(path, a)]);
     assert.equal(one.status, 201); assert.equal(two.status, 201);
     const result = await one.json(); assert.deepEqual(await two.json(), result);
+    assert.equal(result.code, a.provisionalCode);
+    const history = await (await req(path + '/history')).json();
+    assert.deepEqual(history, [{ code: result.code, visitId: result.visitId, tickets: result.tickets }]);
+    assert.equal(history[0].patientNo, undefined);
     assert.equal((await f.pool.query('SELECT count(*)::int n FROM patients')).rows[0].n, 1);
     assert.equal((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n, 1);
     assert.equal((await req(path, { ...a, patient: person('Changed payload') })).status, 409);
@@ -52,6 +56,7 @@ test('enrolled-device replay is atomic, day-bound, idempotent and checks current
 
     const passwordClient = f.client(); await passwordClient.login(g.email('registrar'));
     assert.equal((await passwordClient.request(path, a)).status, 403, 'unenrolled session denied even for a registrar');
+    assert.equal((await passwordClient.request(path + '/history')).status, 403);
     assert.equal((await req(`/api/clinics/${f.other.clinicId}/registration/offline`, a)).status, 404);
     await f.pool.query("UPDATE memberships SET status='revoked' WHERE clinic_id=$1 AND user_id=$2", [c, g.registrar]);
     assert.equal((await req(path, a)).status, 404, 'cached replay checks membership');

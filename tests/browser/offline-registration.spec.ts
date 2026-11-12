@@ -35,6 +35,7 @@ async function registerOffline(page: Page, name: string) {
   const code = await page.locator('.registration-done > p').first().textContent();
   expect(code).toMatch(/^R[A-F0-9]{8}-\d+$/);
   await expect(page.locator('.offline-print .number')).toHaveText(code!);
+  await expect(page.locator('.offline-print')).not.toContainText(name);
   await expect(page.locator('html')).toHaveAttribute('data-printed', 'yes');
   return code!;
 }
@@ -95,6 +96,11 @@ test('network offline: two patients route, print provisional tickets, sync once,
     await expect(page.getByText(pending(0), { exact: true })).toBeVisible();
     expect((await f.pool.query('SELECT count(*)::int n FROM patients')).rows[0].n).toBe(2);
     expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(3);
+    await page.reload();
+    await expect(page.locator('.offline-synced > li')).toHaveCount(3);
+    await expect(page.locator('.offline-synced')).toContainText(first);
+    await expect(page.locator('.offline-synced')).toContainText(second);
+    expect((await stored(page)).entries).toEqual([]);
   } finally { await f.close(); }
 });
 
@@ -117,6 +123,7 @@ test('queued data survives reload, is removed on user switch, and revoked device
     await expect(page.getByText(pending(1), { exact: true })).toBeVisible();
     await page.getByRole('banner').getByRole('button', { name: T('access.device.switchUser'), exact: true }).click();
     await expect(page.getByRole('heading', { name: T('access.device.title'), exact: true })).toBeVisible();
+    expect((await f.pool.query('SELECT count(*)::int n FROM sessions WHERE user_id=$1', [g.registrar])).rows[0].n).toBe(0);
     expect((await stored(page)).entries).toEqual([]);
     await page.getByRole('button', { name: 'Синтетик Невролог', exact: true }).click();
     await page.getByLabel(T('access.device.pin'), { exact: true }).fill('1397');

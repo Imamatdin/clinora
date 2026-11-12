@@ -3,7 +3,7 @@ import type { Names } from './i18n.js';
 export type Route = { queuePointId: string; serviceIds: string[] };
 export type PersonInput = { fullName: string; birthDate: string; gender: string; phone: string | null; districtId: string | null; mahallaId: string | null; address: string | null; source: string | null; duplicateReason?: string };
 export type OfflineEntry = {
-  id: string; code: string; businessDayId: string; points: Route[];
+  id: string; code: string; createdAt: string; businessDayId: string; points: Route[];
   labels: Names[]; patient?: PersonInput; patientId?: string; error?: string;
 };
 type State = { owner: string; counter: number; entries: OfflineEntry[] };
@@ -60,13 +60,13 @@ export async function openOutbox(owner: string) {
 export async function readOutbox(owner: string) {
   return update(state => ({ ...(state ? { state } : {}), result: state?.owner === owner ? state.entries : [] }));
 }
-export async function enqueue(owner: string, deviceId: string, entry: Omit<OfflineEntry, 'code'>) {
+export async function enqueue(owner: string, deviceId: string, entry: Omit<OfflineEntry, 'code' | 'createdAt'>) {
   const result = await update(state => {
     if (state?.owner !== owner) throw new Error('Offline identity changed');
     const existing = state.entries.find(e => e.id === entry.id);
     if (existing) return { state, result: existing };
     const code = `R${deviceId.replaceAll('-', '').slice(0, 8).toUpperCase()}-${String(state.counter + 1).padStart(2, '0')}`;
-    const row = { ...entry, code };
+    const row = { ...entry, code, createdAt: new Date().toISOString() };
     return { state: { ...state, counter: state.counter + 1, entries: [...state.entries, row] }, result: row };
   });
   changed(); channel?.postMessage('change'); return result;

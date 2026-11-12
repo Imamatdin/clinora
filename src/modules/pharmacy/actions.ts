@@ -51,7 +51,7 @@ export async function visitForCharge(ctx: ClinicContext, visitId: string) {
     WHERE v.clinic_id=$1 AND v.id=$2 AND v.status='open' AND (d.status='open' OR
       (v.type='inpatient' AND EXISTS(SELECT 1 FROM admissions a WHERE a.clinic_id=v.clinic_id AND a.visit_id=v.id AND a.status='admitted')
       AND EXISTS(SELECT 1 FROM business_days current_day WHERE current_day.clinic_id=v.clinic_id AND current_day.status='open' FOR SHARE)))
-    FOR SHARE OF v,d`, [ctx.clinicId,visitId])).rows[0];
+    FOR UPDATE OF v FOR SHARE OF d`, [ctx.clinicId,visitId])).rows[0];
   if (!row) return fail('NOT_FOUND');
   if (!ctx.roles.some(r => ['ceo','administrator','pharmacy','inpatient'].includes(r))) {
     if (!(await ctx.tx.query('SELECT 1 FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3', [ctx.clinicId,row.patient_id,ctx.actorId])).rowCount) return fail('FORBIDDEN');

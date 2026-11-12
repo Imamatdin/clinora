@@ -31,11 +31,16 @@ async function retry<T>(ctx:ClinicContext,key:string,payload:unknown,fn:()=>Prom
   return result;
 }
 async function stay(ctx:ClinicContext,id:string,active=true) {
+  // Cashier, pharmacy and surgery lock the visit first. Follow the same order before
+  // taking the admission lock, including reads that produce a consistent invoice.
+  const ref=(await ctx.tx.query('SELECT visit_id FROM admissions WHERE clinic_id=$1 AND id=$2',[ctx.clinicId,id])).rows[0];
+  if(!ref)return fail('NOT_FOUND');
+  await ctx.tx.query('SELECT id FROM visits WHERE clinic_id=$1 AND id=$2 FOR UPDATE',[ctx.clinicId,ref.visit_id]);
   const row=(await ctx.tx.query(`SELECT a.*,v.patient_id,v.status visit_status,
     (a.admitted_at AT TIME ZONE c.timezone)::date::text admission_date,
     (a.discharged_at AT TIME ZONE c.timezone)::date::text discharge_date
     FROM admissions a JOIN visits v ON v.id=a.visit_id JOIN clinics c ON c.id=a.clinic_id
-    WHERE a.clinic_id=$1 AND a.id=$2 FOR UPDATE OF a,v`,[ctx.clinicId,id])).rows[0];
+    WHERE a.clinic_id=$1 AND a.id=$2 FOR UPDATE OF a`,[ctx.clinicId,id])).rows[0];
   if(!row) return fail('NOT_FOUND');
   if(active && (row.status!=='admitted'||row.visit_status!=='open')) return fail('INVALID_TRANSITION');
   return row;

@@ -25,7 +25,8 @@ test('spec example: five bed days plus services = 1,000,000; immutable discharge
   const input={key:key()};const final=await post(`/${g.admission}/discharge`,input);
   assert.equal(final.value,'1000000');assert.equal(final.due,'1000000');
   assert.deepEqual(await post(`/${g.admission}/discharge`,input),final);
-  assert.deepEqual(await get(`/${g.admission}/invoice`),final);
+  // Task 020: lines stay frozen at discharge; payments are read live, so only paymentsAsOf moves.
+  const {paymentsAsOf:_live,...frozen}=await get(`/${g.admission}/invoice`);const {paymentsAsOf:_at,...issued}=final;assert.deepEqual(frozen,issued);
   const pdf=await client.request(base+`/${g.admission}/invoice-pdf`);assert.equal(pdf.status,200);assert.equal(pdf.headers.get('content-type'),'application/pdf');assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0,5).toString(),'%PDF-');
   await post(`/${g.admission}/services`,{key:key(),serviceId:g.services.other,quantity:1},409);
   await post(`/${g.admission}/transfer`,{key:key(),bedId:g.bed2},409);

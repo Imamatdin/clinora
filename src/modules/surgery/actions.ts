@@ -43,7 +43,9 @@ export async function visitOptions(ctx: ClinicContext) {
   return (await ctx.tx.query(`SELECT v.id,p.full_name name,p.patient_no,a.id admission_id FROM visits v
     JOIN patients p ON p.clinic_id=v.clinic_id AND p.id=v.patient_id JOIN business_days d ON d.clinic_id=v.clinic_id AND d.id=v.business_day_id
     LEFT JOIN admissions a ON a.clinic_id=v.clinic_id AND a.visit_id=v.id AND a.status='admitted'
-    WHERE v.clinic_id=$1 AND v.status='open' AND d.status='open' AND ($2 OR EXISTS
+    -- Same rule as pharmacy visitForCharge: an admitted stay stays chargeable after its admission day closes.
+    WHERE v.clinic_id=$1 AND v.status='open' AND (d.status='open' OR (v.type='inpatient' AND a.id IS NOT NULL
+      AND EXISTS(SELECT 1 FROM business_days current_day WHERE current_day.clinic_id=v.clinic_id AND current_day.status='open'))) AND ($2 OR EXISTS
       (SELECT 1 FROM patient_assignments x WHERE x.clinic_id=v.clinic_id AND x.patient_id=v.patient_id AND x.user_id=$3))
     ORDER BY v.created_at DESC LIMIT 200`, [ctx.clinicId,broad,ctx.actorId])).rows;
 }

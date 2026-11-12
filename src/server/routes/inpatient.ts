@@ -8,8 +8,13 @@ registerRoutes('inpatient',[
   {method:'POST',pattern:/^inpatient\/admit$/,roles:inpatient.WARD,handle:async(ctx,_p,body)=>({status:201,body:await inpatient.admit(ctx,await body())})},
   {method:'POST',pattern:/^inpatient\/daily$/,roles:inpatient.WARD,handle:async(ctx,_p,body)=>({body:await inpatient.dailyCharges(ctx,await body())})},
   {method:'POST',pattern:/^inpatient\/rule$/,roles:['ceo','administrator'],handle:async(ctx,_p,body)=>({body:await inpatient.changeRule(ctx,await body())})},
-  ...(['transfer','services','caretakers','discharge'] as const).map(action=>({method:'POST' as const,pattern:new RegExp(`^inpatient/${uuid}/${action}$`),roles:inpatient.WARD,
-    handle:async(ctx:Parameters<typeof inpatient.admit>[0],[id]:string[],body:()=>Promise<unknown>)=>({body:await ({transfer:inpatient.transfer,services:inpatient.addService,caretakers:inpatient.addCaretaker,discharge:inpatient.discharge}[action])(ctx,id!,await body())})})),
+  ...(['transfer','caretakers','discharge'] as const).map(action=>({method:'POST' as const,pattern:new RegExp(`^inpatient/${uuid}/${action}$`),roles:inpatient.WARD,
+    handle:async(ctx:Parameters<typeof inpatient.admit>[0],[id]:string[],body:()=>Promise<unknown>)=>({body:await ({transfer:inpatient.transfer,caretakers:inpatient.addCaretaker,discharge:inpatient.discharge}[action])(ctx,id!,await body())})})),
+  // A refused approval PIN returns 403 without throwing, so the attempt counter commits.
+  {method:'POST',pattern:new RegExp(`^inpatient/${uuid}/services$`),roles:inpatient.WARD,handle:async(ctx,[id],body)=>{
+    const result=await inpatient.addService(ctx,id!,await body());
+    return 'refused' in result?{status:403,body:{error:{code:'FORBIDDEN'}}}:{body:result};
+  }},
   {method:'GET',pattern:new RegExp(`^inpatient/${uuid}/invoice$`),roles:inpatient.READ,handle:async(ctx,[id])=>({body:await inpatient.invoice(ctx,id!)})},
   {method:'GET',pattern:new RegExp(`^inpatient/${uuid}/invoice-pdf$`),roles:inpatient.READ,handle:async(ctx,[id])=>({file:{contentType:'application/pdf',filename:'clinora-inpatient-invoice.pdf',data:await renderInvoice(await inpatient.invoice(ctx,id!))}})}
 ]);

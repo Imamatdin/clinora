@@ -4,7 +4,8 @@ import { Role, type Role as RoleName } from '../modules/identity/roles.js';
 import type { Tx } from './database.js';
 
 /** The verified caller of a clinic action. Built only by requireRole from database state. */
-export type ClinicContext = { tx: Tx; actorId: string; clinicId: string; roles: RoleName[] };
+/** `deviceId` is set by the clinic router for shared-PC sessions (task 020 ward approvals); otherwise absent or null. */
+export type ClinicContext = { tx: Tx; actorId: string; clinicId: string; roles: RoleName[]; deviceId?: string | null };
 
 /**
  * The single guard for clinic routes. Reads the membership and its roles from the database

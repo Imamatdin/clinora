@@ -18,5 +18,8 @@ export const inpatientRu:Record<InpatientKey,string>={
   'inpatient.rule':'Правило койко-дней (изменения с завтра)', 'inpatient.admissionDay':'Считать день поступления',
   'inpatient.dischargeDay':'Считать день выписки', 'inpatient.minimum':'Минимум дней', 'inpatient.saveRule':'Сохранить правило',
   'inpatient.admitted':'Госпитализирован', 'inpatient.discharged':'Выписан', 'inpatient.allPatients':'Все пациенты', 'inpatient.myPatients':'Мои пациенты',
-  'inpatient.language':'Язык', 'inpatient.ruleNotice':'Новое правило вступит в силу завтра', 'inpatient.printHelp':'PDF открыт. Выберите печать в просмотрщике PDF.'
+  'inpatient.language':'Язык', 'inpatient.ruleNotice':'Новое правило вступит в силу завтра', 'inpatient.printHelp':'PDF открыт. Выберите печать в просмотрщике PDF.',
+  'inpatient.linesAsOf':'Услуги по состоянию на', 'inpatient.paymentsAsOf':'Оплаты по состоянию на',
+  'inpatient.override':'Нет на складе: разрешение руководителя', 'inpatient.overrideHelp':'Только на компьютере клиники. Главврач или администратор сам вводит свой PIN здесь.',
+  'inpatient.overrideReason':'Причина нехватки', 'inpatient.approver':'Кто разрешает', 'inpatient.approverPin':'PIN разрешающего'
 };

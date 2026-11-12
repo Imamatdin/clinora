@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import qrcode from 'qrcode-generator';
 import { ApiFailure, type Request } from '../api.js';
 import { errorText, formatDate, t } from '../i18n/index.js';
+import { waitingOutbox } from '../registration/outbox.js';
 
 export type StaffAccessRow = { userId: string; telegramLinked: boolean; invitePending: boolean; pinSet: boolean; pinLocked: boolean; loginUnlockAt: string | null };
 export type Invite = { link: string; expiresAt: string };
@@ -75,6 +76,12 @@ export function Devices({ clinicId, request, onEnrolled }: { clinicId: string; r
     try { await work(); } catch (e) { setError(errorText(e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE')); } finally { setBusy(false); }
   };
   useEffect(() => { setDevices(null); void run(load); }, [clinicId]);
+  /** Revocation is the only path that deletes queued offline registrations; name their count when this browser holds them. */
+  async function revoke(d: DeviceRow) {
+    const count = (await waitingOutbox().catch(() => [])).filter(w => w.deviceId === d.id).reduce((n, w) => n + w.count, 0);
+    if (!confirm(count ? t('access.devices.revokeOffline', { label: d.label, count }) : t('access.devices.revokeConfirm', { label: d.label }))) return;
+    await run(async () => { await request(`${base}/${d.id}/revoke`, {}); setNotice(t('access.devices.revokedNotice')); await load(); });
+  }
   function enroll(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); const label = String(new FormData(e.currentTarget).get('label') ?? '').trim();
     if (!label || !confirm(t('access.devices.enrollConfirm', { label }))) return;
@@ -92,7 +99,7 @@ export function Devices({ clinicId, request, onEnrolled }: { clinicId: string; r
       <ul className="staff-list">{devices.map(d => <li key={d.id} className={d.revokedAt ? 'blocked' : ''}><div className="staff-row">
         <div><strong>{d.label}</strong><span className="fine">{t('access.devices.added', { date: formatDate(d.createdAt.slice(0, 10)), name: d.createdBy })}</span>
           <span className="chips">{d.revokedAt ? <span className="chip blocked">{t('access.devices.revoked')}</span> : <span className="chip">{t('access.devices.active', { count: d.activeSessions })}</span>}</span></div>
-        {!d.revokedAt && <button disabled={busy} onClick={() => { if (confirm(t('access.devices.revokeConfirm', { label: d.label }))) void run(async () => { await request(`${base}/${d.id}/revoke`, {}); setNotice(t('access.devices.revokedNotice')); await load(); }); }}>{t('access.devices.revoke')}</button>}
+        {!d.revokedAt && <button disabled={busy} onClick={() => void revoke(d)}>{t('access.devices.revoke')}</button>}
       </div></li>)}</ul>}
   </section>;
 }

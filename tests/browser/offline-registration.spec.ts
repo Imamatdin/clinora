@@ -46,6 +46,11 @@ async function stored(page: Page) {
     db.close(); return state;
   });
 }
+/** Every queued entry on this browser, across all owners (task 020 keeps one bucket per owner). */
+async function queued(page: Page): Promise<any[]> {
+  const state = await stored(page);
+  return Object.values(state?.owners ?? {}).flatMap((b: any) => b.entries);
+}
 const pending = (count: number) => T('registration.offline.pending', { count });
 
 test('network offline: two patients route, print provisional tickets, sync once, and resolve a duplicate without dropping data', async ({ page }) => {
@@ -74,7 +79,7 @@ test('network offline: two patients route, print provisional tickets, sync once,
     const second = await registerOffline(page, 'Синтетик Офлайн Икки');
     expect(first).not.toBe(second);
     await expect(page.getByText(pending(2), { exact: true })).toBeVisible();
-    expect((await stored(page)).entries).toHaveLength(2);
+    expect((await queued(page))).toHaveLength(2);
     expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(0);
     await page.screenshot({ path: 'work/browser-evidence/offline-registration-360.png', fullPage: true });
     // Simulate one committed request whose response never reaches the browser.
@@ -92,7 +97,7 @@ test('network offline: two patients route, print provisional tickets, sync once,
     await expect(page.locator('.offline-synced')).toContainText(second);
     await expect(page.locator('.offline-synced')).toContainText('Терапевт: 1');
     await expect(page.locator('.offline-synced')).toContainText('Терапевт: 2');
-    expect((await stored(page)).entries).toEqual([]);
+    expect((await queued(page))).toEqual([]);
     for (let i = 0; i < 2; i++) await page.getByRole('button', { name: T('registration.offline.sync'), exact: true }).click();
     expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(2);
     expect((await f.pool.query('SELECT count(*)::int n FROM patients')).rows[0].n).toBe(2);
@@ -100,23 +105,29 @@ test('network offline: two patients route, print provisional tickets, sync once,
     await page.getByRole('button', { name: T('registration.nextPatient'), exact: true }).click();
     await page.context().setOffline(true);
     await registerOffline(page, 'Синтетик Офлайн Бир');
+    // Task 020: a later entry must sync even though the earlier one conflicts.
+    await page.getByRole('button', { name: T('registration.nextPatient'), exact: true }).click();
+    const third = await registerOffline(page, 'Синтетик Офлайн Уч');
     await page.context().setOffline(false);
     await expect(page.getByRole('heading', { name: T('registration.offline.attention'), exact: true })).toBeVisible();
-    expect((await stored(page)).entries).toHaveLength(1);
+    await expect(page.getByText(pending(1), { exact: true })).toBeVisible();
+    await expect(page.locator('.offline-synced')).toContainText(third);
+    expect((await queued(page))).toHaveLength(1);
+    expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(3);
     await page.getByRole('button', { name: T('registration.offline.findDuplicate'), exact: true }).click();
     await page.getByRole('button', { name: new RegExp(T('registration.useExisting') + ':') }).click();
     await expect(page.getByText(pending(0), { exact: true })).toBeVisible();
-    expect((await f.pool.query('SELECT count(*)::int n FROM patients')).rows[0].n).toBe(2);
-    expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(3);
+    expect((await f.pool.query('SELECT count(*)::int n FROM patients')).rows[0].n).toBe(3);
+    expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(4);
     await page.reload();
-    await expect(page.locator('.offline-synced > li')).toHaveCount(3);
+    await expect(page.locator('.offline-synced > li')).toHaveCount(4);
     await expect(page.locator('.offline-synced')).toContainText(first);
     await expect(page.locator('.offline-synced')).toContainText(second);
-    expect((await stored(page)).entries).toEqual([]);
+    expect((await queued(page))).toEqual([]);
   } finally { await f.close(); }
 });
 
-test('queued data survives reload, is removed on user switch, and revoked device clears unsynced records', async ({ page }) => {
+test('queued data survives reload and user switch, syncs when its owner returns; only device revocation clears it', async ({ page }) => {
   const f = await processFixture();
   try {
     const g = await seedRegistration(f.pool, f.owner.clinicId, f.owner.userId, f.password, 'privacy016');
@@ -137,7 +148,10 @@ test('queued data survives reload, is removed on user switch, and revoked device
     await expect(page.getByRole('heading', { name: T('access.device.title'), exact: true })).toBeVisible();
     // Local locking is immediate; the logout transaction may still be finishing on the server.
     await expect.poll(async () => (await f.pool.query('SELECT count(*)::int n FROM sessions WHERE user_id=$1', [g.registrar])).rows[0].n).toBe(0);
-    expect((await stored(page)).entries).toEqual([]);
+    // Task 020: the patient holds a ticket, so switching user keeps the entry, locked to its creator.
+    expect((await queued(page))).toHaveLength(1);
+    const waiting = T('registration.offline.waiting', { count: 1, name: 'Синтетик Регистратор' });
+    await expect(page.getByText(waiting, { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Синтетик Невролог', exact: true }).click();
     await page.getByLabel(T('access.device.pin'), { exact: true }).fill('1397');
     await page.getByRole('button', { name: T('access.device.unlock'), exact: true }).click();
@@ -145,16 +159,55 @@ test('queued data survives reload, is removed on user switch, and revoked device
     await expect(page.locator('.registration')).toHaveAttribute('aria-busy', 'false');
     await expect(page.getByText(pending(0), { exact: true })).toBeVisible();
     await expect(page.locator('.registration')).not.toContainText('Синтетик Приватний');
-    await openDay(f.pool, f.owner.clinicId, f.owner.userId, 1);
-    await page.reload();
-    // Select registrar role after reload if doctor is the first available role.
-    await page.getByRole('navigation', { name: T('app.navigation') }).getByRole('button', { name: T('role.registrar'), exact: true }).click();
+    await expect(page.getByText(waiting, { exact: true })).toBeVisible();
+    expect((await queued(page))).toHaveLength(1);
+    const nextDay = await openDay(f.pool, f.owner.clinicId, f.owner.userId, 1);
+    // The creator signs in again on this computer and resolves and syncs their own entry.
+    await page.getByRole('banner').getByRole('button', { name: T('access.device.switchUser'), exact: true }).click();
+    await page.getByRole('button', { name: 'Синтетик Регистратор', exact: true }).click();
+    await page.getByLabel(T('access.device.pin'), { exact: true }).fill('2580');
+    await page.getByRole('button', { name: T('access.device.unlock'), exact: true }).click();
+    await expect(page.getByText(pending(1), { exact: true })).toBeVisible();
+    await expect(page.locator('.registration')).toContainText('Синтетик Приватний');
+    await page.getByRole('button', { name: T('registration.offline.moveDay'), exact: true }).click();
+    await expect(page.getByText(pending(0), { exact: true })).toBeVisible();
+    expect((await f.pool.query('SELECT count(*)::int n FROM visits WHERE business_day_id=$1', [nextDay])).rows[0].n).toBe(1);
+    expect((await queued(page))).toEqual([]);
+    await expect(page.getByText(waiting, { exact: true })).toHaveCount(0);
+    await expect(page.locator('.registration')).toHaveAttribute('aria-busy', 'false');
     await page.context().setOffline(true);
     await registerOffline(page, 'Синтетик Бекор');
     await f.pool.query('UPDATE devices SET revoked_at=now(),revoked_by=$2 WHERE id=$1', [deviceId, f.owner.userId]);
     await page.context().setOffline(false);
-    await expect.poll(async () => (await stored(page)).entries.length).toBe(0);
+    await expect.poll(async () => (await queued(page)).length).toBe(0);
+    expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(1);
+  } finally { await f.close(); }
+});
+
+test('a registrar who loses the role keeps queued entries locked; an administrator on the computer is told', async ({ page }) => {
+  const f = await processFixture();
+  try {
+    const g = await seedRegistration(f.pool, f.owner.clinicId, f.owner.userId, f.password, 'forbidden020');
+    await openDay(f.pool, f.owner.clinicId, f.owner.userId);
+    await f.pool.query('INSERT INTO account_pins(account_id,pin_hash) VALUES($1,$2)', [g.registrar, await passwordHash('2580')]);
+    await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'administrator',$3)", [f.owner.clinicId, g.doctorC, f.owner.userId]);
+    await f.pool.query('INSERT INTO account_pins(account_id,pin_hash) VALUES($1,$2)', [g.doctorC, await passwordHash('1397')]);
+    await enrolled(page, f, g.registrar);
+    await page.context().setOffline(true);
+    await registerOffline(page, 'Синтетик Рухсатсиз');
+    await f.pool.query("DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2 AND role='registrar'", [f.owner.clinicId, g.registrar]);
+    await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'cashier',$3)", [f.owner.clinicId, g.registrar, f.owner.userId]);
+    await page.context().setOffline(false);
+    await expect.poll(async () => Object.values((await stored(page))?.owners ?? {}).some((b: any) => b.blocked === 'FORBIDDEN')).toBe(true);
+    expect((await queued(page))).toHaveLength(1);
     expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(0);
+    await page.reload();
+    await page.getByRole('banner').getByRole('button', { name: T('access.device.switchUser'), exact: true }).click();
+    await page.getByRole('button', { name: 'Синтетик Невролог', exact: true }).click();
+    await page.getByLabel(T('access.device.pin'), { exact: true }).fill('1397');
+    await page.getByRole('button', { name: T('access.device.unlock'), exact: true }).click();
+    await expect(page.getByText(T('registration.offline.blocked', { count: 1, name: 'Синтетик Регистратор' }), { exact: true })).toBeVisible();
+    expect((await queued(page))).toHaveLength(1);
   } finally { await f.close(); }
 });
 
@@ -207,13 +260,13 @@ test('a long outage locks an expired session but the same registrar recovers que
     await f.pool.query("UPDATE sessions SET last_seen_at=now()-interval '11 minutes' WHERE device_id=$1", [deviceId]);
     await page.context().setOffline(false);
     await expect(page.getByRole('heading', { name: T('access.device.title'), exact: true })).toBeVisible();
-    expect((await stored(page)).entries).toHaveLength(1);
+    expect((await queued(page))).toHaveLength(1);
     await expect(page.getByText('Синтетик Узоқ Узилиш', { exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Синтетик Регистратор', exact: true }).click();
     await page.getByLabel(T('access.device.pin'), { exact: true }).fill('2580');
     await page.getByRole('button', { name: T('access.device.unlock'), exact: true }).click();
     await expect(page.getByText(pending(0), { exact: true })).toBeVisible();
-    expect((await stored(page)).entries).toEqual([]);
+    expect((await queued(page))).toEqual([]);
     expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(1);
   } finally { await f.close(); }
 });

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiFailure, type Request } from '../api.js';
-import { changeEntry, clearOutbox, openOutbox, readOutbox, type OfflineEntry } from './outbox.js';
+import { changeEntry, openOutbox, readOutbox, setOwnerBlocked, type OfflineEntry } from './outbox.js';
 import { pickName, type Locale, type Names, type translator } from './i18n.js';
 
 export type Synced = { code: string; visitId: string; businessDate: string; tickets: { id: string; number: number; names: Names }[] };
@@ -21,9 +21,11 @@ export function useRegistrationOutbox(owner: string | null, base: string, reques
           const user = await request<{ id: string; session: { deviceId: string | null }; clinics: { id: string; roles: string[] }[] }>('/api/auth/me');
           // /auth/me already reconciled storage. Never let a stale tab clear a new person's outbox.
           if (!owner.startsWith(`${user.id}:${user.session.deviceId}:`)) return;
+          // Lost role: keep the queued registrations (patients hold tickets) and flag them for an administrator.
           if (!user.clinics.some(c => owner.endsWith(`:${c.id}`) && c.roles.some(r => ['registrar', 'administrator', 'ceo'].includes(r)))) {
-            await clearOutbox(true); return;
+            await setOwnerBlocked(owner, true); return;
           }
+          await setOwnerBlocked(owner, false);
           const history = await request<Synced[]>(`${base}/offline/history`);
           if (!alive.current || latestOwner.current !== owner) return;
           setSynced(history);
@@ -35,7 +37,8 @@ export function useRegistrationOutbox(owner: string | null, base: string, reques
         }
         for (const entry of await readOutbox(owner)) {
           if (!alive.current || latestOwner.current !== owner) return;
-          if (entry.error || !entry.points.length) break; // Preserve FIFO, including unfinished routing.
+          // Entries in the attention list or with unfinished routing wait for staff; the rest keep syncing in order.
+          if (entry.error || !entry.points.length) continue;
           try {
             const { id, code, createdAt: _createdAt, labels, error: _error, ...payload } = entry;
             const result = await request<Omit<Synced, 'code'>>(`${base}/offline`, { ...payload, provisionalCode: code, idempotencyKey: id });
@@ -45,9 +48,10 @@ export function useRegistrationOutbox(owner: string | null, base: string, reques
           } catch (e) {
             const code = e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE';
             if (code === 'UNAUTHENTICATED') { setSynced([]); return; }
-            if (code === 'FORBIDDEN') { await clearOutbox(true); setItems([]); setSynced([]); return; }
+            if (code === 'FORBIDDEN') { await setOwnerBlocked(owner, true); return; }
             if (code === 'SERVICE_UNAVAILABLE') { setOffline(true); break; }
-            await changeEntry(owner, entry.id, row => ({ ...row, error: code })); break;
+            // A conflict moves only this entry to the attention list; later entries still sync.
+            await changeEntry(owner, entry.id, row => ({ ...row, error: code }));
           }
         }
       });

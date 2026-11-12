@@ -49,13 +49,21 @@ function Screen({clinic,request,myId,setDirty}:ModuleProps) {
       </button>)}</section>
       {active&&<section key={active.id} className="stay-detail"><h3>{active.patient}</h3>
         {bill&&<div><h4>{t('inpatient.invoice')}</h4>{bill.lines.map(l=><p key={l.id}>{l.name} · {l.quantity} × {amount(l.price)} = {amount(l.value)} {t('inpatient.uzs')}</p>)}
+          <p className="fine">{t('inpatient.linesAsOf')}: {new Date(bill.linesAsOf).toLocaleString(locale)} · {t('inpatient.paymentsAsOf')}: {new Date(bill.paymentsAsOf).toLocaleString(locale)}</p>
           <dl>{(['value','discount','payable','paid','due'] as const).map(k=><div key={k}><dt>{t(`inpatient.${k}`)}</dt><dd data-testid={`inpatient-${k}`}>{BigInt(bill[k]).toLocaleString('ru-RU')} {t('inpatient.uzs')}</dd></div>)}</dl>
           <a className="invoice-pdf" href={`${base}/${selected}/invoice-pdf`} target="_blank" rel="noopener noreferrer">{t('inpatient.print')}</a>
         </div>}
         {canWrite&&active.status==='admitted'&&<>
-          <details><summary>{t('inpatient.addService')}</summary><p>{t('inpatient.medicineHelp')}</p><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,`/${selected}/services`,f=>({serviceId:f.get('service'),quantity:Number(f.get('quantity'))}))}><fieldset disabled={busy}>
+          <details><summary>{t('inpatient.addService')}</summary><p>{t('inpatient.medicineHelp')}</p><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,`/${selected}/services`,f=>({serviceId:f.get('service'),quantity:Number(f.get('quantity')),
+              ...f.get('approver')?{override:{reason:f.get('overrideReason'),approverId:f.get('approver'),pin:f.get('approverPin')}}:{}}))}><fieldset disabled={busy}>
             {choose('service',data.services.filter(s=>!['bed','caretaker'].includes(s.kind)).map(s=>({id:s.id,name:`${s.name} · ${s.price===null?'—':amount(s.price)}`})))}
-            <label>{t('inpatient.quantity')}<input name="quantity" type="number" min="1" max="10000" required defaultValue="1"/></label><button>{t('inpatient.addService')}</button>
+            <label>{t('inpatient.quantity')}<input name="quantity" type="number" min="1" max="10000" required defaultValue="1"/></label>
+            {data.approvers.length>0&&<details className="override"><summary>{t('inpatient.override')}</summary><p>{t('inpatient.overrideHelp')}</p>
+              <label>{t('inpatient.approver')}<select name="approver" defaultValue=""><option value="">{t('inpatient.choose')}</option>{data.approvers.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+              <label>{t('inpatient.overrideReason')}<input name="overrideReason" maxLength={1000}/></label>
+              <label>{t('inpatient.approverPin')}<input name="approverPin" type="password" inputMode="numeric" autoComplete="off" pattern="[0-9]{4,6}"/></label>
+            </details>}
+            <button>{t('inpatient.addService')}</button>
           </fieldset></form></details>
           <details><summary>{t('inpatient.transfer')}</summary><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,`/${selected}/transfer`,f=>({bedId:f.get('bed')}))}><fieldset disabled={busy}>{choose('bed',freeBeds)}<button>{t('inpatient.transfer')}</button></fieldset></form></details>
           <details><summary>{t('inpatient.caretaker')}</summary><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,`/${selected}/caretakers`,f=>({fullName:f.get('name'),phone:f.get('phone')||null,dailyServiceId:f.get('dailyService')||null}))}><fieldset disabled={busy}>

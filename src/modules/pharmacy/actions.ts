@@ -40,11 +40,24 @@ export async function stockItem(ctx: ClinicContext, serviceId: string) {
 export async function onHand(ctx: ClinicContext, serviceId: string): Promise<bigint> {
   return BigInt((await ctx.tx.query('SELECT coalesce(sum(qty),0)::text qty FROM stock_movements WHERE clinic_id=$1 AND service_id=$2', [ctx.clinicId,serviceId])).rows[0].qty);
 }
-async function override(ctx: ClinicContext, serviceId: string, delta: number, reason?: string) {
+/**
+ * Negative stock needs a reason and a CEO/administrator. `approverId` is never read from a request
+ * body: only a caller that has already verified that person (ward PIN approval) passes it.
+ */
+async function override(ctx: ClinicContext, serviceId: string, delta: number, reason?: string, approverId?: string) {
   if (await onHand(ctx,serviceId) + BigInt(delta) >= 0n) return null;
   if (!reason) return fail('INVALID_TRANSITION');
+  if (approverId) { await authorize({ ...ctx, actorId: approverId },['ceo','administrator']); return approverId; }
   await authorize(ctx,['ceo','administrator']);
   return ctx.actorId;
+}
+/** Patient access for this visit, whatever its status. Rechecked before every replay as well. */
+async function visitAccess(ctx: ClinicContext, visitId: string) {
+  const row = (await ctx.tx.query('SELECT patient_id FROM visits WHERE clinic_id=$1 AND id=$2', [ctx.clinicId,visitId])).rows[0];
+  if (!row) return fail('NOT_FOUND');
+  if (!ctx.roles.some(r => ['ceo','administrator','pharmacy','inpatient'].includes(r))) {
+    if (!(await ctx.tx.query('SELECT 1 FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3', [ctx.clinicId,row.patient_id,ctx.actorId])).rowCount) return fail('FORBIDDEN');
+  }
 }
 export async function visitForCharge(ctx: ClinicContext, visitId: string) {
   const row = (await ctx.tx.query(`SELECT v.* FROM visits v JOIN business_days d ON d.clinic_id=v.clinic_id AND d.id=v.business_day_id
@@ -77,12 +90,16 @@ export async function receive(ctx: ClinicContext, raw: z.input<typeof ReceiptInp
   });
 }
 /** Atomic movement + priced charge. Exported for doctor and inpatient actions. */
-export async function dispense(ctx: ClinicContext, raw: z.input<typeof DispenseInput>) {
+export async function dispense(ctx: ClinicContext, raw: z.input<typeof DispenseInput>, verified: { approverId?: string } = {}) {
   ctx = await authorize(ctx,DISPENSERS); const input = DispenseInput.parse(raw);
-  await visitForCharge(ctx,input.visitId);
+  // Access is rechecked first (a revoked assignment gets nothing, not even a replay). Then replay:
+  // a retry after the visit closed (discharge, day close) returns the recorded result; only a new
+  // dispense requires an open, chargeable visit.
+  await visitAccess(ctx,input.visitId);
   return once(ctx,'pharmacy.dispense',input,async () => {
+    await visitForCharge(ctx,input.visitId);
     await stockItem(ctx,input.serviceId);
-    const approver = await override(ctx,input.serviceId,-input.qty,input.overrideReason);
+    const approver = await override(ctx,input.serviceId,-input.qty,input.overrideReason,verified.approverId);
     const chargeLineId = await addCharge(ctx,input.visitId,input.serviceId,input.qty,input.source??'pharmacy',new Date());
     const id = randomUUID();
     await ctx.tx.query(`INSERT INTO stock_movements(id,clinic_id,service_id,qty,reason,visit_id,charge_line_id,created_by,override_approved_by,override_reason)

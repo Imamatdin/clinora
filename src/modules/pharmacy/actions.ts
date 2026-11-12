@@ -10,7 +10,7 @@ const qty = z.number().int().min(1).max(2147483647);
 const text = z.string().trim().min(1).max(1000);
 export const Key = z.string().min(8).max(200);
 const base = { serviceId: z.uuid(), idempotencyKey: Key };
-export const ReceiptInput = z.object({ ...base, qty, unitCostUzs: z.string().regex(/^(0|[1-9]\d{0,18})$/).refine(v => BigInt(v) <= 9223372036854775807n), supplier: text, note: text.optional() });
+export const ReceiptInput = z.object({ ...base, qty, unitCostUzs: z.string().regex(/^(0|[1-9]\d{0,18})$/).refine(v => /^(0|[1-9]\d{0,18})$/.test(v) && BigInt(v) <= 9223372036854775807n), supplier: text, note: text.optional() });
 export const AdjustmentInput = z.object({ ...base, qty: z.number().int().min(-2147483647).max(2147483647).refine(v => v !== 0), reason: text, overrideReason: text.optional() });
 export const DispenseInput = z.object({ ...base, visitId: z.uuid(), qty, overrideReason: text.optional() });
 export const ThresholdInput = z.object({ ...base, threshold: z.number().int().min(0).max(2147483647) });

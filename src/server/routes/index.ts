@@ -6,6 +6,7 @@ import './core.js';
 import './access.js';
 import './assistant.js';
 import './cashier.js';
+import './inpatient.js';
 
 export { registeredRoutes } from './registry.js';
 export type { Route } from './types.js';

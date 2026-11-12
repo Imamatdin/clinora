@@ -12,7 +12,7 @@ export const Key = z.string().min(8).max(200);
 const base = { serviceId: z.uuid(), idempotencyKey: Key };
 export const ReceiptInput = z.object({ ...base, qty, unitCostUzs: z.string().regex(/^(0|[1-9]\d{0,18})$/).refine(v => /^(0|[1-9]\d{0,18})$/.test(v) && BigInt(v) <= 9223372036854775807n), supplier: text, note: text.optional() });
 export const AdjustmentInput = z.object({ ...base, qty: z.number().int().min(-2147483647).max(2147483647).refine(v => v !== 0), reason: text, overrideReason: text.optional() });
-export const DispenseInput = z.object({ ...base, visitId: z.uuid(), qty, overrideReason: text.optional() });
+export const DispenseInput = z.object({ ...base, visitId: z.uuid(), qty, overrideReason: text.optional(), source:z.enum(['pharmacy','inpatient']).optional() });
 export const ThresholdInput = z.object({ ...base, threshold: z.number().int().min(0).max(2147483647) });
 export const fail = (code: ConstructorParameters<typeof DomainError>[0]): never => { throw new DomainError(code); };
 
@@ -48,14 +48,17 @@ async function override(ctx: ClinicContext, serviceId: string, delta: number, re
 }
 export async function visitForCharge(ctx: ClinicContext, visitId: string) {
   const row = (await ctx.tx.query(`SELECT v.* FROM visits v JOIN business_days d ON d.clinic_id=v.clinic_id AND d.id=v.business_day_id
-    WHERE v.clinic_id=$1 AND v.id=$2 AND v.status='open' AND d.status='open' FOR SHARE OF v,d`, [ctx.clinicId,visitId])).rows[0];
+    WHERE v.clinic_id=$1 AND v.id=$2 AND v.status='open' AND (d.status='open' OR
+      (v.type='inpatient' AND EXISTS(SELECT 1 FROM admissions a WHERE a.clinic_id=v.clinic_id AND a.visit_id=v.id AND a.status='admitted')
+      AND EXISTS(SELECT 1 FROM business_days current_day WHERE current_day.clinic_id=v.clinic_id AND current_day.status='open' FOR SHARE)))
+    FOR UPDATE OF v FOR SHARE OF d`, [ctx.clinicId,visitId])).rows[0];
   if (!row) return fail('NOT_FOUND');
   if (!ctx.roles.some(r => ['ceo','administrator','pharmacy','inpatient'].includes(r))) {
     if (!(await ctx.tx.query('SELECT 1 FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3', [ctx.clinicId,row.patient_id,ctx.actorId])).rowCount) return fail('FORBIDDEN');
   }
   return row;
 }
-export async function addCharge(ctx: ClinicContext, visitId: string, serviceId: string, quantity: number, source: 'pharmacy'|'surgery', at: Date, performer: string | null = null) {
+export async function addCharge(ctx: ClinicContext, visitId: string, serviceId: string, quantity: number, source: 'pharmacy'|'surgery'|'inpatient', at: Date, performer: string | null = null) {
   const price = await priceAt(ctx.tx,ctx.clinicId,serviceId,at);
   if (!price) return fail('INVALID_TRANSITION');
   const id = randomUUID();
@@ -80,7 +83,7 @@ export async function dispense(ctx: ClinicContext, raw: z.input<typeof DispenseI
   return once(ctx,'pharmacy.dispense',input,async () => {
     await stockItem(ctx,input.serviceId);
     const approver = await override(ctx,input.serviceId,-input.qty,input.overrideReason);
-    const chargeLineId = await addCharge(ctx,input.visitId,input.serviceId,input.qty,'pharmacy',new Date());
+    const chargeLineId = await addCharge(ctx,input.visitId,input.serviceId,input.qty,input.source??'pharmacy',new Date());
     const id = randomUUID();
     await ctx.tx.query(`INSERT INTO stock_movements(id,clinic_id,service_id,qty,reason,visit_id,charge_line_id,created_by,override_approved_by,override_reason)
       VALUES($1,$2,$3,$4,'dispense',$5,$6,$7,$8,$9)`, [id,ctx.clinicId,input.serviceId,-input.qty,input.visitId,chargeLineId,ctx.actorId,approver,approver ? input.overrideReason : null]);

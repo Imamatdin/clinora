@@ -6,6 +6,7 @@ import type { Role } from '../modules/identity/roles.js';
 import type { Request } from './api.js';
 import type { UiKey } from './i18n/index.js';
 import { cashierModule } from './cashier/screen.js';
+import { inpatientModule } from './inpatient/screen.js';
 import { registrationModule } from './registration/screen.js';
 import { catalogModule } from './catalog/screen.js';
 import { doctorModule } from './doctor/screen.js';
@@ -33,7 +34,7 @@ export type WebModule = {
  */
 export const MODULES: readonly WebModule[] = [
   // A role lands on its first module here: doctor first (queue), lab last so CEO/administrator keep the cashier home.
-  doctorModule, cashierModule, pharmacyModule, surgeryModule,
+  doctorModule, cashierModule, pharmacyModule, inpatientModule, surgeryModule,
   registrationModule,
   catalogModule,
   labModule,

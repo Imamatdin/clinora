@@ -1,0 +1,22 @@
+import type { InpatientKey } from './inpatient.uz-Cyrl.js';
+export const inpatientUzLatn:Record<InpatientKey,string>={
+  'inpatient.title':'Statsionar — palatalar', 'inpatient.admit':'Bemorni yotqizish', 'inpatient.visit':'Bemor tashrifi',
+  'inpatient.department':'Boʻlim', 'inpatient.doctor':'Davolovchi shifokor', 'inpatient.bed':'Boʻsh oʻrin', 'inpatient.expected':'Kutilayotgan chiqish sanasi',
+  'inpatient.choose':'Tanlang', 'inpatient.free':'Boʻsh', 'inpatient.occupied':'Band', 'inpatient.room':'Palata',
+  'inpatient.daily':'Kunlik toʻlovlarni hisoblash', 'inpatient.through':'Qaysi sanagacha (kechagi kungacha)',
+  'inpatient.dailyHelp':'Faqat tugagan kunlar hisoblanadi. Koʻchirilgan kuni birinchi oʻrin narxi olinadi. Bugungi toʻlov chiqarishda hisoblanadi.',
+  'inpatient.refresh':'Yangilash', 'inpatient.loading':'Yuklanmoqda…', 'inpatient.empty':'Hozircha bemorlar yoʻq',
+  'inpatient.saved':'Saqlandi', 'inpatient.saving':'Saqlanmoqda…', 'inpatient.select':'Bemorni ochish', 'inpatient.transfer':'Boshqa oʻringa koʻchirish',
+  'inpatient.service':'Xizmat yoki dori', 'inpatient.quantity':'Miqdor', 'inpatient.addService':'Xizmatni qoʻshish',
+  'inpatient.medicineHelp':'Dori ombordan chiqariladi va bir marta hisoblanadi. Dori yetishmasa, dorixonaga murojaat qiling.',
+  'inpatient.caretaker':'Qarovchi', 'inpatient.name':'Qarovchining toʻliq ismi', 'inpatient.phone':'Telefon (+998…)',
+  'inpatient.dailyService':'Qarovchi uchun kunlik xizmat (ixtiyoriy)', 'inpatient.noCharge':'Toʻlovsiz', 'inpatient.addCaretaker':'Qarovchini qoʻshish',
+  'inpatient.discharge':'Bemorni chiqarish', 'inpatient.confirmDischarge':'Yakuniy hisobni tekshiring. Chiqarish oʻrinni boʻshatadi va yangi xizmat qoʻshishni toʻxtatadi.',
+  'inpatient.confirm':'Chiqarishni tasdiqlash', 'inpatient.cancel':'Bekor qilish', 'inpatient.invoice':'Statsionar yakuniy hisobi',
+  'inpatient.print':'A4 PDFni ochish va chop etish', 'inpatient.value':'Xizmatlar qiymati', 'inpatient.discount':'Chegirma',
+  'inpatient.payable':'Toʻlanishi kerak', 'inpatient.paid':'Toʻlangan', 'inpatient.due':'Qarz', 'inpatient.uzs':'soʻm',
+  'inpatient.rule':'Oʻrin kuni qoidasi (oʻzgarish ertadan)', 'inpatient.admissionDay':'Kelgan kun hisoblanadi',
+  'inpatient.dischargeDay':'Chiqqan kun hisoblanadi', 'inpatient.minimum':'Eng kam kun', 'inpatient.saveRule':'Qoidani saqlash',
+  'inpatient.admitted':'Yotqizilgan', 'inpatient.discharged':'Chiqarilgan', 'inpatient.allPatients':'Barcha bemorlar', 'inpatient.myPatients':'Mening bemorlarim',
+  'inpatient.language':'Til', 'inpatient.ruleNotice':'Yangi qoida ertadan amal qiladi', 'inpatient.printHelp':'PDF ochildi. Chop etishni PDF koʻruvchisidan tanlang.'
+};

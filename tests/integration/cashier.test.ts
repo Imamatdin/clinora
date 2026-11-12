@@ -35,10 +35,10 @@ test('cashier HTTP workflow: concurrent idempotency, approval, targeted refunds,
  // Wrong-role requests are rejected before parsing bodies on every registered endpoint.
  await f.pool.query('DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2',[f.owner.clinicId,f.owner.userId]);
  for(const role of ['doctor','laboratory']){
- await f.pool.query('INSERT INTO membership_roles(clinic_id,user_id,role) VALUES($1,$2,$3)',[f.owner.clinicId,f.owner.userId,role]);
+ await f.pool.query('INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,$3,$2)',[f.owner.clinicId,f.owner.userId,role]);
  for(const [path,body] of [['',undefined],['/search',{}],['/shifts',{}],[`/shifts/${s.id}/close`,{}],[`/shifts/${s.id}/cash-out`,{}],[`/visits/${g.visit}`,undefined],['/approvals',{}],[`/visits/${g.visit}/payments`,{}],[`/visits/${g.visit}/refund`,{}],[`/visits/${g.visit}/discount`,{}],[`/visits/${g.visit}/void`,{}],[`/receipts/${receipts[0].id}/print`,{}]] as const)await call(path,body,403);
  await f.pool.query('DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2',[f.owner.clinicId,f.owner.userId]);}
- await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role) VALUES($1,$2,'cashier')",[f.owner.clinicId,f.owner.userId]);
+ await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'cashier',$2)",[f.owner.clinicId,f.owner.userId]);
  await call(`/visits/${g.visit}/discount`,{kind:'fixed',amount:'1',reason:'No approval'},403);
  await call(`/visits/${g.visit}/refund`,{...refund,key:id()},403);
  assert.equal((await c.request(`/api/clinics/${f.other.clinicId}/cashier`)).status,404);
@@ -50,10 +50,10 @@ test('cashier approval PIN failure persists, approval binds payload, revoked app
  const g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);const c=f.client();await c.login();
  // Second active account is made a manager of the first clinic for synthetic approvals.
  await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,role,status,granted_by) VALUES($1,$2,$3,'administrator','active',$4)",[id(),f.owner.clinicId,f.other.userId,f.owner.userId]);
- await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role) VALUES($1,$2,'administrator')",[f.owner.clinicId,f.other.userId]);
+ await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'administrator',$2)",[f.owner.clinicId,f.other.userId]);
  await transaction(f.pool,async tx=>setOwnPin(tx,f.other.userId,'4826'));
  await f.pool.query("DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2",[f.owner.clinicId,f.owner.userId]);
- await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role) VALUES($1,$2,'cashier')",[f.owner.clinicId,f.owner.userId]);
+ await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'cashier',$2)",[f.owner.clinicId,f.owner.userId]);
  const base=`/api/clinics/${f.owner.clinicId}/cashier`,payload={kind:'fixed',amount:'10',reason:'Synthetic'};
  const approval={approverId:f.other.userId,pin:'4826',visitId:g.visit,operation:'discount',payload};
  assert.equal((await c.request(base+'/approvals',{...approval,pin:'1111'})).status,403);
@@ -65,5 +65,24 @@ test('cashier approval PIN failure persists, approval binds payload, revoked app
  const a=await (await c.request(base+'/approvals',{...approval,payload:{...payload,lineId:g.line}})).json();
  await f.pool.query("DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2",[f.owner.clinicId,f.other.userId]);
  assert.equal((await c.request(base+`/visits/${g.visit}/discount`,{...payload,lineId:g.line,approvalId:a.approvalId})).status,403);
+ }finally{await f.close();}
+});
+
+test('cashier rejects missing shift, closed day, foreign lines and concurrent overpayment; audit failure rolls back',async()=>{
+ const f=await httpFixture();try{
+ const g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId),c=f.client();await c.login();const base=`/api/clinics/${f.owner.clinicId}/cashier`;
+ const p={shiftId:id(),amount:'600000',method:'cash',key:id()};
+ assert.equal((await c.request(`${base}/visits/${g.visit}/payments`,p)).status,409);
+ const s=await(await c.request(base+'/shifts',{deskId:g.desk,opening:'0'})).json();
+ const outcomes=await Promise.all([1,2].map(()=>c.request(`${base}/visits/${g.visit}/payments`,{...p,shiftId:s.id,key:id()})));
+ assert.deepEqual(outcomes.map(r=>r.status).sort(),[201,422]);
+ assert.equal((await f.pool.query('SELECT count(*)::int n FROM payments WHERE clinic_id=$1',[f.owner.clinicId])).rows[0].n,1);
+ assert.equal((await c.request(`${base}/visits/${g.visit}/discount`,{kind:'fixed',amount:'1',reason:'Foreign',lineId:id()})).status,404);
+ await f.pool.query("CREATE FUNCTION fail_cashier_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='cashier.paid' THEN RAISE EXCEPTION 'synthetic failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER fail_cashier_audit BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION fail_cashier_audit()");
+ assert.equal((await c.request(`${base}/visits/${g.visit}/payments`,{...p,shiftId:s.id,amount:'1',key:id()})).status,503);
+ assert.equal((await f.pool.query('SELECT count(*)::int n FROM payments WHERE clinic_id=$1',[f.owner.clinicId])).rows[0].n,1);
+ await f.pool.query('DROP TRIGGER fail_cashier_audit ON audit_events');
+ await f.pool.query("UPDATE business_days SET status='closed',closed_by=$2,closed_at=now(),close_snapshot='{}' WHERE id=$1",[g.day,f.owner.userId]);
+ assert.equal((await c.request(`${base}/visits/${g.visit}/payments`,{...p,shiftId:s.id,amount:'1',key:id()})).status,409);
  }finally{await f.close();}
 });

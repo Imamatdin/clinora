@@ -75,9 +75,13 @@ export async function bill(c:ClinicContext,visitId:string) {
  FROM payment_allocations a JOIN payments p ON p.id=a.payment_id AND p.clinic_id=a.clinic_id WHERE p.clinic_id=$1 AND p.visit_id=$2 GROUP BY a.charge_line_id`,[c.clinicId,visitId])).rows;
  const amounts=new Map(allocations.map(r=>[r.charge_line_id,BigInt(r.amount)]));
  for(const line of invoice.lines) if((amounts.get(line.id)??0n)>line.payable)return fail('INVALID_TRANSITION');
- invoice={...invoice,lines:invoice.lines.map(l=>({...l,allocatedPaid:uzs(amounts.get(l.id)??0n)}))};
+ const gross=payments.filter(p=>p.kind==='payment').reduce((s,p)=>s+BigInt(p.amount_uzs),0n);
+ const refunds=payments.filter(p=>p.kind==='refund').reduce((s,p)=>s+BigInt(p.amount_uzs),0n);
+ invoice={...invoice,payments:uzs(gross),refunds:uzs(refunds),status:refunds>0n&&net===0n?'refunded':invoice.status,
+ transactions:payments.map(p=>({id:p.id,kind:p.kind,amount:uzs(p.amount_uzs)})),lines:invoice.lines.map(l=>({...l,allocatedPaid:uzs(amounts.get(l.id)??0n)}))};
  const patient=(await c.tx.query('SELECT p.full_name,p.patient_no FROM patients p JOIN visits v ON v.patient_id=p.id AND v.clinic_id=p.clinic_id WHERE v.clinic_id=$1 AND v.id=$2',[c.clinicId,visitId])).rows[0];
- return {invoice,lines,discounts,payments,patient};
+ const receipts=(await c.tx.query('SELECT id,receipt_no FROM receipts WHERE clinic_id=$1 AND visit_id=$2 ORDER BY issued_at,id',[c.clinicId,visitId])).rows;
+ return {invoice,lines,discounts,payments,patient,receipts};
 }
 function payload(operation:string,visitId:string,input:unknown) {return digest(JSON.stringify({operation,visitId,input}));}
 export async function approve(c:ClinicContext,input:z.infer<typeof Approval>) {

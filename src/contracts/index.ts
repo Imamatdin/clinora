@@ -106,7 +106,8 @@ export const IntegrationJob = z.object({
 export const ERROR_STATUS = {
   UNAUTHENTICATED: 401, FORBIDDEN: 403, NOT_FOUND: 404, STALE_VERSION: 409,
   IDEMPOTENCY_CONFLICT: 409, INVALID_TRANSITION: 409, INVALID_INPUT: 422,
-  INTEGRATION_UNAVAILABLE: 503, NOT_IMPLEMENTED: 501, SERVICE_UNAVAILABLE: 503, RATE_LIMITED: 429
+  INTEGRATION_UNAVAILABLE: 503, NOT_IMPLEMENTED: 501, SERVICE_UNAVAILABLE: 503, RATE_LIMITED: 429,
+  PASSWORD_CHANGE_REQUIRED: 403, ALREADY_EXISTS: 409
 } as const;
 export type ErrorCode = keyof typeof ERROR_STATUS;
 export const ApiError = z.object({ error: z.object({ code: z.enum(Object.keys(ERROR_STATUS) as [ErrorCode, ...ErrorCode[]]), message: z.string(), requestId: Id }).strict() }).strict();

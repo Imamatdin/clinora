@@ -1,28 +1,50 @@
+// Synthetic demonstration clinic: one staff member per role, one fictional patient routed to the doctor.
+// Every login shares DEMO_PASSWORD, which is supplied privately and never printed.
 import { randomUUID } from 'node:crypto';
-import { makePool, migrate } from '../src/server/database.ts';
-import { provisionOwner } from '../src/server/provision.ts';
+import { makePool, migrate, transaction } from '../src/server/database.ts';
+import { passwordHash } from '../src/server/security.ts';
+import { Password } from '../src/contracts/notebook.ts';
 import { Encounter } from '../src/contracts/index.ts';
-import { transaction } from '../src/server/database.ts';
+import { Login, ROLES } from '../src/modules/identity/roles.ts';
 
 if(process.env.NODE_ENV==='production'||process.env.ALLOW_SYNTHETIC_DEMO!=='true')throw new Error('Synthetic setup requires ALLOW_SYNTHETIC_DEMO=true and is forbidden in production');
-for(const key of ['DATABASE_URL','DEMO_EMAIL','DEMO_PASSWORD'])if(!process.env[key])throw new Error(`${key} required; no default credentials`);
+for(const key of ['DATABASE_URL','DEMO_PASSWORD'])if(!process.env[key])throw new Error(`${key} required; no default credentials`);
+Password.parse(process.env.DEMO_PASSWORD);
 const target=new URL(process.env.DATABASE_URL);
 if(!['127.0.0.1','localhost','::1'].includes(target.hostname)||!['/clinora_local','/clinora_test'].includes(target.pathname))throw new Error('Demo requires explicit local/test database');
+const prefix=process.env.DEMO_LOGIN_PREFIX??'demo';
+const staff=[
+  ['ceo','Синтетик Раҳбар'],['administrator','Синтетик Администратор'],['registrar','Синтетик Регистратор'],
+  ['doctor','Синтетик Шифокор'],['laboratory','Синтетик Лаборант'],['cashier','Синтетик Кассир'],['inpatient','Синтетик Стационар ходими']
+];
+if(staff.map(s=>s[0]).join()!==ROLES.join())throw new Error('Demo must cover every role');
 const pool=makePool(process.env.DATABASE_URL);
 try{
   await migrate(pool);
-  const owner=await provisionOwner(pool,{email:process.env.DEMO_EMAIL,password:process.env.DEMO_PASSWORD,name:'Synthetic Demo Clinician',clinic:'Synthetic Demonstration Clinic',clinicalAccess:true});
-  await transaction(pool,async tx=>{
-    const patient=randomUUID();await tx.query('INSERT INTO patients(id,clinic_id,display_name,mrn,provenance) VALUES($1,$2,$3,$4,$5)',[patient,owner.clinicId,'Fictional Samira — demo only','SYN-DEMO-001',{source:'manual',externalReference:null}]);
-    await tx.query('INSERT INTO patient_assignments(clinic_id,patient_id,user_id) VALUES($1,$2,$3)',[owner.clinicId,patient,owner.userId]);
+  const hash=await passwordHash(process.env.DEMO_PASSWORD);
+  const logins=await transaction(pool,async tx=>{
+    const clinicId=randomUUID(),ids={};
+    await tx.query('INSERT INTO clinics(id,name) VALUES($1,$2)',[clinicId,'Синтетик демо клиника']);
+    for(const [role,name] of staff){
+      const id=randomUUID(),login=Login.parse(`${prefix}.${role==='administrator'?'admin':role==='laboratory'?'lab':role}`);ids[role]=id;
+      await tx.query('INSERT INTO accounts(id,login,display_name,password_hash,managed_by_clinic_id) VALUES($1,$2,$3,$4,$5)',[id,login,name,hash,clinicId]);
+      const granter=ids.ceo;
+      await tx.query("INSERT INTO memberships(id,clinic_id,user_id,role,is_owner,clinical_access,patient_scope,status,granted_by) VALUES($1,$2,$3,$4,$5,$6,'assigned','active',$7)",
+        [randomUUID(),clinicId,id,role==='doctor'?'clinician':'administrator',role==='ceo',role==='doctor',granter]);
+      await tx.query('INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,$3,$4)',[clinicId,id,role,granter]);
+      await tx.query("INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,'synthetic.staff',$2)",[randomUUID(),id,clinicId]);
+    }
+    const doctor=ids.doctor,patient=randomUUID();
+    await tx.query('INSERT INTO patients(id,clinic_id,display_name,mrn,provenance) VALUES($1,$2,$3,$4,$5)',[patient,clinicId,'Fictional Samira — demo only','SYN-DEMO-001',{source:'manual',externalReference:null}]);
+    await tx.query('INSERT INTO patient_assignments(clinic_id,patient_id,user_id) VALUES($1,$2,$3)',[clinicId,patient,doctor]);
     for(const [date,location,specialty] of [['2020-02-29','Synthetic room 1','General medicine'],['2026-11-10','Synthetic room 2','Cardiology']]){
       const stamp=new Date().toISOString(),id=randomUUID(),document=randomUUID();
-      const encounter=Encounter.parse({id,clinicId:owner.clinicId,patientId:patient,clinicianId:owner.userId,location:{id:null,label:location},specialty,occurrence:{precision:'date',date,timezone:'Asia/Tashkent'},createdAt:stamp,updatedAt:stamp,status:'draft',revision:1,provenance:{source:'manual',externalReference:null}});
-      await tx.query('INSERT INTO encounters(id,clinic_id,patient_id,clinician_id,data) VALUES($1,$2,$3,$4,$5)',[id,owner.clinicId,patient,owner.userId,encounter]);
-      await tx.query('INSERT INTO documents(id,clinic_id,patient_id,encounter_id) VALUES($1,$2,$3,$4)',[document,owner.clinicId,patient,id]);
-      await tx.query("INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,'synthetic.encounter',$4)",[randomUUID(),owner.userId,owner.clinicId,id]);
+      const encounter=Encounter.parse({id,clinicId,patientId:patient,clinicianId:doctor,location:{id:null,label:location},specialty,occurrence:{precision:'date',date,timezone:'Asia/Tashkent'},createdAt:stamp,updatedAt:stamp,status:'draft',revision:1,provenance:{source:'manual',externalReference:null}});
+      await tx.query('INSERT INTO encounters(id,clinic_id,patient_id,clinician_id,data) VALUES($1,$2,$3,$4,$5)',[id,clinicId,patient,doctor,encounter]);
+      await tx.query('INSERT INTO documents(id,clinic_id,patient_id,encounter_id) VALUES($1,$2,$3,$4)',[document,clinicId,patient,id]);
     }
-    await tx.query("INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,'synthetic.patient',$4)",[randomUUID(),owner.userId,owner.clinicId,patient]);
+    await tx.query("INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,'synthetic.patient',$4)",[randomUUID(),doctor,clinicId,patient]);
+    return (await tx.query('SELECT login FROM accounts WHERE managed_by_clinic_id=$1 ORDER BY login',[clinicId])).rows.map(r=>r.login);
   });
-  console.log('Synthetic clinic, explicit clinical owner, fictional patient and two empty dated encounters provisioned. Credentials were not printed.');
+  console.log(`Synthetic clinic provisioned with one login per role: ${logins.join(', ')}. Password not printed.`);
 }finally{await pool.end();}

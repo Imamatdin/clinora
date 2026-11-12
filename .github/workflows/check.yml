@@ -1,9 +1,9 @@
-name: Notebook checks
+name: Clinora checks
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 concurrency:
-  group: notebook-${{ github.ref }}
+  group: checks-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   notebook:
@@ -32,11 +32,6 @@ jobs:
       - run: npm ci
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run typecheck
-      - name: Capture reviewed replay authorization failures
-        if: github.ref_name == 'task-002-patient-notebook' || github.head_ref == 'task-002-patient-notebook'
-        run: |
-          git fetch --no-tags --depth=1 origin b348991c87363eda79d30f983b7d46478dda9105
-          node scripts/check-replay-before.mjs
       - run: npx playwright install --with-deps chromium
       - run: npm run check
       - run: node --import tsx scripts/check-provision.mjs
@@ -48,13 +43,9 @@ jobs:
             work/browser-evidence/
             work/browser-results/**/*.png
           if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: replay-before-fix-proof
-          path: work/task-002a-before.log
-          if-no-files-found: ignore
   windows-compatibility:
+    # Pull requests only (docs/INCREMENTS.md speed rules); Linux runs on every push.
+    if: github.event_name == 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 10
     steps:

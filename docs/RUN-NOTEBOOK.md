@@ -38,19 +38,42 @@ API and `npm run dev` separately; the proxy preserves the browser Origin. Cookie
 and CSRF remain required. For HTTPS production, NODE_ENV=production requires a DB,
 HTTPS APP_ORIGIN and COOKIE_SECURE=true; hosting/proxy configuration is not delivered.
 
-## Optional synthetic demonstration
+## Optional synthetic demonstration (`npm run db:demo`)
 
-On an empty local/test database, supply DEMO_EMAIL and DEMO_PASSWORD privately and
-set ALLOW_SYNTHETIC_DEMO=true. The demo script provisions an explicit clinical
-owner, a fictional patient and two empty date-only encounters. It does not assert
-professional verification and refuses production/non-local/non-demo database names.
+On a local/test database (`clinora_local` or `clinora_test` on loopback), supply
+DEMO_PASSWORD privately (12-128 characters) and set ALLOW_SYNTHETIC_DEMO=true. The
+script creates one synthetic clinic with one staff member per role, all sharing that
+password, plus a fictional patient routed to the demo doctor:
+
+| Login | Role |
+| --- | --- |
+| `demo.ceo` | CEO (Раҳбар) |
+| `demo.admin` | administrator |
+| `demo.registrar` | registrar |
+| `demo.doctor` | doctor (opens the task-002 notebook) |
+| `demo.lab` | laboratory |
+| `demo.cashier` | cashier |
+| `demo.inpatient` | inpatient |
 
 ```sh
 node --env-file=.env.local --import tsx scripts/demo.mjs
 ```
 
-No demo role switch or default password exists. Running setup again with the same
-account fails rather than overwriting an existing account or patient data.
+Set DEMO_LOGIN_PREFIX to run it again in the same database (for example `demo2` gives
+`demo2.ceo`). The password is never printed. It refuses production and non-local databases.
+
+## Staff and business day (task 003A)
+
+1. Sign in with a login, phone number (`+998 90 123-45-67`, `901234567`) or email.
+2. CEO or administrator: open today's business day from the home screen. The date is
+   the clinic's local date (`clinics.timezone`, default Asia/Tashkent); one open day per
+   clinic; a closed day cannot be reopened or edited.
+3. **Ходимлар**: add a staff member (full name, login, optional phone, roles). The
+   temporary password is shown once; hand it over in person. On first sign-in the person
+   must set their own password before anything else works (enforced by the server).
+4. Change roles, block/unblock, or reset a password from **Бошқариш**. Only a CEO can
+   grant or remove the CEO role or change a CEO. Nobody can change their own access.
+   Password reset and account-wide block apply only to accounts this clinic created.
 
 ## Doctor invitation and walkthrough
 

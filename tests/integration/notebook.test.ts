@@ -1,3 +1,4 @@
+import { readdir } from 'node:fs/promises';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -9,7 +10,7 @@ import { httpFixture,patientInput,encounterInput,noteInput,key } from './fixture
 
 test('fresh migration repeat, explicit ownership, invitation scope/expiry/single use and pending registration',async t=>{
   const f=await httpFixture();t.after(()=>f.close());const owner=f.client(),pending=f.client();await owner.login();
-  assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'1');
+  assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,String((await readdir('db/migrations')).filter(n=>/^\d+.*\.sql$/.test(n)).length));
   const signup={email:'pending@example.test',displayName:'Synthetic Pending',password:f.password};
   assert.equal((await pending.request('/api/auth/register',{...signup,role:'doctor'})).status,422);
   assert.equal((await pending.request('/api/auth/register',signup)).status,202);

@@ -2,7 +2,11 @@ import { z } from 'zod';
 import { Patient, Registration, Occurrence } from './index.js';
 export const Password = z.string().min(12).max(128);
 export const SignupInput = Registration.extend({ password: Password });
-export const LoginInput = z.object({ email: z.string().email().max(254), password: z.string().min(1).max(128) }).strict();
+// Staff sign in with a login name, phone number or email in one field; `email` stays for task-002 clients.
+export const LoginInput = z.union([
+  z.object({ identifier: z.string().trim().min(1).max(254), password: z.string().min(1).max(128) }).strict(),
+  z.object({ email: z.string().email().max(254), password: z.string().min(1).max(128) }).strict()
+]);
 export const PatientInput = Patient.pick({ displayName: true, dateOfBirth: true }).extend({ mrn: z.string().trim().min(1).max(80).nullable() }).strict();
 export const EncounterInput = z.object({
   occurrence: Occurrence, location: z.string().trim().min(1).max(200), specialty: z.string().trim().min(1).max(100)

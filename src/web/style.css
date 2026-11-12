@@ -4,3 +4,51 @@ input,textarea{font-weight:400}.modal-backdrop{position:fixed;inset:0;z-index:20
 @media(min-width:1440px){.chart{padding:28px 40px}.notebook{grid-template-columns:260px minmax(0,1fr)}}
 @media(max-width:1000px){.workspace{grid-template-columns:235px minmax(0,1fr)}.notebook{grid-template-columns:1fr}.timeline{display:block}.visit-row{padding:12px}.chart{padding:20px}.clinicbar{align-items:flex-start}.clinicbar .fine{max-width:300px}}
 @media(max-width:640px){.topbar{padding:12px 16px;gap:8px}.brand span{display:none}.account{font-size:.75rem;gap:8px}.pill{order:3}.clinicbar{padding:12px 16px;display:grid;gap:8px}.clinicbar label{display:grid;gap:4px}.clinicbar select{min-width:0}.workspace{display:block}.patients{padding:16px;border-right:0;border-bottom:1px solid #d7e2df}.patients nav{max-height:220px;overflow-y:auto}.patient-row{padding:10px}.owner{margin-top:15px}.chart{padding:16px}.patient-header{display:grid;gap:12px}.patient-header button{width:fit-content}.notebook{padding-top:20px;gap:14px}.editor,.panel{padding:18px}.two{grid-template-columns:1fr}.banners{padding:0 16px}.pending{margin:16px;padding:20px}.auth{margin-top:38px}footer{padding:16px}.welcome{padding:20px 0}.visit-row{margin:8px 0}.brand{font-size:1.35rem}}
+
+/* Task 003A clinic shell. Touch targets at least 44-52px, body text 16px on new screens. */
+button{min-height:44px}
+.small{min-height:36px}
+button.big{min-height:52px;font-size:1.05rem;padding:12px 22px}
+.clinic-name{font-size:1rem;color:#213c44}
+.person{font-weight:600}
+.pill.day-open{background:#e3f4ea;border-color:#9fd1b3;color:#1d5c3c;font-weight:700;font-size:.8rem}
+.pill.day-closed{background:#fbefe9;border-color:#e7c2b3;color:#7b3a24;font-weight:700;font-size:.8rem}
+.sections{display:flex;gap:8px;padding:12px 28px;border-bottom:1px solid #d7e2df;background:#fff;overflow-x:auto}
+.sections button{white-space:nowrap;font-size:1rem}
+.sections button.current{background:#16685f;border-color:#16685f;color:#fff}
+.page{padding:24px 28px;max-width:960px;font-size:1rem}
+.page h1{font-size:1.6rem}
+.home.compact{padding-bottom:0}
+.day-panel{margin:18px 0;max-width:520px;display:grid;gap:10px}
+.day-panel h2,.day-panel p{margin:0}
+.day-state .pill{font-size:.95rem;padding:6px 14px}
+.planned{list-style:none;padding:0;margin:18px 0;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.planned li{border:1px dashed #bdcecc;border-radius:8px;padding:14px 16px;background:#f9fbfa;color:#5c7379;display:grid;gap:4px;font-size:1rem}
+.planned small{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em}
+.staff .section-heading{align-items:flex-start}
+.staff .panel{margin:16px 0;max-width:none}
+.roles{border:1px solid #d7e2df;border-radius:8px;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:0}
+.roles legend{font-weight:700;font-size:.9rem;padding:0 6px}
+label.check{display:flex;align-items:center;gap:10px;font-size:1rem;font-weight:500;min-height:44px;padding:4px 8px;border-radius:6px;cursor:pointer}
+label.check input{width:22px;height:22px;flex:none}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.staff-list{list-style:none;padding:0;margin:16px 0;display:grid;gap:10px}
+.staff-list li{background:#fff;border:1px solid #d7e2df;border-radius:8px;padding:14px 16px}
+.staff-list li.blocked{background:#faf6f4}
+.staff-row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.staff-row>div{display:grid;gap:4px;min-width:0}
+.staff-row strong{font-size:1.05rem}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:.78rem;background:#eaf2f0;border-radius:20px;padding:3px 10px;color:#244b51}
+.chip.blocked{background:#fbe3da;color:#7b3a24}
+.staff-manage{margin-top:14px;display:grid;gap:12px;border-top:1px solid #e2eae7;padding-top:14px}
+.secret{margin:16px 0;border:2px solid #16685f;border-radius:8px;padding:18px;background:#f1faf7}
+.secret h2{margin-top:0}
+.password{font-family:ui-monospace,monospace;font-size:1.6rem;letter-spacing:.06em;background:#fff;border:1px solid #bdcecc;border-radius:6px;padding:10px 14px;width:fit-content;max-width:100%;overflow-wrap:anywhere}
+@media(max-width:640px){
+.sections{padding:10px 16px}
+.page{padding:18px 16px}
+.clinic-name{order:2;flex-basis:100%}
+.staff-row button{width:100%}
+.password{font-size:1.3rem}
+}

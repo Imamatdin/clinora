@@ -1,0 +1,40 @@
+/* Task 010 doctor and lab workspaces. Phone first (360 px), two columns from 900 px. Touch targets 48 px. */
+.dr{display:grid;gap:12px;min-width:0}
+.dr-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.dr-head h2,.dr-head h3{margin:0}
+.dr-lang{display:flex;align-items:center;gap:6px;font-size:.9rem}
+.dr-lang select{min-height:48px}
+.dr button,.dr select,.dr input,.dr a.button{min-height:48px}
+.dr .small{min-height:40px}
+.dr-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.dr-actions label{flex:1 1 220px}
+.dr-card{background:#fff;border:1px solid #d7e2df;border-radius:8px;padding:14px;min-width:0}
+.dr-current{border-color:#2f7d62;border-width:2px}
+.dr-current h3{margin:4px 0;font-size:1.25rem}
+.dr-list,.dr-history,.dr-labs,.dr-orders{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.dr-list li{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;background:#fff;border:1px solid #e1e9e6;border-radius:6px}
+.dr-list li strong{min-width:5.5em}
+.dr-history li{display:grid;gap:2px;padding:8px 0;border-bottom:1px solid #e6eeeb}
+.dr-labs li{padding:6px 0;border-bottom:1px solid #e6eeeb}
+.dr-labs table{width:100%;border-collapse:collapse;font-size:.92rem}
+.dr-labs td{padding:2px 4px;vertical-align:top;overflow-wrap:anywhere}
+.dr-orders li{display:grid;gap:4px}
+.dr .tag{display:inline-block;font-size:.8rem;padding:2px 8px;border-radius:999px;background:#fdf1d8;color:#6a4a00;width:max-content;max-width:100%}
+.dr .tag.ok{background:#dcf1e7;color:#1d5a43}
+.dr-visit{display:grid;gap:12px;min-width:0}
+.dr-main{display:grid;gap:12px;min-width:0}
+.dr-patient h3{margin-top:0}
+.dr form label{display:grid;gap:4px;margin:8px 0}
+.dr textarea{width:100%;box-sizing:border-box}
+.dr input{width:100%;box-sizing:border-box}
+.dr-rx{border:1px solid #d7e2df;border-radius:8px;padding:10px;margin:10px 0;min-width:0}
+.dr-rx-line{border:1px dashed #c8d6d1;border-radius:6px;padding:8px;margin:0 0 8px;min-width:0}
+.dr dl div{display:grid;gap:2px;margin:4px 0}
+.dr dt{font-size:.8rem;color:#55706a}
+.dr dd{margin:0}
+@media (min-width:900px){
+  .dr-visit{grid-template-columns:minmax(260px,1fr) 2fr;align-items:start}
+  .dr-rx-line{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:0 8px}
+  .dr-rx-line legend{grid-column:1/-1}
+  .dr-rx-line label:nth-of-type(5),.dr-rx-line button{grid-column:1/-1}
+}

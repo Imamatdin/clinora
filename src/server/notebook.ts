@@ -16,6 +16,10 @@ import { createSession, deviceFromRequest, publicAccessRoute, readCookie, sessio
 import { DEVICE_IDLE_MINUTES } from '../modules/devices/actions.js';
 import { accountLimitKey, passwordLogin } from '../modules/login/actions.js';
 import { clientIp } from './client-ip.js';
+import { carriedFields, currentVersion, latestApproval, nextDraftKind } from '../modules/documents/approvals.js';
+
+/** Note fields the notebook editor writes; other fields of the current version are carried into each new version. */
+const NOTEBOOK_FIELDS: ReadonlySet<string> = new Set(['reported', 'observed', 'assessment', 'plan']);
 
 const fail = (code: ConstructorParameters<typeof DomainError>[0]): never => { throw new DomainError(code); };
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => { const result = schema.safeParse(value); return result.success ? result.data : fail('INVALID_INPUT'); };
@@ -24,7 +28,8 @@ type Actor = { userId: string; sessionId: string; email: string | null; login: s
   via: SessionVia; deviceClinicId: string | null; deviceLabel: string | null };
 type Access = { actor: Actor; member: Membership; owner: boolean };
 export type ApiConfig = { pool: pg.Pool; origin: string; secureCookies: boolean; telegram?: TelegramConfig | undefined; trustProxyHops?: number };
-export type ApiResult = { status?: number; body: unknown; cookie?: string | string[]; html?: string };
+/** A clinic route result (JSON, HTML or file) plus an optional session cookie. */
+export type ApiResult = import('./routes/types.js').RouteResult & { cookie?: string | string[] };
 const jsonBody = async (req: IncomingMessage): Promise<unknown> => {
   if (req.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') return fail('INVALID_INPUT');
   let size = 0; const chunks: Buffer[] = [];
@@ -81,10 +86,18 @@ function patientView(row: pg.QueryResultRow): PatientView {
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at), revision: row.revision, provenance: row.provenance };
 }
 async function visits(tx: Tx, clinic: string, patient: string): Promise<VisitView[]> {
-  const rows = (await tx.query(`SELECT e.data,a.display_name,d.id document_id,d.current_revision,v.data version FROM encounters e
+  // Approval from either the doctor workspace (note_approvals) or the assistant (assistant_approvals), latest first.
+  const rows = (await tx.query(`SELECT e.data,a.display_name,d.id document_id,d.current_revision,d.current_version_id,v.data version,
+      ap.id approval_id, ap.version_id approval_version_id, ap.revision approval_revision, ap.approved_at
+    FROM encounters e
     JOIN accounts a ON a.id=e.clinician_id JOIN documents d ON d.encounter_id=e.id LEFT JOIN document_versions v ON v.id=d.current_version_id
+    LEFT JOIN LATERAL (SELECT id, version_id, revision, approved_at FROM (
+        SELECT id, version_id, revision, approved_at FROM note_approvals WHERE document_id=d.id
+        UNION ALL SELECT id, version_id, revision, approved_at FROM assistant_approvals WHERE document_id=d.id) x
+      ORDER BY revision DESC LIMIT 1) ap ON true
     WHERE e.clinic_id=$1 AND e.patient_id=$2 ORDER BY e.created_at,e.id`, [clinic, patient])).rows;
-  const result: VisitView[] = rows.map(r => ({ encounter: r.data, clinicianName: r.display_name, documentId: r.document_id, revision: r.current_revision, version: r.version }));
+  const result: VisitView[] = rows.map(r => ({ encounter: r.data, clinicianName: r.display_name, documentId: r.document_id, revision: r.current_revision, version: r.version,
+    approval: r.approval_id ? { id: r.approval_id, versionId: r.approval_version_id, revision: r.approval_revision, approvedAt: iso(r.approved_at), current: r.approval_version_id === r.current_version_id } : null }));
   // Known dates descending, date-only explicitly preserved; undated visits last, newest entry first.
   return sortVisits(result);
 }
@@ -287,16 +300,21 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
         const doc = (await tx.query('SELECT * FROM documents WHERE clinic_id=$1 AND patient_id=$2 AND encounter_id=$3 FOR UPDATE', [clinic, patientId, encounterId])).rows[0];
         if (!doc) return fail('NOT_FOUND');
         if (doc.current_revision !== input.expectedRevision) return fail('STALE_VERSION');
+        // Task 010: an approved note is never silently replaced. After an approval the new version is an
+        // explicit amendment naming that approval; fields written by other editors (assistant gp.*, prescription) are kept.
+        const approval = await latestApproval(tx, doc.id), current = await currentVersion(tx, doc);
+        const kind = nextDraftKind(approval, current, input.amendmentReason);
         const version = DocumentVersion.parse({ id: randomUUID(), documentId: doc.id, encounterId, clinicId: clinic, patientId,
-          revision: doc.current_revision+1, parentVersionId: doc.current_version_id, kind: 'clinician_edit',
-          templateId: input.templateId, fields: Object.entries(input.note).map(([key,value]) => ({ key, value: value.trim() || null,
+          revision: doc.current_revision+1, parentVersionId: doc.current_version_id, ...kind,
+          templateId: input.templateId, fields: [...Object.entries(input.note).map(([key,value]) => ({ key, value: value.trim() || null,
             category: ({reported:'reported',observed:'observed',assessment:'assessment',plan:'clinician_instruction'} as const)[key as keyof typeof input.note],
             status: 'proposed', origin: 'clinician', revision: doc.current_revision+1, evidence: [], editedBy: actor.userId, unresolvedConflict: null })),
-          createdBy: actor.userId, createdAt: new Date().toISOString(), amendsApprovalId: null, amendmentReason: null });
+            ...carriedFields(current, NOTEBOOK_FIELDS)],
+          createdBy: actor.userId, createdAt: new Date().toISOString() });
         await tx.query('INSERT INTO document_versions(id,document_id,clinic_id,patient_id,revision,created_by,data) VALUES($1,$2,$3,$4,$5,$6,$7)', [version.id, doc.id, clinic, patientId, version.revision, actor.userId, version]);
         await tx.query('UPDATE documents SET current_revision=$1,current_version_id=$2 WHERE id=$3', [version.revision, version.id, doc.id]);
         await audit(tx, actor.userId, clinic, 'draft.saved', version.id);
-        return { revision: version.revision, version };
+        return { revision: version.revision, version, approval: approval ? { id: approval.id, versionId: approval.versionId, revision: approval.revision, approvedAt: approval.approvedAt, current: false } : null };
       }, async cached => {
         const stored = parse(z.object({ revision: Revision, version: DocumentVersion }), cached);
         if (stored.version.clinicId !== clinic || stored.version.patientId !== patientId ||

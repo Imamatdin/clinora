@@ -18,7 +18,7 @@ registerRoutes('registration', [
   { method: 'POST', pattern: /^registration\/visits$/, roles: r.REGISTRARS,
     handle: async (ctx, _p, body) => ({ status: 201, body: await r.createVisit(ctx, parse(r.VisitInput, await body())) }) },
   { method: 'GET', pattern: new RegExp(`^registration/visits/${uuid}/tickets$`), roles: r.REGISTRARS,
-    handle: async (ctx, [id]) => ({ body: null, html: await ticketsHtml(ctx, id!) }) },
+    handle: async (ctx, [id]) => ({ html: await ticketsHtml(ctx, id!) }) },
   { method: 'GET', pattern: /^queue\/mine$/, roles: ['doctor'], handle: async ctx => ({ body: await r.myQueue(ctx) }) },
   { method: 'POST', pattern: /^queue\/call-next$/, roles: r.QUEUE_ROLES,
     handle: async (ctx, _p, body) => ({ body: await r.callNext(ctx, parse(r.CallNextInput, await body())) }) },

@@ -149,9 +149,11 @@ test('doctor queue: own tickets only, call next, missed call, in progress, compl
   assert.equal((await doctorC.request(url(`queue/tickets/${ticketA.id}/status`), { status: 'in_progress', idempotencyKey: key() })).status, 404);
   assert.equal((await doctorA.request(url(`queue/tickets/${ticketB.id}/status`), { status: 'in_progress', idempotencyKey: key() })).status, 404);
   assert.equal((await doctorA.request(url('queue/call-next'), { queuePointId: g.pointB, idempotencyKey: key() })).status, 404);
-  // Doctor A's queue may hold earlier waiting tickets; call until this patient's ticket is called.
+  // Doctor A's queue may hold earlier waiting tickets; call until this patient's ticket is called. One patient is active
+  // at a time (task 010), so each earlier patient is cancelled before calling the next.
   let called: { id: string; status: string } | null = null;
   for (let i = 0; i < 10 && called?.id !== ticketA.id; i++) {
+    if (called) assert.equal((await doctorA.request(url(`queue/tickets/${called.id}/status`), { status: 'cancelled', idempotencyKey: key() })).status, 200);
     const callKey = key();
     const r = await json(await doctorA.request(url('queue/call-next'), { idempotencyKey: callKey }));
     assert.deepEqual(await json(await doctorA.request(url('queue/call-next'), { idempotencyKey: callKey })), r, 'repeat returns same ticket');

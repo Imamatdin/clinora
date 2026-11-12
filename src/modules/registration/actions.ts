@@ -297,21 +297,36 @@ export async function myQueue(ctx: ClinicContext) {
   return rows.map(ticketView);
 }
 
-/** Calls the lowest-numbered waiting ticket at the caller's point (or a given point for managers). Returns { ticket: null } when nobody waits. */
+/**
+ * Calls the lowest-numbered waiting ticket at the caller's point (or a given point for managers). Returns { ticket: null } when nobody waits.
+ * One patient at a time (task 010): while a ticket at the same doctor (or non-doctor point) is called or in progress, that ticket is
+ * returned with alreadyActive: true instead of calling another. A lock per doctor serializes two devices, or a manager and the
+ * doctor, pressing "call next" together with different idempotency keys.
+ */
 export async function callNext(ctx: ClinicContext, raw: z.input<typeof CallNextInput>) {
   ctx = await authorize(ctx, QUEUE_ROLES);
   const input = CallNextInput.parse(raw);
   return once(ctx, 'queue.call_next', input, async () => {
-    const scope = input.queuePointId && manager(ctx) ? '$2::uuid IS NOT NULL AND q.id=$3' : `${OWN} AND ($3::uuid IS NULL OR q.id=$3)`;
+    const forPoint = !!input.queuePointId && manager(ctx);
+    const scope = forPoint ? '$2::uuid IS NOT NULL AND q.id=$3' : `${OWN} AND ($3::uuid IS NULL OR q.id=$3)`;
     if (input.queuePointId && !manager(ctx)
       && !(await ctx.tx.query("SELECT 1 FROM queue_points WHERE clinic_id=$1 AND id=$2 AND kind='doctor' AND user_id=$3", [ctx.clinicId, input.queuePointId, ctx.actorId])).rowCount)
       return fail('NOT_FOUND');
+    const point = forPoint ? (await ctx.tx.query('SELECT kind, user_id FROM queue_points WHERE clinic_id=$1 AND id=$2', [ctx.clinicId, input.queuePointId])).rows[0] : null;
+    if (forPoint && !point) return fail('NOT_FOUND');
+    const lock = !forPoint ? `doctor:${ctx.actorId}` : point.kind === 'doctor' ? `doctor:${point.user_id}` : `point:${input.queuePointId}`;
+    await ctx.tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`queue.call:${ctx.clinicId}:${lock}`]);
+    // A doctor point's active ticket counts across all of that doctor's points; a non-doctor point counts only itself.
+    const [activeScope, activeParam] = forPoint && point.kind !== 'doctor' ? ['q.id=$2', input.queuePointId] : [`q.kind='doctor' AND q.user_id=$2`, forPoint ? point.user_id : ctx.actorId];
+    const active = (await ctx.tx.query(`${TICKET_SELECT} WHERE t.clinic_id=$1 AND t.status IN ('called','in_progress') AND ${activeScope}
+      ORDER BY t.called_at NULLS LAST, t.number LIMIT 1`, [ctx.clinicId, activeParam])).rows[0];
+    if (active) return { ticket: ticketView(active), alreadyActive: true };
     const next = (await ctx.tx.query(`${TICKET_SELECT} WHERE t.clinic_id=$1 AND t.status='waiting' AND ${scope}
       ORDER BY t.number, t.id LIMIT 1 FOR UPDATE OF t SKIP LOCKED`, [ctx.clinicId, ctx.actorId, input.queuePointId ?? null])).rows[0];
-    if (!next) return { ticket: null };
+    if (!next) return { ticket: null, alreadyActive: false };
     await ctx.tx.query("UPDATE queue_tickets SET status='called',called_at=now() WHERE clinic_id=$1 AND id=$2", [ctx.clinicId, next.id]);
     await withAudit(ctx.tx, ctx, 'queue.ticket_called', next.id, { number: next.number });
-    return { ticket: ticketView((await ctx.tx.query(`${TICKET_SELECT} WHERE t.clinic_id=$1 AND t.id=$2`, [ctx.clinicId, next.id])).rows[0]) };
+    return { ticket: ticketView((await ctx.tx.query(`${TICKET_SELECT} WHERE t.clinic_id=$1 AND t.id=$2`, [ctx.clinicId, next.id])).rows[0]), alreadyActive: false };
   });
 }
 

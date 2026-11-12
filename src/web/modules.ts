@@ -8,6 +8,8 @@ import type { UiKey } from './i18n/index.js';
 import { cashierModule } from './cashier/screen.js';
 import { registrationModule } from './registration/screen.js';
 import { catalogModule } from './catalog/screen.js';
+import { doctorModule } from './doctor/screen.js';
+import { labModule } from './lab/screen.js';
 
 /** What the shell hands every feature screen. The server still authorizes every call. */
 export type ModuleProps = {
@@ -30,9 +32,11 @@ export type WebModule = {
  * e.g. `registrationModule,` after importing it.
  */
 export const MODULES: readonly WebModule[] = [
-  cashierModule, pharmacyModule, surgeryModule,
+  // A role lands on its first module here: doctor first (queue), lab last so CEO/administrator keep the cashier home.
+  doctorModule, cashierModule, pharmacyModule, surgeryModule,
   registrationModule,
   catalogModule,
+  labModule,
 ];
 
 /** Placeholders per role for increments not yet built. A registered module with the same label hides its placeholder. */
@@ -41,8 +45,8 @@ export const PLANNED: Record<Role, UiKey[]> = {
   administrator: ['module.catalog', 'module.queueMonitor'],
   // Task 007: search, registration and tickets are one registration screen.
   registrar: ['module.registration'],
-  doctor: ['module.myQueue', 'module.prescription'],
-  laboratory: ['module.labOrders', 'module.labConfirm'],
+  doctor: ['module.myQueue'],
+  laboratory: ['module.labOrders'],
   cashier: ['module.payments', 'module.discounts', 'module.receipts', 'module.cashReport'],
   inpatient: ['module.admissions', 'module.beds', 'module.bedCharges'],
   pharmacy: []

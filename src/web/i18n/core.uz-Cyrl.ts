@@ -69,6 +69,9 @@ export const core = {
   'role.doctor': 'Шифокор',
   'role.laboratory': 'Лаборатория',
   'role.cashier': 'Касса',
+  'role.pharmacy': 'Дорихона',
+  'home.pharmacy.title': 'Дорихона',
+  'home.pharmacy.lead': 'Дори ва товарлар ҳисоби.',
   'role.inpatient': 'Стационар',
   'nav.staff': 'Ходимлар',
 

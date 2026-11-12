@@ -1,3 +1,5 @@
+import { pharmacy } from './pharmacy.uz-Cyrl.js';
+import { surgery } from './surgery.uz-Cyrl.js';
 import { core } from './core.uz-Cyrl.js';
 import { access } from './access.uz-Cyrl.js';
 import { assistant } from './assistant.uz-Cyrl.js';
@@ -12,6 +14,7 @@ import { inpatient } from './inpatient.uz-Cyrl.js';
  */
 export const UZ_CYRL_PARTS = {
   core,
+  pharmacy, surgery,
   access,
   assistant,
   cashier,

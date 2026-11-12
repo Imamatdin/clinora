@@ -1,0 +1,2 @@
+import type { surgery } from './surgery.uz-Cyrl.js';
+export const surgeryUzLatn: Record<keyof typeof surgery,string> = { 'surgery.title':'Jarrohlik', 'surgery.surgeon':'Jarroh', 'surgery.service':'Operatsiya', 'surgery.time':'Operatsiya vaqti', 'surgery.note':'Daftardagi operatsiya qaydi (ixtiyoriy)', 'surgery.save':'Operatsiyani tasdiqlash va hisobga qoʻshish' };

@@ -10,3 +10,6 @@ import './inpatient.js';
 
 export { registeredRoutes } from './registry.js';
 export type { Route } from './types.js';
+
+import './pharmacy.js';
+import './surgery.js';

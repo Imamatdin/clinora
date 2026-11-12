@@ -1,3 +1,5 @@
+import { pharmacyModule } from './pharmacy/screen.js';
+import { surgeryModule } from './surgery/screen.js';
 import type { ComponentType } from 'react';
 import type { ClinicMembershipView, CurrentDayView } from '../contracts/clinic.js';
 import type { Role } from '../modules/identity/roles.js';
@@ -28,6 +30,8 @@ export type WebModule = {
  */
 export const MODULES: readonly WebModule[] = [
   cashierModule,
+  pharmacyModule,
+  surgeryModule,
   inpatientModule,
 ];
 
@@ -39,7 +43,8 @@ export const PLANNED: Record<Role, UiKey[]> = {
   doctor: ['module.myQueue', 'module.prescription'],
   laboratory: ['module.labOrders', 'module.labConfirm'],
   cashier: ['module.payments', 'module.discounts', 'module.receipts', 'module.cashReport'],
-  inpatient: ['module.admissions', 'module.beds', 'module.bedCharges']
+  inpatient: ['module.admissions', 'module.beds', 'module.bedCharges'],
+  pharmacy: []
 };
 
 export const modulesFor = (role: Role, modules: readonly WebModule[] = MODULES) => modules.filter(m => m.roles.includes(role));

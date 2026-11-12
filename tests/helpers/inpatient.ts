@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
 
 /** Entirely synthetic shared fixture; no catalog or patient data from a clinic. */
-export async function inpatientGraph(f:{pool:pg.Pool;owner:{clinicId:string;userId:string}},daysAgo=0) {
+export async function inpatientGraph(f:{pool:pg.Pool;owner:{clinicId:string;userId:string}},daysAgo=0,businessDayAgo=0) {
   const {pool}=f,c=f.owner.clinicId,u=f.owner.userId;
   const dept=randomUUID(),room=randomUUID(),bed=randomUUID(),bed2=randomUUID(),patient=randomUUID(),visit=randomUUID(),day=randomUUID();
   const services={bed:randomUUID(),bed2:randomUUID(),lab:randomUUID(),ultrasound:randomUUID(),other:randomUUID(),caretaker:randomUUID(),medicine:randomUUID()};
   const dates=(await pool.query("SELECT (now() AT TIME ZONE timezone)::date::text today,((now() AT TIME ZONE timezone)::date-$2::int)::text start FROM clinics WHERE id=$1",[c,daysAgo])).rows[0];
-  await pool.query("INSERT INTO business_days(id,clinic_id,business_date,status,opened_by) VALUES($1,$2,$3,'open',$4) ON CONFLICT DO NOTHING",[day,c,dates.today,u]);
+  await pool.query("INSERT INTO business_days(id,clinic_id,business_date,status,opened_by) VALUES($1,$2,$3::date-$5::int,'open',$4) ON CONFLICT DO NOTHING",[day,c,dates.today,u,businessDayAgo]);
   const open=(await pool.query("SELECT id FROM business_days WHERE clinic_id=$1 AND status='open'",[c])).rows[0].id;
   await pool.query("INSERT INTO departments(id,clinic_id,name_uz_cyrl) VALUES($1,$2,'Синтетик бўлим')",[dept,c]);
   await pool.query("INSERT INTO doctor_profiles(clinic_id,user_id,department_id,specialty_uz_cyrl) VALUES($1,$2,$3,'Синтетик шифокор') ON CONFLICT DO NOTHING",[c,u,dept]);

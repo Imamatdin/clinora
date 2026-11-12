@@ -3,13 +3,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { httpFixture } from './fixture.js';
 import { inpatientGraph } from '../helpers/inpatient.js';
-import { transaction } from '../../src/server/database.js';
-import { requireRole } from '../../src/server/roles.js';
-import { onBusinessDayOpen } from '../../src/modules/inpatient/actions.js';
 
 const key=()=>randomUUID();
-async function setup(t:test.TestContext,days=0){
-  const f=await httpFixture();t.after(()=>f.close());const client=f.client();await client.login();const g=await inpatientGraph(f,days);
+async function setup(t:test.TestContext,days=0,businessDayAgo=0){
+  const f=await httpFixture();t.after(()=>f.close());const client=f.client();await client.login();const g=await inpatientGraph(f,days,businessDayAgo);
   const base=`/api/clinics/${g.clinic}/inpatient`;
   const post=async(path:string,body:unknown,status=200)=>{const r=await client.request(base+path,body);const v=await r.json();assert.equal(r.status,status,JSON.stringify(v));return v;};
   const get=async(path:string)=>{const r=await client.request(base+path);assert.equal(r.status,200);return r.json();};
@@ -30,6 +27,7 @@ test('spec example: five bed days plus services = 1,000,000; immutable discharge
   await post(`/${g.admission}/services`,{key:key(),serviceId:g.services.other,quantity:1},409);
   await post(`/${g.admission}/transfer`,{key:key(),bedId:g.bed2},409);
   assert.equal((await f.pool.query('SELECT count(*)::int n FROM bed_assignments WHERE admission_id=$1 AND to_at IS NULL',[g.admission])).rows[0].n,0);
+  await assert.rejects(f.pool.query("INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,source,created_by) VALUES($1,$2,$3,$4,1,1,'lab',$5)",[key(),g.clinic,g.visit,g.services.lab,g.actor]),{code:'23514'});
   const r=await client.request(base+`/${g.admission}/caretakers`,{key:key(),fullName:'Late',phone:null,dailyServiceId:null});assert.equal(r.status,409);
 });
 test('admit and concurrent retry are one stay; occupied bed and wrong visit type rejected',async t=>{
@@ -68,7 +66,7 @@ test('dated rules preserve old dates; caretaker daily charges and minimum shortf
   assert.equal((await get('')).effectiveRule.minimumDays,1);
   assert.equal((await get('')).rule.minimumDays,4);
 });
-test('minimum same-day stay, optional caretaker, service retries, rollback on missing price',async t=>{
+test('minimum same-day stay, optional caretaker and service retries',async t=>{
   const {f,g,post,admit,get}=await setup(t);const {id}=await admit();
   await post(`/${id}/caretakers`,{key:key(),fullName:'Synthetic No Charge',phone:'+998901234567',dailyServiceId:null});
   const input={key:key(),serviceId:g.services.medicine,quantity:2};
@@ -82,15 +80,20 @@ test('minimum same-day stay, optional caretaker, service retries, rollback on mi
   await post(`/${other.admission}/services`,{key:key(),serviceId:missingService,quantity:1});
   assert.equal((await get(`/${other.admission}/invoice`)).value,'12345');
 });
-test('business-day opener accrues existing stays in its transaction; missing historical price rolls back',async t=>{
-  const {f,g,client,base}=await setup(t,2);
-  // Hook is the same action invoked by the actual open endpoint, with an already-open synthetic day.
-  await transaction(f.pool,async tx=>{const ctx=await requireRole(tx,g.actor,g.clinic,['ceo']);await onBusinessDayOpen(ctx);});
+test('business-day opener accrues existing stays atomically; missing historical price rolls back the opening',async t=>{
+  const {f,g,client,base}=await setup(t,2,1);
+  const oldDay=(await f.pool.query("SELECT id FROM business_days WHERE clinic_id=$1 AND status='open'",[g.clinic])).rows[0].id;
+  assert.equal((await client.request(`/api/clinics/${g.clinic}/business-days/${oldDay}/close`,{})).status,200);
+  const noPrice=key();await f.pool.query("INSERT INTO services(id,clinic_id,kind,name_uz_cyrl) VALUES($1,$2,'bed','No price')",[noPrice,g.clinic]);
+  await f.pool.query('UPDATE beds SET bed_service_id=$2 WHERE id=$1',[g.bed,noPrice]);
+  const openPath=`/api/clinics/${g.clinic}/business-days/open`;
+  assert.equal((await client.request(openPath,{})).status,422);
+  assert.equal((await f.pool.query("SELECT count(*)::int n FROM business_days WHERE clinic_id=$1 AND status='open'",[g.clinic])).rows[0].n,0);
+  assert.equal((await f.pool.query('SELECT count(*)::int n FROM charge_lines WHERE visit_id=$1',[g.visit])).rows[0].n,0);
+  await f.pool.query("INSERT INTO service_prices(id,clinic_id,service_id,price_uzs,effective_from,set_by) VALUES($1,$2,$3,100000,'2000-01-01',$4)",[key(),g.clinic,noPrice,g.actor]);
+  assert.equal((await client.request(openPath,{})).status,201);
   assert.equal((await f.pool.query('SELECT count(*)::int n FROM bed_day_charges WHERE admission_id=$1',[g.admission])).rows[0].n,2);
-  const noPrice=key();await f.pool.query("INSERT INTO services(id,clinic_id,kind,name_uz_cyrl) VALUES($1,$2,'other','No price')",[noPrice,g.clinic]);
-  const before=(await f.pool.query('SELECT count(*)::int n FROM charge_lines')).rows[0].n;
-  const r=await client.request(base+`/${g.admission}/services`,{key:key(),serviceId:noPrice,quantity:1});assert.equal(r.status,422);
-  assert.equal((await f.pool.query('SELECT count(*)::int n FROM charge_lines')).rows[0].n,before);
+  const r=await client.request(base+`/${g.admission}/services`,{key:key(),serviceId:g.services.other,quantity:0});assert.equal(r.status,422);
 });
 test('every inpatient route rejects wrong roles and foreign clinics; revocation applies to cached retry',async t=>{
   const {f,g,client,base,admit}=await setup(t);const admitted=await admit();

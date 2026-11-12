@@ -39,3 +39,16 @@ CREATE TABLE inpatient_discharge_invoices (
 );
 CREATE TRIGGER inpatient_invoices_immutable BEFORE UPDATE OR DELETE ON inpatient_discharge_invoices
   FOR EACH ROW EXECUTE FUNCTION core_append_only();
+
+-- Other modules must not append clinical charges after discharge either. The visit lock
+-- orders a racing service insert before or after the discharge snapshot transaction.
+CREATE FUNCTION inpatient_charge_open_stay() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM 1 FROM visits WHERE clinic_id=NEW.clinic_id AND id=NEW.visit_id FOR UPDATE;
+  IF EXISTS(SELECT 1 FROM admissions WHERE clinic_id=NEW.clinic_id AND visit_id=NEW.visit_id AND status='discharged') THEN
+    RAISE EXCEPTION 'discharged stay cannot receive new charges' USING ERRCODE='check_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER inpatient_charge_open_stay BEFORE INSERT ON charge_lines
+  FOR EACH ROW EXECUTE FUNCTION inpatient_charge_open_stay();

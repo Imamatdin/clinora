@@ -15,7 +15,7 @@ const json = (v:unknown) => JSON.stringify(v, (_k,x)=>typeof x==='bigint'?x.toSt
 // serializes daily runs against transfers/discharge, and requests with different retry keys.
 async function guard(ctx:ClinicContext, roles:readonly ('ceo'|'administrator'|'inpatient'|'doctor'|'cashier')[]=WARD) {
   await ctx.tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,11011))',[ctx.clinicId]);
-  await requireRole(ctx.tx,ctx.actorId,ctx.clinicId,roles);
+  ctx.roles=(await requireRole(ctx.tx,ctx.actorId,ctx.clinicId,roles)).roles;
 }
 async function clock(ctx:ClinicContext) {
   return (await ctx.tx.query("SELECT timezone,(now() AT TIME ZONE timezone)::date::text today,now() instant FROM clinics WHERE id=$1",[ctx.clinicId])).rows[0]!;
@@ -61,7 +61,7 @@ async function line(ctx:ClinicContext,visit:string,service:string,quantity:numbe
 }
 
 export async function ward(ctx:ClinicContext):Promise<WardView> {
-  await requireRole(ctx.tx,ctx.actorId,ctx.clinicId,READ);
+  ctx.roles=(await requireRole(ctx.tx,ctx.actorId,ctx.clinicId,READ)).roles;
   const c=await clock(ctx);
   // Doctors get only their assigned stays, never the clinic bed map, pending visits or other names.
   const doctorOnly=ctx.roles.includes('doctor')&&!ctx.roles.some(r=>(WARD as readonly string[]).includes(r)||r==='cashier');
@@ -84,7 +84,7 @@ export async function ward(ctx:ClinicContext):Promise<WardView> {
       JOIN accounts ac ON ac.id=a.attending_user_id LEFT JOIN bed_assignments ba ON ba.admission_id=a.id AND ba.to_at IS NULL
       LEFT JOIN beds b ON b.id=ba.bed_id LEFT JOIN rooms r ON r.id=b.room_id
       WHERE a.clinic_id=$1 AND (NOT $2::boolean OR (a.attending_user_id=$3 AND EXISTS(SELECT 1 FROM patient_assignments pa WHERE pa.clinic_id=a.clinic_id AND pa.patient_id=v.patient_id AND pa.user_id=$3)))
-      ORDER BY a.status,a.admitted_at DESC`,[ctx.clinicId,doctorOnly,ctx.actorId]),
+      ORDER BY a.status,r.name,b.label,a.admitted_at DESC`,[ctx.clinicId,doctorOnly,ctx.actorId]),
     ctx.tx.query('SELECT bed_day_rule FROM clinic_settings WHERE clinic_id=$1',[ctx.clinicId])
   ]);
   return JSON.parse(json({today:c.today,rule:settings.rows[0].bed_day_rule,effectiveRule:await ruleAt(ctx,c.today),beds:beds.rows,visits:visits.rows,departments:departments.rows,doctors:doctors.rows,services:services.rows,admissions:admissions.rows}));
@@ -208,7 +208,7 @@ export async function changeRule(ctx:ClinicContext,raw:unknown) {
   });
 }
 export async function invoice(ctx:ClinicContext,id:string):Promise<InvoiceView> {
-  await requireRole(ctx.tx,ctx.actorId,ctx.clinicId,READ);const a=await stay(ctx,id,false);
+  ctx.roles=(await requireRole(ctx.tx,ctx.actorId,ctx.clinicId,READ)).roles;const a=await stay(ctx,id,false);
   if(ctx.roles.includes('doctor')&&!ctx.roles.some(r=>(WARD as readonly string[]).includes(r)||r==='cashier')) {
     if(a.attending_user_id!==ctx.actorId||!(await ctx.tx.query('SELECT 1 FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3',[ctx.clinicId,a.patient_id,ctx.actorId])).rowCount)return fail('FORBIDDEN');
   }
@@ -218,8 +218,12 @@ export async function invoice(ctx:ClinicContext,id:string):Promise<InvoiceView> 
   const discounts=(await ctx.tx.query('SELECT * FROM discounts WHERE clinic_id=$1 AND visit_id=$2 AND voided_at IS NULL ORDER BY created_at,id',[ctx.clinicId,a.visit_id])).rows;
   const payments=(await ctx.tx.query('SELECT * FROM payments WHERE clinic_id=$1 AND visit_id=$2 ORDER BY created_at,id',[ctx.clinicId,a.visit_id])).rows;
   const ds:Discount[]=discounts.map(d=>({...d.charge_line_id?{lineId:d.charge_line_id}:{},reason:d.reason,approverId:d.approved_by,...d.kind==='percent'?{kind:'percent' as const,basisPoints:d.percent_bp}:{kind:'fixed' as const,amount:uzs(d.amount_uzs)}}));
-  const totals=calculateInvoice(lines.map(l=>({id:l.id,unitPrice:uzs(l.unit_price_uzs),quantity:l.quantity,status:l.status,category:l.kind})),ds,
-    payments.map(p=>({id:p.id,kind:p.kind,amount:uzs(p.amount_uzs)})));
+  // Current discounts may have reallocated/refunded old payments. Like the cashier,
+  // calculate the current payable against net receipts, not a historic gross-payment peak.
+  const net=payments.reduce((sum,p)=>sum+(p.kind==='payment'?1n:-1n)*BigInt(p.amount_uzs),0n);
+  let totals:ReturnType<typeof calculateInvoice>;
+  try {totals=calculateInvoice(lines.map(l=>({id:l.id,unitPrice:uzs(l.unit_price_uzs),quantity:l.quantity,status:l.status,category:l.kind})),ds,
+    net>0n?[{id:'net',kind:'payment',amount:uzs(net)}]:[]);}catch{return fail('INVALID_TRANSITION');}
   const names=(await ctx.tx.query('SELECT c.name clinic,p.full_name patient,p.patient_no FROM clinics c JOIN patients p ON p.clinic_id=c.id WHERE c.id=$1 AND p.id=$2',[ctx.clinicId,a.patient_id])).rows[0];
   return {...names,patientNo:names.patient_no,admissionId:id,visitId:a.visit_id,issuedAt:(await clock(ctx)).instant.toISOString(),
     lines:lines.map(l=>({id:l.id,name:l.name,quantity:l.quantity,price:l.unit_price_uzs,value:(l.status==='cancelled'?0n:BigInt(l.unit_price_uzs)*BigInt(l.quantity)).toString(),source:l.source})),

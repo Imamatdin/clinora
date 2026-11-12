@@ -17,7 +17,9 @@ Updated 12 November 2026. Increments are ordered by dependency. Each ends at a g
 
 | C10 | Pharmacy stock (medicines, goods, stock receipts, dispensing charges) and surgery charges; in go-live scope (decided 12 Nov) | Stock never goes negative without an explicit override; every dispense links to a visit and a charge |
 
-After C9 and C10: AI documentation from conversation on visit notes, Telegram, inpatient patient app, external integrations. Detailed briefs from the previous planner are kept in `docs/backlog/ai-documentation/` (their task numbers 003-006 are superseded by this table; renumber when scheduled). Accounting stays in the clinic's 1C; a daily export to 1C is a later integration, not a replacement of 1C accounting.
+After C9, C10 and A1: the rest of the agent layer (proposals for prescriptions, referrals, charges; registrar and ward voice entry; CEO Telegram assistant; scheduled helpers), patient Telegram bot, inpatient patient app, external integrations. Detailed briefs from the previous planner are kept in `docs/backlog/ai-documentation/` (their task numbers 003-006 are superseded by this table; renumber when scheduled). Accounting stays in the clinic's 1C; a daily export to 1C is a later integration, not a replacement of 1C accounting.
+
+| A1 | Doctor assistant, first slice: Telegram voice message or in-app recording, transcription, draft visit note in one specialty form and proposed lab orders with source references, doctor approves field by field. Starts after C6, runs alongside C7-C9; Tech Award demo | Approval writes an immutable version; unapproved proposals change nothing; provider failure leaves a usable manual note; measured transcription errors on a fixed Uzbek/Russian phone-mic set are reported, not claimed |
 
 ## Process rules (speed)
 

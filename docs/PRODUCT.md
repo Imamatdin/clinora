@@ -29,7 +29,7 @@ The clinical notebook built in tasks 001-002 stays. It becomes the doctor's visi
 
 ## Access and Telegram (decided 12 November 2026)
 
-- Phones: staff open Clinora as a Telegram Mini App from the clinic bot. The server validates Telegram's signed init data (HMAC with the bot token, freshness window) on every session start and checks current roles on every request. No password in daily phone use.
+- Phones: the same screens run as a Telegram Mini App from the clinic bot or as the installed app on the home screen; doctors choose (customer interviews raised doubts about Telegram, so both ship and the usability test sets the default). In the Mini App, The server validates Telegram's signed init data (HMAC with the bot token, freshness window) on every session start and checks current roles on every request. No password in daily phone use.
 - Linking: the administrator creates a staff account; Clinora issues a single-use, expiring invite link; tapping it in Telegram binds that Telegram user id to the staff account. A Telegram id alone never grants access; blocking the staff account ends access on the next request.
 - Clinic PCs: the installed web app (PWA) stays signed in per device for the shift; people switch user with a short PIN so every action is attributed to the right person.
 - One backend, one database, live updates across devices.
@@ -50,6 +50,18 @@ The test: a 60-year-old doctor who only uses Telegram finishes the task on the f
 9. Before go-live, two real staff per role complete their main tasks unaided. Targets: register a patient under 60 s, take a payment under 30 s.
 
 Human-readable version for the founders: the Claude Doc "Clinora: what we're building".
+
+## Agent layer (the founders' "more agentic" pivot)
+
+The assistant turns speech or text into proposed actions in the clinic system; a person approves clinical and financial actions with one tap; read-only questions answer directly. Build every mutation now so the assistant can reuse it later:
+
+- Each mutation is a typed, validated server action (zod schema in, typed result out) with actor, clinic, idempotency key and audit, callable by the UI and later by the assistant. No business logic lives only in a React component or route handler.
+- The assistant always acts as the signed-in person, through the same permission checks. It never holds wider access.
+- Proposals are stored as drafts with source references (transcript segment ids) until approved; approval executes the action and records who approved which version.
+- If the AI provider is unavailable, every workflow completes by hand.
+- Speech accuracy (Uzbek, Russian, mixed) is measured on phone microphones in a real exam room before any accuracy claim.
+
+Previous planner's detailed AI briefs: `docs/backlog/ai-documentation/`.
 
 ## Data model direction
 

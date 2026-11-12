@@ -7,7 +7,7 @@ export const inpatient = {
   'inpatient.refresh':'Янгилаш', 'inpatient.loading':'Юкланмоқда…', 'inpatient.empty':'Ҳозирча беморлар йўқ',
   'inpatient.saved':'Сақланди', 'inpatient.saving':'Сақланмоқда…', 'inpatient.select':'Беморни очиш', 'inpatient.transfer':'Бошқа ўринга кўчириш',
   'inpatient.service':'Хизмат ёки дори', 'inpatient.quantity':'Миқдор', 'inpatient.addService':'Хизматни қўшиш',
-  'inpatient.medicineHelp':'Дори учун фақат тўлов ёзилади. Омбордан чиқариш ҳали уланмаган.',
+  'inpatient.medicineHelp':'Дори омбордан чиқарилади ва бир марта ҳисобланади. Дори етишмаса, дорихонага мурожаат қилинг.',
   'inpatient.caretaker':'Қаровчи', 'inpatient.name':'Қаровчининг тўлиқ исми', 'inpatient.phone':'Телефон (+998…)',
   'inpatient.dailyService':'Қаровчи учун кунлик хизмат (ихтиёрий)', 'inpatient.noCharge':'Тўловсиз', 'inpatient.addCaretaker':'Қаровчини қўшиш',
   'inpatient.discharge':'Беморни чиқариш', 'inpatient.confirmDischarge':'Якуний ҳисобни текширинг. Чиқариш ўринни бўшатади ва янги хизмат қўшишни тўхтатади.',

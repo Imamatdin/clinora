@@ -8,7 +8,7 @@ export const inpatientUzLatn:Record<InpatientKey,string>={
   'inpatient.refresh':'Yangilash', 'inpatient.loading':'Yuklanmoqda…', 'inpatient.empty':'Hozircha bemorlar yoʻq',
   'inpatient.saved':'Saqlandi', 'inpatient.saving':'Saqlanmoqda…', 'inpatient.select':'Bemorni ochish', 'inpatient.transfer':'Boshqa oʻringa koʻchirish',
   'inpatient.service':'Xizmat yoki dori', 'inpatient.quantity':'Miqdor', 'inpatient.addService':'Xizmatni qoʻshish',
-  'inpatient.medicineHelp':'Dori uchun faqat toʻlov yoziladi. Ombordan chiqarish hali ulanmagan.',
+  'inpatient.medicineHelp':'Dori ombordan chiqariladi va bir marta hisoblanadi. Dori yetishmasa, dorixonaga murojaat qiling.',
   'inpatient.caretaker':'Qarovchi', 'inpatient.name':'Qarovchining toʻliq ismi', 'inpatient.phone':'Telefon (+998…)',
   'inpatient.dailyService':'Qarovchi uchun kunlik xizmat (ixtiyoriy)', 'inpatient.noCharge':'Toʻlovsiz', 'inpatient.addCaretaker':'Qarovchini qoʻshish',
   'inpatient.discharge':'Bemorni chiqarish', 'inpatient.confirmDischarge':'Yakuniy hisobni tekshiring. Chiqarish oʻrinni boʻshatadi va yangi xizmat qoʻshishni toʻxtatadi.',

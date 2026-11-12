@@ -8,7 +8,7 @@ export const inpatientRu:Record<InpatientKey,string>={
   'inpatient.refresh':'Обновить', 'inpatient.loading':'Загрузка…', 'inpatient.empty':'Пациентов пока нет',
   'inpatient.saved':'Сохранено', 'inpatient.saving':'Сохранение…', 'inpatient.select':'Открыть пациента', 'inpatient.transfer':'Перевести на другую койку',
   'inpatient.service':'Услуга или лекарство', 'inpatient.quantity':'Количество', 'inpatient.addService':'Добавить услугу',
-  'inpatient.medicineHelp':'Для лекарства записывается только начисление. Списание со склада ещё не подключено.',
+  'inpatient.medicineHelp':'Лекарство списывается со склада с одним начислением. При нехватке обратитесь в аптеку.',
   'inpatient.caretaker':'Ухаживающий', 'inpatient.name':'ФИО ухаживающего', 'inpatient.phone':'Телефон (+998…)',
   'inpatient.dailyService':'Суточная услуга для ухаживающего (необязательно)', 'inpatient.noCharge':'Без оплаты', 'inpatient.addCaretaker':'Добавить ухаживающего',
   'inpatient.discharge':'Выписать пациента', 'inpatient.confirmDischarge':'Проверьте итоговый счёт. Выписка освобождает койку и запрещает новые услуги.',

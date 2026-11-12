@@ -4,6 +4,7 @@ import { DomainError } from '../identity/access.js';
 import { calculateInvoice, countBedDays, uzs, type BedDayRule, type Discount } from '../billing/index.js';
 import { requireRole, recordAudit, type ClinicContext } from '../../server/roles.js';
 import { priceAt } from '../../server/repo/prices.js';
+import { dispense } from '../pharmacy/actions.js';
 import { AdmitInput, TransferInput, ServiceInput, CaretakerInput, DailyInput, KeyInput, ChangeRuleInput, RuleInput, type InvoiceView, type WardView } from './contracts.js';
 
 export const WARD = ['ceo','administrator','inpatient'] as const;
@@ -126,11 +127,12 @@ export async function addService(ctx:ClinicContext,id:string,raw:unknown) {
   const i=parse(ServiceInput,raw);await guard(ctx);
   return retry(ctx,i.key,{action:'service',id,...i},async()=>{
     const a=await stay(ctx,id);await openBusinessDay(ctx);
-    const s=(await ctx.tx.query("SELECT kind FROM services WHERE clinic_id=$1 AND id=$2 AND is_active AND kind NOT IN ('bed','caretaker')",[ctx.clinicId,i.serviceId])).rows[0];
+    const s=(await ctx.tx.query("SELECT kind,track_stock FROM services WHERE clinic_id=$1 AND id=$2 AND is_active AND kind NOT IN ('bed','caretaker')",[ctx.clinicId,i.serviceId])).rows[0];
     if(!s)return fail('INVALID_INPUT');
-    // Task 012 is not on this branch's base. This is a priced consumption record, not a stock dispense.
-    const chargeId=await line(ctx,a.visit_id,i.serviceId,i.quantity,(await clock(ctx)).instant,'inpatient');
-    await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.service_added',id,{chargeId,stockDispensed:false});return {id:chargeId};
+    const stockDispensed=s.kind==='medicine'||(s.kind==='good'&&s.track_stock);
+    const chargeId=stockDispensed?(await dispense(ctx,{visitId:a.visit_id,serviceId:i.serviceId,qty:i.quantity,idempotencyKey:`inpatient:${i.key}`,source:'inpatient'})).chargeLineId
+      :await line(ctx,a.visit_id,i.serviceId,i.quantity,(await clock(ctx)).instant,'inpatient');
+    await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.service_added',id,{chargeId,stockDispensed});return {id:chargeId};
   });
 }
 export async function addCaretaker(ctx:ClinicContext,id:string,raw:unknown) {

@@ -13,10 +13,11 @@ export async function inpatientGraph(f:{pool:pg.Pool;owner:{clinicId:string;user
   await pool.query("INSERT INTO doctor_profiles(clinic_id,user_id,department_id,specialty_uz_cyrl) VALUES($1,$2,$3,'Синтетик шифокор') ON CONFLICT DO NOTHING",[c,u,dept]);
   for(const [kind,id] of Object.entries(services)){
     const serviceKind=kind==='bed2'?'bed':kind==='ultrasound'?'diagnostic':kind;
-    await pool.query('INSERT INTO services(id,clinic_id,kind,name_uz_cyrl) VALUES($1,$2,$3,$4)',[id,c,serviceKind,`Синтетик ${kind}`]);
+    await pool.query('INSERT INTO services(id,clinic_id,kind,name_uz_cyrl,track_stock) VALUES($1,$2,$3,$4,$5)',[id,c,serviceKind,`Синтетик ${kind}`,kind==='medicine']);
     const price={bed:'100000',bed2:'200000',lab:'250000',ultrasound:'150000',other:'100000',caretaker:'50000',medicine:'10000'}[kind];
     await pool.query("INSERT INTO service_prices(id,clinic_id,service_id,price_uzs,effective_from,set_by) VALUES($1,$2,$3,$4,'2000-01-01',$5)",[randomUUID(),c,id,price,u]);
   }
+  await pool.query("INSERT INTO stock_movements(id,clinic_id,service_id,qty,reason,created_by) VALUES($1,$2,$3,10,'receipt',$4)",[randomUUID(),c,services.medicine,u]);
   await pool.query("INSERT INTO rooms(id,clinic_id,department_id,name) VALUES($1,$2,$3,'101')",[room,c,dept]);
   await pool.query("INSERT INTO beds(id,clinic_id,room_id,label,bed_service_id) VALUES($1,$2,$3,'1',$4),($5,$2,$3,'2',$6)",[bed,c,room,services.bed,bed2,services.bed2]);
   await pool.query(`INSERT INTO patients(id,clinic_id,display_name,provenance) VALUES($1,$2,'Синтетик Бемор','{"source":"manual"}')`,[patient,c]);

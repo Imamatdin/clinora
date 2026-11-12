@@ -70,11 +70,16 @@ test('dated rules preserve old dates; caretaker daily charges and minimum shortf
   assert.equal((await get('')).rule.minimumDays,4);
 });
 test('minimum same-day stay, optional caretaker and service retries',async t=>{
-  const {g,post,admit}=await setup(t);const {id}=await admit();
+  const {f,g,post,admit}=await setup(t);const {id}=await admit();
   await post(`/${id}/caretakers`,{key:key(),fullName:'Synthetic No Charge',phone:'+998901234567',dailyServiceId:null});
   const input={key:key(),serviceId:g.services.medicine,quantity:2};
   assert.deepEqual(await post(`/${id}/services`,input),await post(`/${id}/services`,input));
   await post(`/${id}/services`,{...input,quantity:3},409);
+  const stock=(await f.pool.query("SELECT qty,charge_line_id FROM stock_movements WHERE service_id=$1 AND reason='dispense'",[g.services.medicine])).rows;
+  assert.deepEqual(stock.map(r=>r.qty),[-2]);
+  assert.equal((await f.pool.query('SELECT source FROM charge_lines WHERE id=$1',[stock[0].charge_line_id])).rows[0].source,'inpatient');
+  await post(`/${id}/services`,{key:key(),serviceId:g.services.medicine,quantity:9},409);
+  assert.equal((await f.pool.query('SELECT sum(qty)::int n FROM stock_movements WHERE service_id=$1',[g.services.medicine])).rows[0].n,8);
   const final=await post(`/${id}/discharge`,{key:key()});assert.equal(final.value,'120000');
 });
 test('business-day opener accrues existing stays atomically; missing historical price rolls back the opening',async t=>{
@@ -90,6 +95,7 @@ test('business-day opener accrues existing stays atomically; missing historical 
   await f.pool.query("INSERT INTO service_prices(id,clinic_id,service_id,price_uzs,effective_from,set_by) VALUES($1,$2,$3,100000,'2000-01-01',$4)",[key(),g.clinic,noPrice,g.actor]);
   assert.equal((await client.request(openPath,{})).status,201);
   assert.equal((await f.pool.query('SELECT count(*)::int n FROM bed_day_charges WHERE admission_id=$1',[g.admission])).rows[0].n,2);
+  const dispensed=await client.request(base+`/${g.admission}/services`,{key:key(),serviceId:g.services.medicine,quantity:1});assert.equal(dispensed.status,200);
   const r=await client.request(base+`/${g.admission}/services`,{key:key(),serviceId:g.services.other,quantity:0});assert.equal(r.status,422);
 });
 test('every inpatient route rejects wrong roles and foreign clinics; revocation applies to cached retry',async t=>{

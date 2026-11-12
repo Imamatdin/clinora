@@ -36,7 +36,7 @@ export async function pdf(title:string,rows:unknown[][],thermal=false):Promise<B
     const sizes=weights.map(n=>n*width),fontSize=thermal?8.5:9;
     doc.font(section?'bold':'body').fontSize(fontSize);
     const height=Math.max(...values.map((v,i)=>doc.heightOfString(v,{width:sizes[i]!-12})),13)+14;
-    if(doc.y+height>bottom){doc.addPage();heading();}
+    if(doc.y+height+(section?50:0)>bottom){doc.addPage();heading();}
     doc.font(section?'bold':'body').fontSize(fontSize);
     const y=doc.y;let x=margin;
     if(section||rowIndex%2===0)doc.rect(margin,y,width,height).fill(section?'#e9e1e7':'#f7f4ef');

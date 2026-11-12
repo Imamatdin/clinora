@@ -26,7 +26,7 @@ export function Dates({from,to,onChange,onSubmit,busy}:{from:string;to:string;on
     <button className="ceo-primary" disabled={busy}>{t('ceo.show')}</button>
   </form>;
 }
-export function Confirm({text,onConfirm,busy}:{text:string;onConfirm:()=>void;busy:boolean}) {
+export function Confirm({text,label=text,onConfirm,busy}:{text:string;label?:string;onConfirm:()=>void;busy:boolean}) {
   const [open,setOpen]=useState(false);
-  return <>{!open?<button className="ceo-primary" disabled={busy} onClick={()=>setOpen(true)}>{text}</button>:<div className="ceo-confirm" role="group" aria-label={text}><p>{text}</p><button className="ceo-primary" disabled={busy} onClick={()=>{setOpen(false);onConfirm();}}>{t('ceo.confirm')}</button><button disabled={busy} onClick={()=>setOpen(false)}>{t('ceo.cancel')}</button></div>}</>;
+  return <>{!open?<button className="ceo-primary" disabled={busy} onClick={()=>setOpen(true)}>{label}</button>:<div className="ceo-confirm" role="group" aria-label={text}><p>{text}</p><button className="ceo-primary" disabled={busy} onClick={()=>{setOpen(false);onConfirm();}}>{t('ceo.confirm')}</button><button disabled={busy} onClick={()=>setOpen(false)}>{t('ceo.cancel')}</button></div>}</>;
 }

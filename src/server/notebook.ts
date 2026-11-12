@@ -8,11 +8,14 @@ import { DomainError, requireClinicalAccess } from '../modules/identity/access.j
 import { transaction, type Tx } from './database.js';
 import { digest, dummyHash, passwordHash, passwordMatches, same, token } from './security.js';
 import { sortVisits } from '../contracts/timeline.js';
+import { PasswordChangeInput } from '../contracts/clinic.js';
+import { identifierKind } from '../modules/identity/roles.js';
+import { clinicRoute } from './clinic-routes.js';
 
 const fail = (code: ConstructorParameters<typeof DomainError>[0]): never => { throw new DomainError(code); };
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => { const result = schema.safeParse(value); return result.success ? result.data : fail('INVALID_INPUT'); };
 const iso = (value: Date) => value.toISOString();
-type Actor = { userId: string; sessionId: string; email: string; name: string; csrf: string; verification: unknown; principal: Principal };
+type Actor = { userId: string; sessionId: string; email: string | null; login: string | null; phone: string | null; name: string; csrf: string; verification: unknown; mustChangePassword: boolean; principal: Principal };
 type Access = { actor: Actor; member: Membership; owner: boolean };
 export type ApiConfig = { pool: pg.Pool; origin: string; secureCookies: boolean };
 export type ApiResult = { status?: number; body: unknown; cookie?: string };
@@ -31,10 +34,11 @@ async function actorFor(tx: Tx, req: IncomingMessage): Promise<Actor> {
   const cookies = (req.headers.cookie ?? '').split(';').map(v => v.trim()).filter(v => v.startsWith('clinora_session='));
   const raw = cookies.length === 1 ? cookies[0]!.slice('clinora_session='.length) : '';
   if (!/^[a-f0-9]{64}$/.test(raw)) return fail('UNAUTHENTICATED');
-  const row = (await tx.query(`SELECT s.id,s.user_id,s.expires_at,a.email,a.display_name,a.professional_verification
+  const row = (await tx.query(`SELECT s.id,s.user_id,s.expires_at,a.email,a.login,a.phone,a.must_change_password,a.display_name,a.professional_verification
     FROM sessions s JOIN accounts a ON a.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND a.status='active' FOR SHARE OF s,a`, [digest(raw)])).rows[0];
   if (!row) return fail('UNAUTHENTICATED');
-  return { userId: row.user_id, sessionId: row.id, email: row.email, name: row.display_name, csrf: digest('csrf:' + raw), verification: row.professional_verification,
+  return { userId: row.user_id, sessionId: row.id, email: row.email, login: row.login, phone: row.phone, name: row.display_name, csrf: digest('csrf:' + raw),
+    verification: row.professional_verification, mustChangePassword: row.must_change_password,
     principal: { userId: row.user_id, sessionId: row.id, expiresAt: iso(row.expires_at), accountStatus: 'active' } };
 }
 async function accessFor(tx: Tx, actor: Actor, clinic: string): Promise<Access> {
@@ -97,10 +101,10 @@ async function idempotent(tx: Tx, access: Access, operation: string, key: unknow
   await tx.query('INSERT INTO idempotency_records(clinic_id,actor_id,operation,key,payload_hash,response) VALUES($1,$2,$3,$4,$5,$6)', [...scope, hash, JSON.stringify(result)]);
   return result;
 }
-async function throttle(pool: pg.Pool, email: string, ip: string) {
+async function throttle(pool: pg.Pool, identity: string, ip: string) {
   // Server socket address only; no trust in client X-Forwarded-For headers.
   await transaction(pool, async tx => {
-    for (const [key, limit] of [[digest('ip:' + ip), 40], [digest('email:' + email), 8]] as const) {
+    for (const [key, limit] of [[digest('ip:' + ip), 40], [digest('id:' + identity), 8]] as const) {
       const row = (await tx.query(`INSERT INTO login_limits(key,attempts,reset_at) VALUES($1,1,now()+interval '15 minutes')
         ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN login_limits.reset_at<now() THEN 1 ELSE login_limits.attempts+1 END,
         reset_at=CASE WHEN login_limits.reset_at<now() THEN now()+interval '15 minutes' ELSE login_limits.reset_at END RETURNING attempts`, [key])).rows[0];
@@ -124,9 +128,11 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
     return { status: 202, body: { message: 'If this address is available, an unprivileged account has been created. Sign in to continue.' } };
   }
   if (path === '/api/auth/login' && method === 'POST') {
-    const input = parse(LoginInput, await jsonBody(req)), email = input.email.toLowerCase();
-    await throttle(config.pool, email, req.socket.remoteAddress ?? 'unknown');
-    const account = (await config.pool.query('SELECT * FROM accounts WHERE email=$1', [email])).rows[0];
+    const input = parse(LoginInput, await jsonBody(req));
+    const who = identifierKind('identifier' in input ? input.identifier : input.email);
+    // Unparseable identifiers are still throttled and still pay the KDF, like an unknown account.
+    await throttle(config.pool, who ? `${who.column}:${who.value}` : 'invalid', req.socket.remoteAddress ?? 'unknown');
+    const account = who ? (await config.pool.query(`SELECT * FROM accounts WHERE ${who.column}=$1`, [who.value])).rows[0] : undefined;
     const matches = await passwordMatches(input.password, account?.password_hash ?? dummyHash);
     if (!matches || !account || account.status !== 'active') return fail('UNAUTHENTICATED');
     const raw = token();
@@ -137,14 +143,30 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
     const actor = await actorFor(tx, req);
     if (mutation && !same(String(req.headers['x-csrf-token'] ?? ''), actor.csrf)) return fail('FORBIDDEN');
     if (path === '/api/auth/me' && method === 'GET') {
-      const memberships = (await tx.query(`SELECT m.clinic_id id,c.name,m.role,m.is_owner "isOwner",m.clinical_access "clinicalAccess",m.patient_scope "patientScope"
+      // Roles are display hints for navigation only; every route rechecks them in the database.
+      const memberships = (await tx.query(`SELECT m.clinic_id id,c.name,m.is_owner "isOwner",m.clinical_access "clinicalAccess",m.patient_scope "patientScope",
+          coalesce((SELECT array_agg(r.role ORDER BY r.role) FROM membership_roles r WHERE r.clinic_id=m.clinic_id AND r.user_id=m.user_id),'{}') roles
         FROM memberships m JOIN clinics c ON c.id=m.clinic_id WHERE m.user_id=$1 AND m.status='active' ORDER BY c.name`, [actor.userId])).rows;
-      return { body: { id: actor.userId, name: actor.name, email: actor.email, csrf: actor.csrf, professionalVerification: actor.verification, clinics: memberships } };
+      return { body: { id: actor.userId, name: actor.name, email: actor.email, login: actor.login, phone: actor.phone, csrf: actor.csrf,
+        mustChangePassword: actor.mustChangePassword, professionalVerification: actor.verification, clinics: memberships } };
     }
     if (path === '/api/auth/logout' && method === 'POST') {
       await tx.query('DELETE FROM sessions WHERE id=$1', [actor.sessionId]);
       return { body: { ok: true }, cookie: `clinora_session=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0${config.secureCookies ? '; Secure' : ''}` };
     }
+    if (path === '/api/auth/password' && method === 'POST') {
+      await throttle(config.pool, `password:${actor.userId}`, req.socket.remoteAddress ?? 'unknown');
+      const input = parse(PasswordChangeInput, await jsonBody(req));
+      const account = (await tx.query('SELECT password_hash FROM accounts WHERE id=$1 FOR UPDATE', [actor.userId])).rows[0];
+      if (!account || !await passwordMatches(input.currentPassword, account.password_hash)) return fail('FORBIDDEN');
+      await tx.query('UPDATE accounts SET password_hash=$2, must_change_password=false WHERE id=$1', [actor.userId, await passwordHash(input.newPassword)]);
+      // Other devices signed in with the old password are signed out; this session continues.
+      await tx.query('DELETE FROM sessions WHERE user_id=$1 AND id<>$2', [actor.userId, actor.sessionId]);
+      await audit(tx, actor.userId, null, 'account.password_changed', actor.userId);
+      return { body: { ok: true } };
+    }
+    // A temporary password only unlocks changing it. Enforced here, not just in the interface.
+    if (actor.mustChangePassword) return fail('PASSWORD_CHANGE_REQUIRED');
     if (path === '/api/invitations/accept' && method === 'POST') {
       const input = parse(AcceptInviteInput, await jsonBody(req));
       const invite = (await tx.query('SELECT * FROM invitations WHERE token_hash=$1 AND email=$2 AND expires_at>now() AND consumed_at IS NULL AND revoked_at IS NULL FOR UPDATE', [digest(input.token), actor.email])).rows[0];
@@ -155,13 +177,17 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
       const prior = (await tx.query('SELECT id FROM memberships WHERE clinic_id=$1 AND user_id=$2', [invite.clinic_id, actor.userId])).rows[0];
       if (prior) return fail('FORBIDDEN'); // Reinstatement of a revoked clinician requires a separate owner workflow.
       await tx.query("INSERT INTO memberships(id,clinic_id,user_id,role,clinical_access,status,granted_by) VALUES($1,$2,$3,'clinician',true,'active',$4)", [randomUUID(), invite.clinic_id, actor.userId, invite.created_by]);
+      await tx.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'doctor',$3)", [invite.clinic_id, actor.userId, invite.created_by]);
       await tx.query('UPDATE invitations SET consumed_at=now() WHERE id=$1', [invite.id]);
       await audit(tx, actor.userId, invite.clinic_id, 'membership.accepted', invite.id);
       return { body: { ok: true } };
     }
     const parts = path.split('/').filter(Boolean);
     if (parts[0] !== 'api' || parts[1] !== 'clinics' || !Id.safeParse(parts[2]).success) return fail('NOT_FOUND');
-    const clinic = parts[2]!, access = await accessFor(tx, actor, clinic);
+    const clinic = parts[2]!;
+    const routed = await clinicRoute(tx, actor.userId, clinic, parts.slice(3).join('/'), method, req, jsonBody);
+    if (routed) return routed;
+    const access = await accessFor(tx, actor, clinic);
     if (parts[3] === 'invitations' && parts.length === 4 && method === 'POST') {
       if (!access.owner) return fail('FORBIDDEN');
       const input = parse(InviteInput, await jsonBody(req)), raw = token();

@@ -92,7 +92,7 @@ test('language switch and simulated demo fallback', async ({ page }) => {
     await openVisit(page, f, 'Fictional Fallback — demo only');
     const panel = page.locator('.assistant');
     // One header switch changes every screen, the assistant panel included (task 017).
-    const languages = page.getByRole('banner').getByRole('group', { name: T('app.language') });
+    const languages = page.getByRole('banner').locator('.lang-switch'); // its label changes with the language
     await languages.getByRole('button', { name: 'Рус', exact: true }).click();
     await expect(panel.getByRole('heading', { name: assistantDictionaries.ru.title })).toBeVisible();
     await languages.getByRole('button', { name: 'Oʻzb', exact: true }).click();

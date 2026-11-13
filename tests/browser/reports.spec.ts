@@ -32,7 +32,7 @@ for(const width of [1440,390])test(`C8: real dashboard, drilldown, PDF download 
     await page.getByRole('button',{name:C('ceo.back'),exact:true}).click();
     await page.getByText(C('ceo.more'),{exact:true}).click();const download=page.waitForEvent('download',{timeout:10000});await page.getByRole('button',{name:C('ceo.pdf'),exact:true}).click();const pdf=await download.catch(e=>{throw new Error(`${e.message}; browser errors: ${errors.join('; ')}`);});expect(pdf.suggestedFilename()).toBe('clinora-report.pdf');await pdf.saveAs(`work/browser-evidence/ceo-report-${width}.pdf`);
     // Task 017: one header language switch for every screen.
-    const languages=page.getByRole('banner').getByRole('group',{name:T('app.language')});
+    const languages=page.getByRole('banner').locator('.lang-switch'); // its label changes with the language
     await languages.getByRole('button',{name:'Oʻzb',exact:true}).click();await expect(page.getByRole('heading',{name:'Klinika koʻrsatkichlari'})).toBeVisible();
     await languages.getByRole('button',{name:'Ўзб',exact:true}).click();
     await page.getByRole('button',{name:T('module.payroll'),exact:true}).click();await expect(page.getByRole('heading',{name:C('ceo.payrollTitle'),exact:true})).toBeVisible();

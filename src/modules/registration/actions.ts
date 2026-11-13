@@ -41,6 +41,8 @@ export const PatientUpdateInput = z.object({ ...patientFields, expectedRevision:
 export const VisitInput = z.object({
   patientId: id,
   points: z.array(z.object({ queuePointId: id, serviceIds: z.array(id).max(20) }).strict()).min(1).max(10),
+  /** Task 017: the registrar marks an arrival for admission; inpatient staff can admit only inpatient visits. */
+  type: z.enum(['outpatient', 'inpatient']).default('outpatient'),
   idempotencyKey: Key
 }).strict();
 export const OfflineInput = z.object({
@@ -279,8 +281,8 @@ export async function createVisit(ctx: ClinicContext, raw: z.input<typeof VisitI
     }
     const at: Date = (await ctx.tx.query('SELECT now() at')).rows[0].at;
     const visitId = randomUUID();
-    await ctx.tx.query("INSERT INTO visits(id,clinic_id,patient_id,business_day_id,type,created_by) VALUES($1,$2,$3,$4,'outpatient',$5)",
-      [visitId, ctx.clinicId, person.id, day.id, ctx.actorId]);
+    await ctx.tx.query('INSERT INTO visits(id,clinic_id,patient_id,business_day_id,type,created_by) VALUES($1,$2,$3,$4,$5,$6)',
+      [visitId, ctx.clinicId, person.id, day.id, input.type, ctx.actorId]);
     const tickets: TicketView[] = []; let charges = 0;
     for (const route of routes) {
       const point = points.get(route.queuePointId)!;

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { processFixture, T } from './process-fixture.js';
 import { assistant } from '../../src/web/i18n/assistant.uz-Cyrl.js';
 import { assistantUzLatn } from '../../src/web/i18n/assistant.uz-Latn.js';
@@ -16,19 +17,22 @@ const A = assistantDictionaries['uz-Cyrl'];
 // Chromium's fake microphone feeds a real MediaRecorder stream through the real chunk upload path.
 test.use({ launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'], ...(process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {}) }, permissions: ['microphone'] });
 
-async function openVisit(page: Page, origin: string, password: string, name: string) {
-  await page.goto(origin);
+/** Task 017: the notebook is folded into the visit screen; the assistant opens from a called patient. */
+async function openVisit(page: Page, f: Awaited<ReturnType<typeof processFixture>>, name: string) {
+  const c = f.owner.clinicId, u = f.owner.userId, k = () => randomUUID(), day = k(), point = k(), patient = k(), visit = k();
+  await f.pool.query("INSERT INTO business_days(id,clinic_id,business_date,status,opened_by) VALUES($1,$2,(now() AT TIME ZONE 'Asia/Tashkent')::date,'open',$3)", [day, c, u]);
+  await f.pool.query("INSERT INTO queue_points(id,clinic_id,kind,user_id,name_uz_cyrl) VALUES($1,$2,'doctor',$3,'Синтетик хона 3')", [point, c, u]);
+  await f.pool.query("INSERT INTO patients(id,clinic_id,display_name,full_name,provenance) VALUES($1,$2,$3,$3,'{}')", [patient, c, name]);
+  await f.pool.query('INSERT INTO patient_assignments(clinic_id,patient_id,user_id) VALUES($1,$2,$3)', [c, patient, u]);
+  await f.pool.query("INSERT INTO visits(id,clinic_id,patient_id,business_day_id,type,created_by) VALUES($1,$2,$3,$4,'outpatient',$5)", [visit, c, patient, day, u]);
+  await f.pool.query('INSERT INTO queue_tickets(id,clinic_id,business_day_id,visit_id,queue_point_id,number) VALUES($1,$2,$3,$4,$5,1)', [k(), c, day, visit, point]);
+  await page.goto(f.origin);
   await page.getByLabel(T('auth.identifier'), { exact: true }).fill('owner@example.test');
-  await page.getByLabel(T('auth.password'), { exact: true }).fill(password);
+  await page.getByLabel(T('auth.password'), { exact: true }).fill(f.password);
   await page.getByRole('button', { name: T('auth.signIn'), exact: true }).click();
   await page.getByRole('navigation', { name: T('app.navigation') }).getByRole('button', { name: T('role.doctor'), exact: true }).click();
-  await page.getByRole('button', { name: T('notebook.newPatient'), exact: true }).click();
-  await page.getByLabel(T('notebook.patientName'), { exact: true }).fill(name);
-  await page.getByRole('button', { name: T('notebook.createPatient'), exact: true }).click();
-  await page.getByRole('button', { name: T('notebook.newEncounter') }).click();
-  await page.getByLabel(T('notebook.visitDate'), { exact: true }).fill('2026-11-19');
-  await page.getByLabel(T('notebook.location'), { exact: true }).fill('Synthetic room 3');
-  await page.getByRole('button', { name: T('notebook.createEncounter'), exact: true }).click();
+  await page.getByRole('button', { name: T('doctor.callNext'), exact: true }).click();
+  await page.getByRole('button', { name: T('doctor.start'), exact: true }).click();
   await expect(page.getByRole('heading', { name: A.title })).toBeVisible();
 }
 async function reviewAndApprove(page: Page) {
@@ -63,7 +67,7 @@ for (const width of [1280, 390]) test(`doctor records with the microphone, revie
   const f = await processFixture();
   try {
     await page.setViewportSize({ width, height: 900 });
-    await openVisit(page, f.origin, f.password, 'Fictional Dilnoza — demo only');
+    await openVisit(page, f, 'Fictional Dilnoza — demo only');
     const panel = page.locator('.assistant');
     const start = panel.getByRole('button', { name: A.start, exact: true });
     await expect(start).toBeDisabled(); // Recording needs the consent acknowledgement first.
@@ -85,13 +89,15 @@ test('language switch and simulated demo fallback', async ({ page }) => {
   const f = await processFixture();
   try {
     await page.setViewportSize({ width: 1280, height: 900 });
-    await openVisit(page, f.origin, f.password, 'Fictional Fallback — demo only');
+    await openVisit(page, f, 'Fictional Fallback — demo only');
     const panel = page.locator('.assistant');
-    await panel.getByRole('button', { name: 'Рус', exact: true }).click();
+    // One header switch changes every screen, the assistant panel included (task 017).
+    const languages = page.getByRole('banner').locator('.lang-switch'); // its label changes with the language
+    await languages.getByRole('button', { name: 'Рус', exact: true }).click();
     await expect(panel.getByRole('heading', { name: assistantDictionaries.ru.title })).toBeVisible();
-    await panel.getByRole('button', { name: 'Oʻzb', exact: true }).click();
+    await languages.getByRole('button', { name: 'Oʻzb', exact: true }).click();
     await expect(panel.getByRole('heading', { name: assistantDictionaries['uz-Latn'].title })).toBeVisible();
-    await panel.getByRole('button', { name: 'Ўзб', exact: true }).click();
+    await languages.getByRole('button', { name: 'Ўзб', exact: true }).click();
     await panel.getByRole('button', { name: A.demoRun }).click();
     await reviewAndApprove(page);
   } finally { await f.close(); }

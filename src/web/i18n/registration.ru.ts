@@ -62,6 +62,7 @@ export const registrationRu: Record<keyof typeof registration, string> = {
   'registration.waiting': 'В очереди: {count}',
   'registration.noServices': 'Услуги не назначены',
   'registration.noPrice': 'цена не задана',
+  'registration.admit': 'Будет госпитализирован(а) в стационар',
   'registration.total': 'Итого: {amount}',
   'registration.print': 'Печать талонов',
   'registration.printAgain': 'Напечатать талоны ещё раз',

@@ -4,6 +4,8 @@ import type { doctor } from './doctor.uz-Cyrl.js';
 export const doctorRu: Record<keyof typeof doctor, string> = {
   'doctor.title': 'Моя очередь',
   'doctor.language': 'Язык',
+  'doctor.inpatients': 'Мои госпитализированные пациенты',
+  'doctor.openNote': 'Открыть дневниковую запись',
   'doctor.loading': 'Загрузка…',
   'doctor.refresh': 'Обновить',
   'doctor.noDay': 'Рабочий день не открыт. Очередь появится здесь, когда администратор откроет день.',

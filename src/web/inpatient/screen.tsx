@@ -7,15 +7,17 @@ import { inpatientUzLatn } from '../i18n/inpatient.uz-Latn.js';
 import { inpatientRu } from '../i18n/inpatient.ru.js';
 import type { WardView, InvoiceView } from '../../modules/inpatient/contracts.js';
 
-const languages=[{id:'uz-Cyrl',label:'Ўзб'},{id:'uz-Latn',label:'Oʻzb'},{id:'ru',label:'Рус'}];
+import { useLocale } from '../i18n/locale.js';
 
 function Screen({clinic,request,myId,setDirty}:ModuleProps) {
-  const [locale,setLocale]=useState<'uz-Cyrl'|'uz-Latn'|'ru'>(()=>{const saved=localStorage.getItem(`inpatient-locale-${myId}`);return saved==='ru'||saved==='uz-Latn'?saved:'uz-Cyrl';});
+  const locale=useLocale();
   const dict={'uz-Cyrl':inpatient,'uz-Latn':inpatientUzLatn,ru:inpatientRu}[locale];
   const t=(key:InpatientKey)=>dict[key];
   const amount=(value:string)=>BigInt(value).toLocaleString('ru-RU');
   const [data,setData]=useState<WardView|null>(null),[selected,setSelected]=useState(''),[bill,setBill]=useState<InvoiceView|null>(null);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[confirm,setConfirm]=useState(false),[mine,setMine]=useState(false);
+  // Task 017: the admit form offers only beds of the chosen department (the server refuses others).
+  const [admitDept,setAdmitDept]=useState('');
   const pending=useRef<{payload:string;key:string}|null>(null);
   const base=`/api/clinics/${clinic.id}/inpatient`;
   const canWrite=clinic.roles.some(r=>['ceo','administrator','inpatient'].includes(r));
@@ -27,20 +29,21 @@ function Screen({clinic,request,myId,setDirty}:ModuleProps) {
     const payload=JSON.stringify({path,value});if(pending.current?.payload!==payload)pending.current={payload,key:crypto.randomUUID()};
     const result=await request(`${base}${path}`,{...value,key:pending.current.key});pending.current=null;setDirty(false);return result;
   }
-  function submit(e:FormEvent<HTMLFormElement>,path:string,build:(f:FormData)=>Record<string,unknown>){e.preventDefault();const form=e.currentTarget,value=build(new FormData(form));void run(async()=>{await mutate(path,value);form.reset();const details=form.closest('details');if(details)details.open=false;await refresh();if(selected)setBill(await request(`${base}/${selected}/invoice`));setNotice(t('inpatient.saved'));});}
+  function submit(e:FormEvent<HTMLFormElement>,path:string,build:(f:FormData)=>Record<string,unknown>){e.preventDefault();const form=e.currentTarget,value=build(new FormData(form));void run(async()=>{await mutate(path,value);form.reset();setAdmitDept("");const details=form.closest('details');if(details)details.open=false;await refresh();if(selected)setBill(await request(`${base}/${selected}/invoice`));setNotice(t('inpatient.saved'));});}
   const choose=(name:string,options:{id:string;name:string}[],required=true)=><label>{t(`inpatient.${name}` as InpatientKey)}<select name={name} required={required} aria-label={t(`inpatient.${name}` as InpatientKey)} defaultValue=""><option value="">{t(required?'inpatient.choose':'inpatient.noCharge')}</option>{options.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>;
   const freeBeds=data?.beds.filter(b=>!b.admission_id).map(b=>({id:b.id,name:`${b.room} · ${b.label}`}))??[];
   const active=data?.admissions.find(a=>a.id===selected);
   const stays=data?.admissions.filter(a=>!mine||a.attending_user_id===myId)??[];
   return <div className="inpatient">
-    <header><h2>{t('inpatient.title')}</h2><label>{t('inpatient.language')}<select value={locale} onChange={e=>{const next=e.target.value as typeof locale;setLocale(next);localStorage.setItem(`inpatient-locale-${myId}`,next);}}>{languages.map(l=><option key={l.id} value={l.id}>{l.label}</option>)}</select></label></header>
+    <header><h2>{t('inpatient.title')}</h2></header>
     {error&&<p role="alert">{error}</p>}<p role="status">{busy?t('inpatient.saving'):notice}</p>
     <button disabled={busy} onClick={()=>void run(refresh)}>{t('inpatient.refresh')}</button>
     {!data?<p>{t('inpatient.loading')}</p>:<>
       <section aria-label={t('inpatient.room')} className="bed-map">{data.beds.map(b=><div key={b.id} data-occupied={!!b.admission_id}><strong>{b.room} · {b.label}</strong><p>{b.admission_id?`${t('inpatient.occupied')} · ${b.patient}`:t('inpatient.free')}</p></div>)}</section>
       {canWrite&&<details><summary>{t('inpatient.admit')}</summary><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,'/admit',f=>({visitId:f.get('visit'),departmentId:f.get('department'),doctorId:f.get('doctor'),bedId:f.get('bed'),expectedDischarge:f.get('expected')||null}))}><fieldset disabled={busy}>
         {choose('visit',data.visits.map(v=>({id:v.id,name:`${v.patient_no} · ${v.patient}`})))}
-        {choose('department',data.departments)}{choose('doctor',data.doctors)}{choose('bed',freeBeds)}
+        <label>{t('inpatient.department')}<select name="department" required aria-label={t('inpatient.department')} value={admitDept} onChange={e=>setAdmitDept(e.target.value)}><option value="">{t('inpatient.choose')}</option>{data.departments.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
+        {choose('doctor',data.doctors)}{choose('bed',data.beds.filter(b=>!b.admission_id&&(!admitDept||!b.department_id||b.department_id===admitDept)).map(b=>({id:b.id,name:`${b.room} · ${b.label}`})))}
         <label>{t('inpatient.expected')}<input name="expected" type="date" min={data.today}/></label><button>{t('inpatient.admit')}</button>
       </fieldset></form></details>}
       <label><input type="checkbox" checked={mine} onChange={e=>setMine(e.target.checked)}/>{t('inpatient.myPatients')}</label>

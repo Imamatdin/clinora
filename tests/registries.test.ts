@@ -16,10 +16,12 @@ test('route registry keeps the task-003A routes and rejects a second claim on a 
 test('web module registry: placeholders cover every role and a registered module replaces its placeholder', () => {
   assert.deepEqual(Object.keys(PLANNED).sort(), [...ROLES].sort());
   assert.equal(new Set(MODULES.map(m => m.id)).size, MODULES.length);
-  const fake: WebModule = { id: 'registration', roles: ['registrar'], label: 'module.registration', Screen: () => null };
-  assert.deepEqual(modulesFor('registrar', [fake]).map(m => m.id), ['registration']);
-  assert.ok(!plannedFor('registrar', [fake]).includes('module.registration'));
-  assert.ok(plannedFor('registrar', []).includes('module.registration'));
+  const fake: WebModule = { id: 'queue-monitor', roles: ['administrator'], label: 'module.queueMonitor', Screen: () => null };
+  assert.deepEqual(modulesFor('administrator', [fake]).map(m => m.id), ['queue-monitor']);
+  assert.ok(!plannedFor('administrator', [fake]).includes('module.queueMonitor'));
+  assert.ok(plannedFor('administrator', []).includes('module.queueMonitor'));
+  // Task 017: no built feature still shows a "coming soon" placeholder.
+  for (const role of ROLES) assert.deepEqual(plannedFor(role).filter(k => k !== 'module.queueMonitor'), [], role);
 });
 
 test('each role lands on its own main screen (the first registered module for that role)', () => {

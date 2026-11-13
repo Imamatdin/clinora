@@ -135,6 +135,37 @@ export async function completeConsultation(ctx: ClinicContext, ticketId: string,
   });
 }
 
+// ---------- Ward rounds (task 017: replaces the old notebook's assigned-patient list) ----------
+
+/** The doctor's admitted patients (attending doctor, still admitted): name, room and bed, admission date. */
+export async function myInpatients(ctx: ClinicContext) {
+  const { c, scope } = await doctor(ctx);
+  const rows = (await c.tx.query(`SELECT a.id, a.admitted_at, v.patient_id, coalesce(p.full_name, p.display_name) name, p.patient_no,
+      (SELECT r.name || ' · ' || b.label FROM bed_assignments ba JOIN beds b ON b.id=ba.bed_id JOIN rooms r ON r.id=b.room_id
+        WHERE ba.admission_id=a.id AND ba.to_at IS NULL LIMIT 1) bed
+    FROM admissions a JOIN visits v ON v.clinic_id=a.clinic_id AND v.id=a.visit_id JOIN patients p ON p.clinic_id=v.clinic_id AND p.id=v.patient_id
+    WHERE a.clinic_id=$1 AND a.attending_user_id=$2 AND a.status='admitted'
+      AND ($3 = 'clinic' OR EXISTS (SELECT 1 FROM patient_assignments x WHERE x.clinic_id=a.clinic_id AND x.patient_id=v.patient_id AND x.user_id=$2))
+    ORDER BY a.admitted_at`, [c.clinicId, c.actorId, scope])).rows;
+  return rows.map(r => ({ admissionId: r.id as string, patientId: r.patient_id as string, name: r.name as string, patientNo: r.patient_no as number | null,
+    bed: (r.bed ?? null) as string | null, admittedAt: r.admitted_at }));
+}
+
+/** Opens (creating on first use) the attending doctor's note for an admission's visit; no queue ticket involved. */
+export async function openAdmission(ctx: ClinicContext, admissionId: string, raw: z.input<typeof KeyInput>) {
+  const { c, scope } = await doctor(ctx); const input = KeyInput.parse(raw);
+  return once(c, 'doctor.open_admission', scoped(input, { admissionId }), async () => {
+    const a = (await c.tx.query(`SELECT a.visit_id, v.patient_id, coalesce((SELECT r.name || ' · ' || b.label FROM bed_assignments ba JOIN beds b ON b.id=ba.bed_id
+        JOIN rooms r ON r.id=b.room_id WHERE ba.admission_id=a.id AND ba.to_at IS NULL LIMIT 1), 'Стационар') point_name
+      FROM admissions a JOIN visits v ON v.clinic_id=a.clinic_id AND v.id=a.visit_id
+      WHERE a.clinic_id=$1 AND a.id=$2 AND a.attending_user_id=$3 AND a.status='admitted' FOR SHARE OF a`, [c.clinicId, admissionId, c.actorId])).rows[0];
+    if (!a) return fail('NOT_FOUND');
+    await patientInScope(c, scope, a.patient_id);
+    const enc = await ensureEncounter(c, a);
+    return { admissionId, patientId: a.patient_id as string, visitId: a.visit_id as string, ...enc };
+  });
+}
+
 // ---------- Patient card ----------
 
 /** Patient summary, previous visits with their diagnosis, and lab results. Routed patients only. */

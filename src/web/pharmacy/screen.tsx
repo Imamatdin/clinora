@@ -2,12 +2,13 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { ModuleProps, WebModule } from '../modules.js';
 import { errorText } from '../i18n/index.js';
 import { ApiFailure } from '../api.js';
-import { languages, translator, type Locale } from './i18n.js';
+import { translator } from './i18n.js';
+import { useLocale } from '../i18n/locale.js';
 type Item = { id:string; name:string; on_hand:string; threshold:number; unit:string };
 export type Choice = { id:string; name:string; admission_id?:string|null };
 type Movement = { id:string; qty:number; reason:'receipt'|'dispense'|'adjustment'|'return'; note:string|null; created_at:string };
 export function Pharmacy({ clinic, request, setDirty }:ModuleProps) {
-  const [locale,setLocale] = useState<Locale>('uz-Cyrl'), t = translator(locale);
+  const locale = useLocale(), t = translator(locale);
   const [items,setItems] = useState<Item[]>([]), [visits,setVisits] = useState<Choice[]>([]), [moves,setMoves] = useState<Movement[]>([]);
   const [item,setItem] = useState(''), [mode,setMode] = useState<'receipt'|'dispense'|'adjust'|'threshold'>('receipt');
   const [busy,setBusy] = useState(true), [error,setError] = useState(''), [notice,setNotice] = useState('');
@@ -27,7 +28,7 @@ export function Pharmacy({ clinic, request, setDirty }:ModuleProps) {
     catch(e) {setError(errorText(e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE'));}finally{setBusy(false);}
   }
   const selected = items.find(i=>i.id===item);
-  return <section><h2>{t('pharmacy.title')}</h2><label>{t('pharmacy.language')}<select style={{minHeight:48}} aria-label={t('pharmacy.language')} value={locale} onChange={e=>setLocale(e.target.value as Locale)}>{languages.map(l=><option key={l.id} value={l.id}>{l.label}</option>)}</select></label>
+  return <section><h2>{t('pharmacy.title')}</h2>
     {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}{busy&&<p role="status">{t('pharmacy.loading')}</p>}
     <button style={{minHeight:48}} disabled={busy} onClick={()=>{setBusy(true);load().catch(()=>setError(errorText('SERVICE_UNAVAILABLE'))).finally(()=>setBusy(false));}}>{t('pharmacy.refresh')}</button>
     {!busy&&!items.length&&<p>{t('pharmacy.empty')}</p>}

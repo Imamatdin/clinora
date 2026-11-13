@@ -6,6 +6,7 @@ import { recordAudit, type ClinicContext } from '../../server/roles.js';
 import { computeReport } from '../reports/actions.js';
 import { records } from '../reports/records.js';
 import { onBusinessDayOpen } from '../inpatient/actions.js';
+import { postPendingConfirmations } from '../lab/actions.js';
 
 /*
  * Business-day server actions. The business date is always the clinic's local calendar date
@@ -38,6 +39,7 @@ export async function openDay(ctx: ClinicContext): Promise<BusinessDayView> {
   if (!inserted) return fail('INVALID_TRANSITION');
   await recordAudit(ctx.tx, ctx.actorId, ctx.clinicId, 'business_day.opened', id);
   await onBusinessDayOpen(ctx);
+  await postPendingConfirmations(ctx, id); // Task 017: late lab confirmations made while no day was open.
   return view((await ctx.tx.query(`${SELECT} WHERE d.id=$1`, [id])).rows[0]);
 }
 

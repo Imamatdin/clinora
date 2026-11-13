@@ -42,17 +42,9 @@ export const MODULES: readonly WebModule[] = [
   registrationModule, catalogModule, labModule, reportsModule, payrollModule, exportModule,
 ];
 
-/** Placeholders per role for increments not yet built. A registered module with the same label hides its placeholder. */
+/** Placeholders per role for increments not yet built (task 017: built features no longer show "coming soon"). */
 export const PLANNED: Record<Role, UiKey[]> = {
-  ceo: ['module.dashboard', 'module.reports', 'module.payroll', 'module.export'],
-  administrator: ['module.catalog', 'module.queueMonitor'],
-  // Task 007: search, registration and tickets are one registration screen.
-  registrar: ['module.registration'],
-  doctor: ['module.myQueue'],
-  laboratory: ['module.labOrders'],
-  cashier: ['module.payments', 'module.discounts', 'module.receipts', 'module.cashReport'],
-  inpatient: ['module.admissions', 'module.beds', 'module.bedCharges'],
-  pharmacy: []
+  ceo: [], administrator: ['module.queueMonitor'], registrar: [], doctor: [], laboratory: [], cashier: [], inpatient: [], pharmacy: []
 };
 
 export const modulesFor = (role: Role, modules: readonly WebModule[] = MODULES) => modules.filter(m => m.roles.includes(role));

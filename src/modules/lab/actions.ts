@@ -25,25 +25,46 @@ export const ConfirmInput = z.object({ idempotencyKey: Key }).strict();
 
 const LINE_SELECT = `SELECT l.id, l.status, l.created_at, l.completed_at, l.visit_id, s.name_uz_cyrl service, s.unit,
     coalesce(p.full_name, p.display_name) patient_name, p.patient_no, coalesce(p.birth_date, p.date_of_birth)::text birth_date, p.gender,
-    a.display_name ordered_by, v.status visit_status,
+    a.display_name ordered_by, v.status visit_status, vd.business_date::text visit_date, vd.status visit_day_status,
+    (SELECT pc.posted_at IS NULL FROM lab_pending_confirmations pc WHERE pc.clinic_id=l.clinic_id AND pc.charge_line_id=l.id) pending,
     (SELECT max(version) FROM lab_results r WHERE r.clinic_id=l.clinic_id AND r.charge_line_id=l.id) result_version
   FROM charge_lines l
   JOIN services s ON s.clinic_id=l.clinic_id AND s.id=l.service_id AND s.kind='lab'
   JOIN visits v ON v.clinic_id=l.clinic_id AND v.id=l.visit_id
+  JOIN business_days vd ON vd.clinic_id=v.clinic_id AND vd.id=v.business_day_id
   JOIN patients p ON p.clinic_id=v.clinic_id AND p.id=v.patient_id
   JOIN accounts a ON a.id=l.created_by`;
 const lineView = (r: Record<string, any>) => ({ id: r.id as string, status: r.status as string, service: r.service as string,
   patientName: r.patient_name as string, patientNo: r.patient_no as number | null, orderedBy: r.ordered_by as string,
-  orderedAt: r.created_at, completedAt: r.completed_at, resultVersion: (r.result_version ?? null) as number | null });
+  orderedAt: r.created_at, completedAt: r.completed_at, resultVersion: (r.result_version ?? null) as number | null,
+  // Task 017: an order from a closed business day (results arrive the next day) and a confirmation waiting for a day to open.
+  visitDate: r.visit_date as string, late: r.visit_day_status === 'closed', pending: r.pending === true });
 
-/** Lab lines of today's (open) business day, newest first. Filtering by status happens on the client. */
+/**
+ * Lab lines of today's (open) business day, plus orders of closed days still waiting for a result (task 017), newest
+ * first. With no day open, only those waiting orders are listed. Filtering by status happens on the client.
+ */
 export async function orders(ctx: ClinicContext) {
   const c = await requireRole(ctx.tx, ctx.actorId, ctx.clinicId, LAB_READ);
   const day = (await c.tx.query("SELECT id, business_date::text date FROM business_days WHERE clinic_id=$1 AND status='open'", [c.clinicId])).rows[0];
-  if (!day) return { day: null, orders: [] };
-  const rows = (await c.tx.query(`${LINE_SELECT} WHERE l.clinic_id=$1 AND v.business_day_id=$2 AND l.status<>'cancelled'
-    ORDER BY CASE l.status WHEN 'ordered' THEN 0 ELSE 1 END, l.created_at DESC LIMIT 500`, [c.clinicId, day.id])).rows;
-  return { day: { id: day.id as string, date: day.date as string }, orders: rows.map(lineView) };
+  const rows = (await c.tx.query(`${LINE_SELECT} WHERE l.clinic_id=$1 AND l.status<>'cancelled'
+      AND (v.business_day_id=$2 OR (vd.status='closed' AND l.status='ordered'))
+    ORDER BY CASE l.status WHEN 'ordered' THEN 0 ELSE 1 END, l.created_at DESC LIMIT 500`, [c.clinicId, day?.id ?? null])).rows;
+  return { day: day ? { id: day.id as string, date: day.date as string } : null, orders: rows.map(lineView) };
+}
+
+/**
+ * Posts late confirmations made while no business day was open (task 017). Runs inside the day-open transaction:
+ * each waiting line completes once, attributed to the new day; the closed day it was ordered on is untouched.
+ */
+export async function postPendingConfirmations(ctx: ClinicContext, dayId: string) {
+  const posted = (await ctx.tx.query(`UPDATE charge_lines l SET status='completed', completed_by=p.requested_by, completed_at=now(),
+      performer_user_id=coalesce(l.performer_user_id,p.requested_by), completed_business_day_id=$2
+    FROM lab_pending_confirmations p WHERE p.clinic_id=$1 AND p.posted_at IS NULL AND l.clinic_id=p.clinic_id AND l.id=p.charge_line_id AND l.status='ordered'
+    RETURNING l.id`, [ctx.clinicId, dayId])).rows;
+  await ctx.tx.query('UPDATE lab_pending_confirmations SET posted_business_day_id=$2, posted_at=now() WHERE clinic_id=$1 AND posted_at IS NULL', [ctx.clinicId, dayId]);
+  for (const r of posted) await recordAudit(ctx.tx, ctx.actorId, ctx.clinicId, 'lab.confirmation_posted', r.id, { businessDayId: dayId });
+  return posted.length;
 }
 
 async function line(c: ClinicContext, id: string, lock = false) {
@@ -84,11 +105,20 @@ export async function confirm(ctx: ClinicContext, id: string, raw: z.input<typeo
     const r = await line(c, id, true);
     if (r.status === 'cancelled' || !r.result_version) return fail('INVALID_TRANSITION');
     if (r.status === 'completed') return { id, status: 'completed', completedNow: false };
-    // Charges of a closed visit belong to a closed day; they are not changed from the lab.
-    if (r.visit_status !== 'open') return fail('INVALID_TRANSITION');
-    const done = (await c.tx.query(`UPDATE charge_lines SET status='completed', completed_by=$3, completed_at=now(), performer_user_id=coalesce(performer_user_id,$3)
-      WHERE clinic_id=$1 AND id=$2 AND status='ordered'`, [c.clinicId, id, c.actorId])).rowCount;
-    await recordAudit(c.tx, c.actorId, c.clinicId, 'lab.confirmed', id, { version: r.result_version });
-    return { id, status: 'completed', completedNow: !!done };
+    // Task 017: a result that arrives after the visit's day is closed (or after discharge) is still confirmed. The
+    // completion posts to the business day open now, with the original visit date kept in the audit; the line's
+    // value stays on its own day, whose closed snapshot is never rewritten. With no day open it waits (pending).
+    const day = (await c.tx.query("SELECT id, business_date::text date FROM business_days WHERE clinic_id=$1 AND status='open' FOR SHARE", [c.clinicId])).rows[0];
+    const late = r.visit_day_status === 'closed' || r.visit_status !== 'open';
+    if (!day) {
+      await c.tx.query(`INSERT INTO lab_pending_confirmations(charge_line_id,clinic_id,result_version,requested_by) VALUES($1,$2,$3,$4)
+        ON CONFLICT (charge_line_id) DO NOTHING`, [id, c.clinicId, r.result_version, c.actorId]);
+      await recordAudit(c.tx, c.actorId, c.clinicId, 'lab.confirmation_pending', id, { version: r.result_version, visitDate: r.visit_date });
+      return { id, status: 'pending', completedNow: false, visitDate: r.visit_date as string };
+    }
+    const done = (await c.tx.query(`UPDATE charge_lines SET status='completed', completed_by=$3, completed_at=now(), performer_user_id=coalesce(performer_user_id,$3),
+      completed_business_day_id=$4 WHERE clinic_id=$1 AND id=$2 AND status='ordered'`, [c.clinicId, id, c.actorId, day.id])).rowCount;
+    await recordAudit(c.tx, c.actorId, c.clinicId, 'lab.confirmed', id, { version: r.result_version, ...(late ? { late: true, visitDate: r.visit_date, postedTo: day.date } : {}) });
+    return { id, status: 'completed', completedNow: !!done, ...(late ? { late: true, visitDate: r.visit_date as string, postedTo: day.date as string } : {}) };
   });
 }

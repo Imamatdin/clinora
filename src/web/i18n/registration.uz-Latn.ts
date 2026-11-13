@@ -62,6 +62,7 @@ export const registrationUzLatn: Record<keyof typeof registration, string> = {
   'registration.waiting': 'Navbatda: {count}',
   'registration.noServices': 'Xizmatlar biriktirilmagan',
   'registration.noPrice': 'narxi belgilanmagan',
+  'registration.admit': 'Statsionarga yotqiziladi',
   'registration.total': 'Jami: {amount}',
   'registration.print': 'Talonlarni chop etish',
   'registration.printAgain': 'Talonlarni qayta chop etish',

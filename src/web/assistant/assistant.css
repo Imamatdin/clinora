@@ -3,9 +3,6 @@
 .assistant .banners{padding:0}
 .assistant .simulated{background:#fff4d6;border:1px solid #e3c36b;color:#5d4500;padding:10px 14px;border-radius:6px;font-weight:600;margin:0}
 .assistant button{min-height:48px}
-.lang-switch{display:flex;gap:4px}
-.lang-switch button{min-height:40px;padding:6px 12px}
-.lang-switch button.current{background:#16685f;border-color:#16685f;color:#fff}
 .capture{display:grid;gap:12px;border:1px solid #d7e2df;border-radius:8px;padding:16px;background:#f9fbfa}
 .capture .check,.labs .check{display:flex;gap:10px;align-items:center;font-size:1rem;font-weight:500}
 .capture .check input,.labs .check input{width:24px;height:24px;flex:none}

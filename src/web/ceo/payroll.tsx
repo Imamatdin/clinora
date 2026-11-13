@@ -1,7 +1,7 @@
 import { useEffect,useState } from 'react';
 import type { ModuleProps,WebModule } from '../modules.js';
 import type { Download } from '../../modules/reports/exports.js';
-import { Confirm,Dates,money,saveFile,t,Language,useReportLocale,type Key } from './shared.js';
+import { Confirm,Dates,money,saveFile,t,useReportLocale,type Key } from './shared.js';
 type RuleRow={id:string;user_id:string;doctor_share_bp:number;basis:'paid'|'billed';discount_bearer:'clinic'|'doctor'|'proportional';categories:string[];effective_from:string;created_by_name:string};
 type State={doctors:{id:string;display_name:string}[];history:RuleRow[];today:string;ceo:boolean};
 type Earnings={from:string;to:string;period:{id:string;status:string}|null;lines:{charge_line_id:string;user_id:string;doctor:string;rule_id:string|null;status?:string;entitlement_uzs:string;from_receipts_uzs:string;clinic_funded_uzs:string}[]};
@@ -28,7 +28,7 @@ export function Payroll({clinic,request,day,setDirty}:ModuleProps) {
   const groups=new Map<string,{name:string;earned:bigint;receipts:bigint;funded:bigint;lines:Earnings['lines']}>();
   for(const line of result?.lines??[]){const g=groups.get(line.user_id)??{name:line.doctor,earned:0n,receipts:0n,funded:0n,lines:[]};g.earned+=BigInt(line.entitlement_uzs);g.receipts+=BigInt(line.from_receipts_uzs);g.funded+=BigInt(line.clinic_funded_uzs);g.lines.push(line);groups.set(line.user_id,g);}
   return <section className="ceo-workspace"><header className="ceo-heading"><div><p className="ceo-eyebrow">{t('ceo.eyebrow')}</p><h2>{state?.ceo?t('ceo.payrollTitle'):t('ceo.myPay')}</h2><p>{t('ceo.payrollLead')}</p></div></header>
-    <Language/><Dates {...range} onChange={(from,to)=>{setRange({from,to});setResult(null);}} onSubmit={()=>void calculate()} busy={busy}/>
+    <Dates {...range} onChange={(from,to)=>{setRange({from,to});setResult(null);}} onSubmit={()=>void calculate()} busy={busy}/>
     {busy&&<p role="status">{t('ceo.loading')}</p>}{error&&<p className="ceo-error" role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
     {result&&<section className="ceo-pay-results"><span className="ceo-live">{result.period?t('ceo.final'):t('ceo.draft')}</span><p>{result.from} — {result.to}</p>
       {groups.size===0?<p className="ceo-empty">{t('ceo.empty')}</p>:[...groups].map(([id,g])=><details className="ceo-pay-doctor" key={id}><summary><span>{g.name}</span><strong>{g.lines.some(l=>l.status==='rule_missing')?t('ceo.ruleMissing'):money(g.earned)+' '+t('ceo.uzs')}</strong></summary><dl><div><dt>{t('ceo.receipts')}</dt><dd>{money(g.receipts)}</dd></div><div><dt>{t('ceo.funded')}</dt><dd>{money(g.funded)}</dd></div></dl><ul className="ceo-pay-lines">{g.lines.map(l=><li key={l.charge_line_id}><span>{l.charge_line_id}<small>{l.status==='rule_missing'?t('ceo.ruleMissing'):l.rule_id}</small></span><strong>{money(l.entitlement_uzs)}</strong></li>)}</ul></details>)}

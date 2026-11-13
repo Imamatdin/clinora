@@ -9,12 +9,14 @@ import { registration } from './registration.uz-Cyrl.js';
 import { doctor } from './doctor.uz-Cyrl.js';
 import { lab } from './lab.uz-Cyrl.js';
 import { ceo } from './ceo.uz-Cyrl.js';
+import { catalogUzCyrl as catalog } from './catalog.uz-Cyrl.js';
+import { help } from './help.uz-Cyrl.js';
 
 /**
  * Uzbek (Cyrillic) dictionary, merged from per-feature parts. Each feature keeps its strings in
  * ./<feature>.uz-Cyrl.ts, exports them under the feature name with keys prefixed '<feature>.',
  * and adds one entry here (import + name). tests/i18n.test.ts rejects key collisions and unprefixed keys.
- * Uzbek Latin and Russian dictionaries must provide the same keys (typed by UiKey).
+ * Uzbek Latin (./uz-Latn.ts) and Russian (./ru.ts) merge the same parts; tests/i18n.test.ts fails on any missing key.
  */
 export const UZ_CYRL_PARTS = {
   core,
@@ -26,6 +28,8 @@ export const UZ_CYRL_PARTS = {
   registration,
   doctor, lab,
   ceo,
+  catalog,
+  help,
 } as const;
 
 type Parts = typeof UZ_CYRL_PARTS;

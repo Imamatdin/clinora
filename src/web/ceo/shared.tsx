@@ -1,17 +1,14 @@
-import { useState,useSyncExternalStore } from 'react';
+import { useState } from 'react';
+import { currentLocale,useLocale } from '../i18n/locale.js';
 import type { Download } from '../../modules/reports/exports.js';
 import { ceo } from '../i18n/ceo.uz-Cyrl.js';
 import { ceoUzLatn } from '../i18n/ceo.uz-Latn.js';
 import { ceoRu } from '../i18n/ceo.ru.js';
 export type Key=keyof typeof ceo;
 const dictionaries={'uz-Cyrl':ceo,'uz-Latn':ceoUzLatn,ru:ceoRu};
-type Locale=keyof typeof dictionaries;
-let locale:Locale='uz-Cyrl';const listeners=new Set<()=>void>();
-export const t=(key:Key)=>dictionaries[locale][key];
-const subscribe=(fn:()=>void)=>{listeners.add(fn);return()=>{listeners.delete(fn);};};
-const snapshot=()=>locale;
-export function useReportLocale(){return useSyncExternalStore(subscribe,snapshot);}
-export function Language(){const value=useReportLocale();return <label className="ceo-language">{t('ceo.language')}<select aria-label={t('ceo.language')} value={value} onChange={e=>{locale=e.target.value as Locale;for(const fn of [...listeners])fn();}}><option value="uz-Cyrl">{t('ceo.langCyrl')}</option><option value="uz-Latn">{t('ceo.langLatn')}</option><option value="ru">{t('ceo.langRu')}</option></select></label>;}
+export const t=(key:Key)=>dictionaries[currentLocale()][key];
+/** Reports follow the shell's single interface language (header switch). */
+export const useReportLocale=useLocale;
 export const money=(value:string|bigint)=>BigInt(value).toLocaleString('ru-RU');
 export const metric=(key:string)=>t(`ceo.${key}` as Key);
 export function saveFile(file:Download) {

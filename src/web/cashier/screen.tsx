@@ -48,7 +48,7 @@ export function Cashier({ clinic, request }: ModuleProps) {
     setApprover((x) => x || d.approvers[0]?.id || "");
     setExpense((x) => x || d.expenses[0]?.id || "");
   }
-  async function run(fn: () => Promise<void>) {
+  async function run(fn: () => Promise<void>, announce = true) {
     if (locked.current) return;
     locked.current = true;
     setBusy(true);
@@ -56,7 +56,7 @@ export function Cashier({ clinic, request }: ModuleProps) {
     setSaved(false);
     try {
       await fn();
-      setSaved(true);
+      if (announce) setSaved(true); // Task 017: loading the screen is not a save.
     } catch (e) {
       setError(errorText((e as { code: string }).code));
     } finally {
@@ -65,7 +65,7 @@ export function Cashier({ clinic, request }: ModuleProps) {
     }
   }
   useEffect(() => {
-    void run(load);
+    void run(load, false);
   }, [clinic.id]);
   async function refresh() {
     if (visit) setBill(await request<Row>(`${base}/visits/${visit}`));
@@ -233,7 +233,7 @@ export function Cashier({ clinic, request }: ModuleProps) {
               {(["value", "discount", "paid", "due"] as const).map((k) => (
                 <div key={k}>
                   <dt>{t(`cashier.${k}`)}</dt>
-                  <dd>{money(bill.invoice[k])}</dd>
+                  <dd data-testid={`cashier-${k}`}>{money(bill.invoice[k])}</dd>
                 </div>
               ))}
             </dl>
@@ -250,10 +250,10 @@ export function Cashier({ clinic, request }: ModuleProps) {
                 </button>
               ))}
               <button
-                aria-label={t("cashier.backspace")}
+                title={t("cashier.backspace")}
                 onClick={() => setAmount((v) => v.slice(0, -1))}
               >
-                ⌫
+                {t("cashier.erase")}
               </button>
             </div>
             {select(

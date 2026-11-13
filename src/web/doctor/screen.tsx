@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type MutableRefObject } from 'react';
 import { ApiFailure, type Request } from '../api.js';
-import { errorText } from '../i18n/index.js';
+import { errorText, useLocale } from '../i18n/index.js';
 import type { ModuleProps, WebModule } from '../modules.js';
-import { languages, money, saveLocale, savedLocale, translator, type DoctorKey, type Locale } from './i18n.js';
+import { money, translator, type DoctorKey } from './i18n.js';
 import { VISIT_PANELS } from './panels.js';
 
 /** Task 007's queue API ticket (src/modules/registration: queue/mine, queue/call-next, queue/tickets/:id/status). */
@@ -39,7 +39,7 @@ function useKeys() {
 }
 
 function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps) {
-  const [locale, setLocale] = useState<Locale>(savedLocale), t = translator(locale);
+  const t = translator(useLocale());
   const [queue, setQueue] = useState<Ticket[] | null>(null), [open, setOpen] = useState<{ encounterId: string; patientId: string } | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const keys = useKeys(), base = `/api/clinics/${clinic.id}/doctor`, queueBase = `/api/clinics/${clinic.id}/queue`;
@@ -49,7 +49,9 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
     setBusy(true); setError(''); setNotice('');
     try { await work(); } catch (e) { setError(errorText(e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE')); } finally { setBusy(false); }
   };
-  const load = () => request<Ticket[]>(`${queueBase}/mine`).then(setQueue);
+  const [ward, setWard] = useState<{ admissionId: string; name: string; patientNo: number | null; bed: string | null }[]>([]);
+  // Task 017: admitted patients of this doctor (ward rounds) open the same visit screen, without a queue ticket.
+  const load = () => Promise.all([request<Ticket[]>(`${queueBase}/mine`).then(setQueue), request<typeof ward>(`${base}/inpatients`).then(setWard).catch(() => setWard([]))]).then(() => undefined);
   useEffect(() => { load().catch(() => setError(errorText('SERVICE_UNAVAILABLE'))); }, [clinic.id]);
   useEffect(() => {
     if (open) return;
@@ -70,17 +72,19 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
     const r = await post<{ encounterId: string; patientId: string }>(`${base}/tickets/${ticket.id}/start`);
     setOpen({ encounterId: r.encounterId, patientId: r.patientId }); await load();
   });
+  const openStay = (admissionId: string) => run(async () => {
+    const r = await post<{ encounterId: string; patientId: string }>(`${base}/admissions/${admissionId}/open`);
+    setOpen({ encounterId: r.encounterId, patientId: r.patientId });
+  });
   const requeue = (ticket: Ticket) => run(async () => { await post(`${queueBase}/tickets/${ticket.id}/status`, { status: 'waiting' }); await load(); });
 
-  const language = <label className="dr-lang">{t('doctor.language')}<select aria-label={t('doctor.language')} value={locale} onChange={e => { const l = e.target.value as Locale; setLocale(l); saveLocale(l); }}>
-    {languages.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}</select></label>;
   const banners = <div aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>;
 
   if (open) return <section className="dr">
     <div className="dr-head"><button className="quiet" disabled={busy} onClick={() => {
       const leave = () => { setDirty(false); setOpen(null); void load(); };
       if (leaveRef.current) leaveRef.current(leave); else leave();
-    }}>{t('doctor.back')}</button>{language}</div>
+    }}>{t('doctor.back')}</button></div>
     {banners}
     <VisitScreen key={open.encounterId} t={t} clinicId={clinic.id} base={base} request={request} encounterId={open.encounterId} patientId={open.patientId} setDirty={setDirty} leaveRef={leaveRef} />
   </section>;
@@ -88,9 +92,9 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
   const tickets = queue ?? [], active = tickets.find(x => x.status === 'called' || x.status === 'in_progress');
   const waiting = tickets.filter(x => x.status === 'waiting'), done = tickets.filter(x => x.status === 'completed');
   return <section className="dr">
-    <div className="dr-head"><h2>{t('doctor.title')}</h2>{language}</div>
+    <div className="dr-head"><h2>{t('doctor.title')}</h2></div>
     {banners}
-    {!queue ? <p>{t('doctor.loading')}</p> : !businessDay?.openDay && !tickets.length ? <p className="empty">{t('doctor.noDay')}</p> : <>
+    {!queue ? <p>{t('doctor.loading')}</p> : !businessDay?.openDay && !tickets.length && !ward.length ? <p className="empty">{t('doctor.noDay')}</p> : <>
       <div className="dr-actions">
         <button className="primary big" disabled={busy || (!waiting.length && !active)} onClick={() => void callNext()}>{t('doctor.callNext')}</button>
         <span className="fine">{t('doctor.waitingCount', { count: waiting.length })}</span>
@@ -108,6 +112,9 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
       {!tickets.length && <p className="empty">{t('doctor.empty')}</p>}
       {waiting.length > 0 && <><h3>{t('doctor.waitingList')}</h3><ul className="dr-list">{waiting.map(x =>
         <li key={x.id}><strong>{t('doctor.ticketNo', { number: x.number })}</strong><span>{x.patient.fullName}</span></li>)}</ul></>}
+      {ward.length > 0 && <><h3>{t('doctor.inpatients')}</h3><ul className="dr-list">{ward.map(a =>
+        <li key={a.admissionId}><strong>{a.bed ?? ''}</strong><span>{a.name}</span>
+          <button className="small" disabled={busy} onClick={() => void openStay(a.admissionId)}>{t('doctor.openNote')}</button></li>)}</ul></>}
       {done.length > 0 && <><h3>{t('doctor.doneList')}</h3><ul className="dr-list">{done.map(x =>
         <li key={x.id}><strong>{t('doctor.ticketNo', { number: x.number })}</strong><span>{x.patient.fullName}</span>
           <button className="small" disabled={busy} onClick={() => void start(x)}>{t('doctor.open')}</button></li>)}</ul></>}

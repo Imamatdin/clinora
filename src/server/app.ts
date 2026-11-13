@@ -1,3 +1,4 @@
+import { ROLES } from '../modules/identity/roles.js';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { readFile, readdir } from 'node:fs/promises';
@@ -24,7 +25,7 @@ const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js
   '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 /** Installed-app files copied from src/web/public. A fixed list: nothing else at the root is served. */
 const PUBLIC_FILES = ['sw.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png', 'icons/icon.svg',
-  'ticket.css', 'ticket.js'];
+  'ticket.css', 'ticket.js', ...ROLES.map(r => `help/${r}.png`)];
 /**
  * Strict policy for every response. Only change for task 004: Telegram Web (web.telegram.org) may
  * frame the app so the Mini App works there. Scripts stay same-origin: the Telegram bridge is our own code.
@@ -37,6 +38,8 @@ export async function createApp(webDirectory?: string, config?: ApiConfig, optio
   const files = new Map<string, { body: Buffer; contentType: string }>();
   if (webDirectory) {
     files.set('/', { body: await readFile(join(webDirectory, 'index.html')), contentType: mime['.html']! });
+    // Task 017: printable cheat sheets are the same app page at /help/<role>.
+    for (const role of ROLES) files.set(`/help/${role}`, files.get('/')!);
     for (const name of await readdir(join(webDirectory, 'assets'))) {
       if (!/^[a-zA-Z0-9_.-]+\.(js|css)$/.test(name)) continue;
       files.set('/assets/' + name, { body: await readFile(join(webDirectory, 'assets', name)), contentType: mime[extname(name)]! });

@@ -4,6 +4,8 @@ import type { doctor } from './doctor.uz-Cyrl.js';
 export const doctorUzLatn: Record<keyof typeof doctor, string> = {
   'doctor.title': 'Mening navbatim',
   'doctor.language': 'Til',
+  'doctor.inpatients': 'Yotqizilgan bemorlarim',
+  'doctor.openNote': 'Kunlik qaydni ochish',
   'doctor.loading': 'Yuklanmoqda…',
   'doctor.refresh': 'Yangilash',
   'doctor.noDay': 'Ish kuni ochilmagan. Administrator kunni ochgandan keyin navbat shu yerda koʻrinadi.',

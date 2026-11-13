@@ -2,6 +2,8 @@
 export const doctor = {
   'doctor.title': 'Менинг навбатим',
   'doctor.language': 'Тил',
+  'doctor.inpatients': 'Ётқизилган беморларим',
+  'doctor.openNote': 'Кунлик қайдни очиш',
   'doctor.loading': 'Юкланмоқда…',
   'doctor.refresh': 'Янгилаш',
   'doctor.noDay': 'Иш куни очилмаган. Администратор кунни очгандан кейин навбат шу ерда кўринади.',

@@ -111,9 +111,10 @@ export function Devices({ clinicId, request, onEnrolled }: { clinicId: string; r
 }
 
 /** The signed-in person's own PIN and Telegram link. Not offered on a shared PC session. */
-export function MyAccess({ clinicId, name, request, onBack }: { clinicId: string; name: string; request: Request; onBack: () => void }) {
+/** Task 028: a person's own PIN and Telegram link, as two sections of the Settings screen. Set once, then rarely touched. */
+export function MyAccess({ clinicId, name, request }: { clinicId: string; name: string; request: Request }) {
   const [state, setState] = useState<{ telegramLinked: boolean; pinSet: boolean; pinLocked: boolean } | null>(null);
-  const [invite, setInvite] = useState<Invite | null>(null), [busy, setBusy] = useState(false);
+  const [invite, setInvite] = useState<Invite | null>(null), [busy, setBusy] = useState(false), [pinOpen, setPinOpen] = useState(false);
   const [error, setError] = useState(''), [notice, setNotice] = useState('');
   const load = async () => setState(await request(`/api/clinics/${clinicId}/access/me`));
   const run = async (work: () => Promise<void>) => {
@@ -124,31 +125,30 @@ export function MyAccess({ clinicId, name, request, onBack }: { clinicId: string
   function savePin(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); const form = e.currentTarget, f = new FormData(form);
     if (f.get('pin') !== f.get('repeat')) { setError(t('access.me.pinMismatch')); return; }
-    void run(async () => { await request('/api/auth/pin', { pin: f.get('pin') }); form.reset(); setNotice(t('access.me.pinSaved')); await load(); });
+    void run(async () => { await request('/api/auth/pin', { pin: f.get('pin') }); form.reset(); setPinOpen(false); setNotice(t('access.me.pinSaved')); await load(); });
   }
-  return <main className="page my-access" aria-labelledby="me-title">
-    <h1 id="me-title">{t('access.me.title')}</h1><p className="muted">{t('access.me.lead')}</p>
-    <div aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>
+  return <div className="my-access">
+    <div aria-live="polite" className="banners">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>
     {!state ? <p role="status" className="empty">{t('access.loading')}</p> : <>
-      <section className="panel"><h2>{t('access.me.pinTitle')}</h2>
-        <p>{state.pinLocked ? t('access.me.pinStatusLocked') : state.pinSet ? t('access.me.pinStatusSet') : t('access.me.pinStatusNone')}</p>
-        <p className="fine">{t('access.me.pinLead')}</p>
-        <form onSubmit={savePin}>
-          <label>{t('access.me.pinNew')}<input name="pin" type="password" inputMode="numeric" pattern="[0-9]{4,6}" minLength={4} maxLength={6} autoComplete="off" required /></label>
+      <section className="setting" aria-labelledby="me-pin"><div><h3 id="me-pin">{t('access.me.pinTitle')}</h3>
+        <p className={`fine dot ${state.pinLocked ? 'attn' : state.pinSet ? 'ok' : ''}`}>{state.pinLocked ? t('access.me.pinStatusLocked') : state.pinSet ? t('access.me.pinStatusSet') : t('access.me.pinStatusNone')}</p></div>
+        <button aria-expanded={pinOpen} onClick={() => setPinOpen(o => !o)}>{t(state.pinSet ? 'access.me.pinChange' : 'access.me.pinSet')}</button>
+        {pinOpen && <form onSubmit={savePin} className="setting-form">
+          <p className="fine">{t('access.me.pinLead')}</p>
+          <label>{t('access.me.pinNew')}<input name="pin" type="password" inputMode="numeric" pattern="[0-9]{4,6}" minLength={4} maxLength={6} autoComplete="off" required autoFocus /></label>
           <label>{t('access.me.pinRepeat')}<input name="repeat" type="password" inputMode="numeric" pattern="[0-9]{4,6}" minLength={4} maxLength={6} autoComplete="off" required /></label>
-          <button className="primary big" disabled={busy}>{t('access.me.pinSave')}</button>
-        </form></section>
-      <section className="panel"><h2>{t('access.me.telegramTitle')}</h2>
-        <p>{state.telegramLinked ? t('access.me.telegramLinked') : t('access.me.telegramNone')}</p>
+          <button className="primary" disabled={busy}>{t('access.me.pinSave')}</button>
+        </form>}</section>
+      <section className="setting" aria-labelledby="me-tg"><div><h3 id="me-tg">{t('access.me.telegramTitle')}</h3>
+        <p className={`fine dot ${state.telegramLinked ? 'ok' : ''}`}>{state.telegramLinked ? t('access.me.telegramLinked') : t('access.me.telegramNone')}</p></div>
         <div className="actions">
           <button disabled={busy} onClick={() => void run(async () => setInvite(await request<Invite>(`/api/clinics/${clinicId}/access/me/telegram-invite`, {})))}>{t('access.me.telegramInvite')}</button>
-          {state.telegramLinked && <button disabled={busy} onClick={() => void run(async () => { await request(`/api/clinics/${clinicId}/access/me/telegram-unlink`, {}); await load(); })}>{t('access.me.telegramUnlink')}</button>}
+          {state.telegramLinked && <button className="quiet" disabled={busy} onClick={() => void run(async () => { await request(`/api/clinics/${clinicId}/access/me/telegram-unlink`, {}); await load(); })}>{t('access.me.telegramUnlink')}</button>}
         </div>
         {invite && <InvitePanel invite={invite} name={name} onDone={() => { setInvite(null); void run(load); }} />}
       </section>
     </>}
-    <button className="big" onClick={onBack}>{t('access.me.back')}</button>
-  </main>;
+  </div>;
 }
 
 export type AccountNotice = { id: string; kind: 'password_reset' | 'telegram_invite' | 'approval_locked' | 'credential_request'; actorName: string | null; at: string };

@@ -38,8 +38,9 @@ export type WebModule = {
  */
 export const MODULES: readonly WebModule[] = [
   // A role lands on its first module here: CEO on the dashboard, doctor on the queue, inpatient on the ward; lab last so the administrator keeps the cashier home.
-  dashboardModule, doctorModule, cashierModule, pharmacyModule, inpatientModule, surgeryModule,
-  registrationModule, catalogModule, labModule, reportsModule, payrollModule, exportModule,
+  // Task 028: this is also the order of the navigation rail and, on phones, of the bottom bar (first four).
+  dashboardModule, doctorModule, cashierModule, registrationModule, inpatientModule, labModule, surgeryModule, pharmacyModule,
+  reportsModule, payrollModule, catalogModule, exportModule,
 ];
 
 /** Placeholders per role for increments not yet built (task 017: built features no longer show "coming soon"). */
@@ -50,3 +51,12 @@ export const PLANNED: Record<Role, UiKey[]> = {
 export const modulesFor = (role: Role, modules: readonly WebModule[] = MODULES) => modules.filter(m => m.roles.includes(role));
 export const plannedFor = (role: Role, modules: readonly WebModule[] = MODULES) =>
   PLANNED[role].filter(key => !modulesFor(role, modules).some(m => m.label === key));
+
+/** Task 028 navigation: an icon and a group per module id. Groups: 0 the day, 1 daily work with patients and money, 2 management. */
+export const NAV: Record<string, { icon: import('./shell.js').IconName; group: number }> = {
+  dashboard: { icon: 'today', group: 0 }, doctor: { icon: 'queue', group: 1 }, cashier: { icon: 'cash', group: 1 }, registration: { icon: 'register', group: 1 },
+  inpatient: { icon: 'ward', group: 1 }, lab: { icon: 'lab', group: 1 }, surgery: { icon: 'surgery', group: 1 }, pharmacy: { icon: 'pharmacy', group: 1 },
+  reports: { icon: 'reports', group: 2 }, payroll: { icon: 'payroll', group: 2 }, catalog: { icon: 'catalog', group: 2 }, exports: { icon: 'export', group: 2 }
+};
+/** Every screen a person's roles allow, once each, in registry order. Navigation only; the server authorizes every call. */
+export const modulesForRoles = (roles: readonly Role[], modules: readonly WebModule[] = MODULES) => modules.filter(m => m.roles.some(r => roles.includes(r)));

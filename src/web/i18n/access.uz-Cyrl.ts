@@ -115,7 +115,9 @@ export const access = {
   'access.notice.someone': 'ходим',
   'access.notice.dismiss': 'Тушунарли',
   'access.pinChangeRequired': 'Тасдиқлаш учун камида 6 рақамли янги PIN код ўрнатинг.',
-  'access.pinChangeOpen': 'PIN кодни ўзгартириш'
+  'access.pinChangeOpen': 'PIN кодни ўзгартириш',
+  'access.me.pinChange': 'Алмаштириш',
+  'access.me.pinSet': 'Ўрнатиш',
 } as const;
 export type AccessKey = keyof typeof access;
 export const accessUzCyrl = access;

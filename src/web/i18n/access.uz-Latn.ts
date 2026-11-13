@@ -117,5 +117,7 @@ export const accessUzLatn: Record<AccessKey, string> = {
   'access.notice.someone': 'xodim',
   'access.notice.dismiss': 'Tushunarli',
   'access.pinChangeRequired': 'Tasdiqlash uchun kamida 6 raqamli yangi PIN kod oʻrnating.',
-  'access.pinChangeOpen': 'PIN kodni oʻzgartirish'
+  'access.pinChangeOpen': 'PIN kodni oʻzgartirish',
+  'access.me.pinChange': 'Almashtirish',
+  'access.me.pinSet': 'Oʻrnatish',
 };

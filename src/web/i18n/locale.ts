@@ -2,8 +2,9 @@ import { useSyncExternalStore } from 'react';
 
 /**
  * One interface language for the whole app (task 017). Every screen reads it from here, so the header switch
- * changes every module at once. The choice is a per-device convenience (storage may be unavailable in a private
- * window or Telegram); it never affects what the server returns. Default: Uzbek Cyrillic.
+ * changes every module at once. After sign-in the language follows the person: their account's saved language,
+ * else the clinic's default (task 028, see adoptLocale). The copy in this browser only decides what the sign-in
+ * screen shows before anyone is known; it never affects what the server returns. Default: Uzbek Cyrillic.
  */
 export type Locale = 'uz-Cyrl' | 'uz-Latn' | 'ru';
 export const LOCALES: readonly Locale[] = ['uz-Cyrl', 'uz-Latn', 'ru'];
@@ -23,6 +24,13 @@ export function setLocale(next: Locale) {
   if (typeof document !== 'undefined') document.documentElement.lang = next;
   try { globalThis.localStorage?.setItem(STORAGE_KEY, next); } catch { /* not persisted */ }
   for (const fn of [...listeners]) fn();
+}
+/** After sign-in: the account's language wins; without one, a choice made in this browser, else the clinic's default. */
+export function adoptLocale(account: Locale | null | undefined, clinicDefault: Locale | undefined) {
+  let stored: string | null = null;
+  try { stored = globalThis.localStorage?.getItem(STORAGE_KEY) ?? null; } catch { /* no storage */ }
+  const next = account ?? (LOCALES.includes(stored as Locale) ? stored as Locale : clinicDefault ?? 'uz-Cyrl');
+  if (next !== current) setLocale(next);
 }
 const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 /** Re-renders the caller when the language changes. */

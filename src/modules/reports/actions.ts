@@ -4,7 +4,7 @@ import { records, invoiceAt, serviceDate, inRange, localDate, sum, indexRecords,
 
 /** `rest` marks a remainder row: the count and sum of the rows not listed (see capReport). */
 export type Detail = { id: string; date: string; label: string; amount: string; rest?: number; patientId?:string; doctorId?: string; doctor?: string; departmentId?: string; department?: string; kind?: string; source?: string };
-export type Report = { from: string; to: string; clinic: string; generatedAt: string; snapshot?: boolean; totals: Record<string,string>;
+export type Report = { trend?: { date: string; collected: string }[]; from: string; to: string; clinic: string; generatedAt: string; snapshot?: boolean; totals: Record<string,string>;
   needsReview?: {id:string;label:string}[]; details: Record<string,Detail[]>; doctors: Group[]; departments: Group[]; sources: Group[];cashShifts?:{id:string;cashier:string;date:string;opening:string;expected:string;counted:string|null;difference:string|null}[] };
 /** Doctor rows also carry the doctor's home department (doctor profile; else where most of their service value is), for the dashboard's department filter (task 025). */
 export type Group = { id: string; name: string; amount: string; lines: Detail[]; departmentId?: string; department?: string; patientLines?:Detail[];valueLines?:Detail[];discountLines?:Detail[];outstandingLines?:Detail[] };
@@ -131,6 +131,12 @@ export function capReport(report: Report, top = 100, groupTop = 20): Report {
 export async function dashboard(c: ClinicContext,p: Period) {
   await requireRole(c.tx,c.actorId,c.clinicId,['ceo']);
   return computeReport(await records(c,p,{outstanding:true}),p);
+}
+/** Task 028: money received per business day for the 14 days ending at `to` (payments only, like "collected"). Call after dashboard(), which checks the role. */
+export async function revenueTrend(c: ClinicContext, to: string) {
+  return (await c.tx.query(`SELECT d.business_date::text date, coalesce(sum(p.amount_uzs) FILTER (WHERE p.kind='payment'),0)::text collected
+    FROM business_days d LEFT JOIN payments p ON p.clinic_id=d.clinic_id AND p.business_day_id=d.id
+    WHERE d.clinic_id=$1 AND d.business_date BETWEEN $2::date-13 AND $2::date GROUP BY d.business_date ORDER BY d.business_date`, [c.clinicId, to])).rows as { date: string; collected: string }[];
 }
 export async function dayReport(c: ClinicContext,id: string) {
   const ctx=await requireRole(c.tx,c.actorId,c.clinicId,['ceo','administrator','cashier']);

@@ -4,7 +4,7 @@ import { ru } from './ru.js';
 import { currentLocale, intlLocale, type Locale } from './locale.js';
 
 export type { UiKey, Locale };
-export { currentLocale, setLocale, useLocale, LOCALES, LOCALE_LABELS, intlLocale } from './locale.js';
+export { adoptLocale, currentLocale, setLocale, useLocale, LOCALES, LOCALE_LABELS, intlLocale } from './locale.js';
 export const DICTIONARIES: Record<Locale, Record<UiKey, string>> = { 'uz-Cyrl': uzCyrl, 'uz-Latn': uzLatn, ru };
 
 /** Fill {placeholders}; unknown ones stay visible so a missing value is noticed, never silently blank. */

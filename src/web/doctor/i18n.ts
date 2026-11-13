@@ -11,4 +11,4 @@ export const translator = (locale: Locale) => (key: DoctorKey, vars: Record<stri
   dictionaries[locale][key].replace(/\{(\w+)\}/g, (m, name: string) => name in vars ? String(vars[name]) : m);
 
 /** Whole sums with thin-space thousands: 1 250 000. Money arrives as a decimal string and never passes through a float. */
-export const money = (uzs: string) => uzs.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+export const money = (uzs: string) => uzs.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');

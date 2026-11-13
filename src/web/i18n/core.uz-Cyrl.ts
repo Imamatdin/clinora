@@ -48,6 +48,8 @@ export const core = {
   'auth.identifier': 'Логин, телефон ёки email',
   'auth.email': 'Email',
   'auth.password': 'Парол',
+  'auth.showPassword': 'Паролни кўрсатиш',
+  'auth.hidePassword': 'Паролни яшириш',
   'auth.signIn': 'Кириш',
   'auth.staffNote': 'Клиника ходимлари ҳисобини администратор яратади.',
 

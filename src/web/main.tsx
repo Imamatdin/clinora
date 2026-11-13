@@ -18,6 +18,7 @@ import { lockOutbox } from './registration/outbox.js';
 import { OfflineWaiting } from './registration/waiting.js';
 import { HelpPage, helpRole } from './help/page.js';
 import { HeaderMenu, Tabs } from './shell.js';
+import { PasswordField } from './password.js';
 import './style.css';
 import './ceo/style.css';
 
@@ -188,7 +189,7 @@ function App() {
     !me ? <main className="auth"><p className="eyebrow">{t('auth.eyebrow')}</p><h1>{t('auth.welcome')}</h1><p className="muted">{t('auth.lead')}</p>
       <form onSubmit={signIn}>
         <label>{t('auth.identifier')}<input name="identifier" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} /></label>
-        <label>{t('auth.password')}<input name="password" type="password" required minLength={1} maxLength={128} autoComplete="current-password" /></label>
+        <PasswordField label={t('auth.password')} name="password" required minLength={1} maxLength={128} autoComplete="current-password" />
         <button disabled={busy} className="primary big">{busy ? t('app.wait') : t('auth.signIn')}</button>
       </form>
       <p className="fine">{t('auth.staffNote')}</p>
@@ -196,9 +197,9 @@ function App() {
       {error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</main> :
     me.mustChangePassword ? <main className="auth"><h1>{t('password.title')}</h1><p className="muted">{t('password.lead')}</p>
       <form onSubmit={changePassword}>
-        <label>{t('password.current')}<input name="currentPassword" type="password" required maxLength={128} autoComplete="current-password" /></label>
-        <label>{t('password.new')}<input name="newPassword" type="password" required minLength={12} maxLength={128} autoComplete="new-password" /></label>
-        <label>{t('password.repeat')}<input name="repeat" type="password" required minLength={12} maxLength={128} autoComplete="new-password" /></label>
+        <PasswordField label={t('password.current')} name="currentPassword" required maxLength={128} autoComplete="current-password" />
+        <PasswordField label={t('password.new')} name="newPassword" required minLength={12} maxLength={128} autoComplete="new-password" />
+        <PasswordField label={t('password.repeat')} name="repeat" required minLength={12} maxLength={128} autoComplete="new-password" />
         <button className="primary big" disabled={busy}>{busy ? t('app.wait') : t('password.submit')}</button>
       </form>{error && <p role="alert" className="error">{error}</p>}</main> :
     <>

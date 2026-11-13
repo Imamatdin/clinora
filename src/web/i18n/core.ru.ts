@@ -47,6 +47,8 @@ export const coreRu: Record<keyof typeof core, string> = {
   'auth.identifier': 'Логин, телефон или email',
   'auth.email': 'Email',
   'auth.password': 'Пароль',
+  'auth.showPassword': 'Показать пароль',
+  'auth.hidePassword': 'Скрыть пароль',
   'auth.signIn': 'Войти',
   'auth.staffNote': 'Учётные записи сотрудников клиники создаёт администратор.',
 

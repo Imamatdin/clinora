@@ -44,6 +44,8 @@ export const coreUzLatn: Record<keyof typeof core, string> = {
   "auth.identifier": "Login, telefon yoki email",
   "auth.email": "Email",
   "auth.password": "Parol",
+  "auth.showPassword": "Parolni koʻrsatish",
+  "auth.hidePassword": "Parolni yashirish",
   "auth.signIn": "Kirish",
   "auth.staffNote": "Klinika xodimlari hisobini administrator yaratadi.",
   "password.title": "Yangi parol oʻrnating",

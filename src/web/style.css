@@ -266,3 +266,10 @@ button.ledger-row{border:0;border-radius:0;background:none;font-weight:400;paddi
 button.ledger-row:hover:not(:disabled){background:var(--hover)}
 .ledger-row>.amount,.ledger-row>b{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:500}
 .label{font-size:var(--fs-fine);color:var(--ink-muted);font-weight:500;margin:0}
+
+/* Show/hide password: the toggle sits on the field's right edge, outside the label (src/web/password.tsx). */
+.password-field{position:relative;display:grid}
+.password-field input{padding-right:120px !important}
+.password-field .password-toggle{position:absolute;right:4px;bottom:3px;min-height:44px;padding:6px 10px;border:0;border-radius:6px;background:none;color:var(--accent);font-weight:500;font-size:var(--fs-fine)}
+.password-field .password-toggle:hover:not(:disabled){background:var(--hover)}
+.password-field .password-toggle[aria-pressed=true]{color:var(--ink)}

@@ -107,7 +107,13 @@ export async function finalize(c:ClinicContext,p:Period) {
     throw new PayrollRulesMissing(names);
   }
   await c.tx.query('INSERT INTO payroll_periods(id,clinic_id,from_date,to_date) VALUES($1,$2,$3,$4)',[id,c.clinicId,p.from,p.to]);
-  for(const l of lines)await c.tx.query(`INSERT INTO payroll_lines(id,clinic_id,period_id,user_id,charge_line_id,rule_id,entitlement_uzs,from_receipts_uzs,clinic_funded_uzs) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[randomUUID(),c.clinicId,id,l.user_id,l.charge_line_id,l.rule_id,l.entitlement_uzs.toString(),l.from_receipts_uzs.toString(),l.clinic_funded_uzs.toString()]);
+  // One statement per 5000 lines instead of one round trip per line (task 024: a month is thousands of lines).
+  for(let i=0;i<lines.length;i+=5000){
+    const batch=lines.slice(i,i+5000);
+    await c.tx.query(`INSERT INTO payroll_lines(id,clinic_id,period_id,user_id,charge_line_id,rule_id,entitlement_uzs,from_receipts_uzs,clinic_funded_uzs)
+      SELECT gen_random_uuid(),$1,$2,u,l,r,e,f,k FROM unnest($3::uuid[],$4::uuid[],$5::uuid[],$6::bigint[],$7::bigint[],$8::bigint[]) x(u,l,r,e,f,k)`,
+      [c.clinicId,id,batch.map(l=>l.user_id),batch.map(l=>l.charge_line_id),batch.map(l=>l.rule_id),batch.map(l=>l.entitlement_uzs.toString()),batch.map(l=>l.from_receipts_uzs.toString()),batch.map(l=>l.clinic_funded_uzs.toString())]);
+  }
   await c.tx.query("UPDATE payroll_periods SET status='final',finalized_by=$2,finalized_at=now(),daily_snapshot=$3 WHERE id=$1",[id,c.actorId,JSON.stringify(json(daily(data,p)))]);
   await recordAudit(c.tx,c.actorId,c.clinicId,'payroll.finalized',id,p); return earnings(c,p);
 }

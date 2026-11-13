@@ -25,3 +25,7 @@ Task 005 adds `016_catalog_import.sql`: is_active on districts/mahallas/room_typ
 Task 015 adds `019_assistant_telegram_unify.sql`: confirmed 003C assistant Telegram links move into task 004's
 `telegram_links` (an existing 004 link for the same account or Telegram user wins; blocked accounts and pending
 links are not carried over), then the 003C link, link-code and update tables are dropped.
+
+Task 017 adds `023_lab_late_confirmation.sql`: `charge_lines.completed_business_day_id` (the day a completion was
+posted to) and `lab_pending_confirmations` (late lab confirmations made while no business day was open; they post
+when the next day opens). Closed-day snapshots and line values are never rewritten.

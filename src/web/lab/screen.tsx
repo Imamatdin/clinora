@@ -4,7 +4,8 @@ import { errorText, useLocale } from '../i18n/index.js';
 import type { ModuleProps, WebModule } from '../modules.js';
 import { translator, type LabKey } from './i18n.js';
 
-type Order = { id: string; status: string; service: string; patientName: string; patientNo: number | null; orderedBy: string; orderedAt: string; resultVersion: number | null };
+type Order = { id: string; status: string; service: string; patientName: string; patientNo: number | null; orderedBy: string; orderedAt: string; resultVersion: number | null;
+  visitDate: string; late: boolean; pending: boolean };
 type Value = { name: string; value: string; unit: string; reference: string };
 type Detail = Order & { birthDate: string | null; visitOpen: boolean;
   versions: { version: number; enteredAt: string; enteredBy: string; values: Value[]; comment: string | null; afterConfirmation: boolean }[] };
@@ -36,13 +37,15 @@ function LabHome({ clinic, request, setDirty }: ModuleProps) {
   return <section className="dr">
     <div className="dr-head"><h2>{t('lab.title')}</h2></div>
     {error && <p role="alert" className="error">{error}</p>}
-    {!data ? <p>{t('lab.loading')}</p> : !data.day ? <p className="empty">{t('lab.noDay')}</p> : <>
+    {!data ? <p>{t('lab.loading')}</p> : !data.day && !data.orders.length ? <p className="empty">{t('lab.noDay')}</p> : <>
+      {!data.day && <p className="notice">{t('lab.noDay')}</p>}
       <div className="dr-actions" role="group" aria-label={t('lab.filter')}>
         {FILTERS.map(f => <button key={f} className={f === filter ? 'primary' : ''} aria-pressed={f === filter} onClick={() => setFilter(f)}>{t(`lab.filter.${f}`)}</button>)}
         <button className="quiet" disabled={busy} onClick={() => { setBusy(true); load().catch(() => setError(errorText('SERVICE_UNAVAILABLE'))).finally(() => setBusy(false)); }}>{t('lab.refresh')}</button>
       </div>
       {!shown.length ? <p className="empty">{t('lab.empty')}</p> : <ul className="dr-orders">{shown.map(o => <li key={o.id} className="dr-card">
-        <div><strong>{o.service}</strong> <span className={o.status === 'completed' ? 'tag ok' : 'tag'}>{t(`lab.status.${o.status}` as LabKey)}</span></div>
+        <div><strong>{o.service}</strong> <span className={o.status === 'completed' ? 'tag ok' : 'tag'}>{t(`lab.status.${o.status}` as LabKey)}</span>
+          {o.late && <span className="tag">{t('lab.late', { date: o.visitDate.split('-').reverse().join('.') })}</span>}{o.pending && <span className="tag">{t('lab.pendingTag')}</span>}</div>
         <div>{o.patientName}{o.patientNo ? ' · ' + t('lab.patientNo', { number: o.patientNo }) : ''}</div>
         <div className="fine">{t('lab.orderedBy', { name: o.orderedBy })} · {time(o.orderedAt)}{o.resultVersion ? ' · ' + t('lab.resultSaved', { version: o.resultVersion }) : ''}</div>
         <button className="primary" onClick={() => setOpenId(o.id)}>{t('lab.open')}</button>
@@ -77,7 +80,10 @@ function LabOrder({ t, base, id, request, setDirty }: { t: T; base: string; id: 
     const r = await post<{ version: number }>('/results', { expectedVersion: order.resultVersion ?? 0, values, comment });
     await reload(); setNotice(t('lab.saved', { version: r.version }));
   }); };
-  const confirmTest = () => { if (confirm(t('lab.confirmQuestion'))) void run(async () => { await post('/confirm', {}); await reload(); setNotice(t('lab.confirmed')); }); };
+  const confirmTest = () => { if (confirm(t('lab.confirmQuestion'))) void run(async () => {
+    const r = await post<{ status: string; late?: boolean; postedTo?: string }>('/confirm', {}); await reload();
+    setNotice(r.status === 'pending' ? t('lab.pending') : r.late && r.postedTo ? t('lab.confirmedLate', { date: r.postedTo.split('-').reverse().join('.') }) : t('lab.confirmed'));
+  }); };
   const setCell = (i: number, k: keyof Value, value: string) => { setRows(old => old.map((r, j) => j === i ? { ...r, [k]: value } : r)); markDirty(true); };
 
   return <div className="dr-main">
@@ -99,10 +105,11 @@ function LabOrder({ t, base, id, request, setDirty }: { t: T; base: string; id: 
       <div className="dr-actions">
         <p role="status" className="fine">{busy ? t('lab.saving') : dirty ? t('lab.unsaved') : ''}</p>
         <button className="primary" disabled={busy || !dirty}>{t('lab.save')}</button>
-        {order.status === 'ordered' && <button type="button" className="primary big" disabled={busy || dirty || !order.resultVersion || !order.visitOpen} onClick={confirmTest}>{t('lab.confirm')}</button>}
+        {order.status === 'ordered' && <button type="button" className="primary big" disabled={busy || dirty || !order.resultVersion || order.pending} onClick={confirmTest}>{t('lab.confirm')}</button>}
       </div>
       {order.status === 'ordered' && !order.resultVersion && <p className="fine">{t('lab.needResult')}</p>}
-      {order.status === 'ordered' && !order.visitOpen && <p className="fine">{t('lab.visitClosed')}</p>}
+      {order.status === 'ordered' && order.late && <p className="fine">{t('lab.late', { date: order.visitDate.split('-').reverse().join('.') })} · {t('lab.lateHint')}</p>}
+      {order.pending && <p className="fine">{t('lab.pending')}</p>}
     </form>
     <section className="dr-card">
       <h3>{t('lab.history')}</h3>

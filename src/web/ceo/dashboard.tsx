@@ -2,12 +2,12 @@ import { useEffect,useRef,useState } from 'react';
 import type { Report,Detail,Group } from '../../modules/reports/actions.js';
 import type { Download } from '../../modules/reports/exports.js';
 import type { ModuleProps,WebModule } from '../modules.js';
-import { Dates,money,metric,saveFile,t,Confirm,useReportLocale } from './shared.js';
+import { Dates,money,metric,saveBlob,saveFile,t,Confirm,useReportLocale } from './shared.js';
 
 function Ledger({title,lines,onBack}:{title:string;lines:Detail[];onBack:()=>void}) {
   const heading=useRef<HTMLHeadingElement>(null);useEffect(()=>heading.current?.focus(),[]);
-  return <section className="ceo-ledger"><button onClick={onBack}>{t('ceo.back')}</button><h2 ref={heading} tabIndex={-1}>{title}</h2><p>{lines.length} {t('ceo.lines')}</p>
-    {!lines.length?<p className="ceo-empty">{t('ceo.empty')}</p>:<ol>{lines.map((l,i)=><li key={`${l.id}:${i}`}><div><strong>{l.label}</strong><small>{l.date} · {l.id}</small></div><b>{money(l.amount)}</b></li>)}</ol>}
+  return <section className="ceo-ledger"><button onClick={onBack}>{t('ceo.back')}</button><h2 ref={heading} tabIndex={-1}>{title}</h2><p>{lines.reduce((n,l)=>n+(l.rest??1),0)} {t('ceo.lines')}</p>
+    {!lines.length?<p className="ceo-empty">{t('ceo.empty')}</p>:<ol>{lines.map((l,i)=><li key={`${l.id}:${i}`}>{l.rest?<div><strong>{t('ceo.others')}</strong><small>{l.rest} {t('ceo.lines')}</small></div>:<div><strong>{l.label}</strong><small>{l.date} · {l.id}</small></div>}<b>{money(l.amount)}</b></li>)}</ol>}
   </section>;
 }
 function Breakdown({title,rows,onSelect}:{title:string;rows:Group[];onSelect:(title:string,lines:Detail[])=>void}) {
@@ -49,7 +49,7 @@ export function Dashboard({clinic,request,day}:ModuleProps) {
 export function ExportPanel({clinic,request}:ModuleProps) {
   useReportLocale();
   const [busy,setBusy]=useState(false),[error,setError]=useState(false),[done,setDone]=useState(false);
-  const run=async()=>{setBusy(true);setError(false);setDone(false);try{saveFile(await request<Download>(`/api/clinics/${clinic.id}/reports/full-export`,{}));setDone(true);}catch{setError(true);}finally{setBusy(false);}};
+  const run=async()=>{setBusy(true);setError(false);setDone(false);try{saveBlob(await request<Blob>(`/api/clinics/${clinic.id}/reports/full-export`,{},false,10*60_000),'clinora-clinic.zip');setDone(true);}catch{setError(true);}finally{setBusy(false);}};
   return <section className="ceo-workspace"><header className="ceo-heading"><div><p className="ceo-eyebrow">{t('ceo.eyebrow')}</p><h2>{t('ceo.exportTitle')}</h2><p>{t('ceo.exportLead')}</p></div></header><p>{t('ceo.full')}</p><Confirm label={t('ceo.full')} text={t('ceo.fullConfirm')} busy={busy} onConfirm={()=>void run()}/>{error&&<p role="alert">{t('ceo.error')}</p>}{done&&<p role="status">{t('ceo.downloaded')}</p>}</section>;
 }
 export const dashboardModule:WebModule={id:'dashboard',roles:['ceo'],label:'module.dashboard',Screen:Dashboard};

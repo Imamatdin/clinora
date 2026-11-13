@@ -59,7 +59,7 @@ test('C8: CEO-only exports are valid PDF/XLSX/CSV ZIP, exact UZS, audited and cl
       if(format==='pdf')assert.equal(buffer.subarray(0,4).toString(),'%PDF');
       else{const files=unzipSync(buffer);assert.match(strFromU8(files['xl/worksheets/sheet1.xml']!),new RegExp(exact));assert.ok(files['[Content_Types].xml']);}
     }
-    const archive=await client.request(base+'/reports/full-export',{});assert.equal(archive.status,200);const files=unzipSync(Buffer.from((await archive.json()).base64,'base64'));
+    const archive=await client.request(base+'/reports/full-export',{});assert.equal(archive.status,200);assert.equal(archive.headers.get('content-type'),'application/zip');assert.equal(archive.headers.get('content-length'),null,'streamed, not buffered');const files=unzipSync(new Uint8Array(await archive.arrayBuffer()));
     assert.match(strFromU8(files['charge_lines.csv']!),new RegExp(exact));assert.ok(files['document_versions.csv']);assert.ok(files['payroll_lines.csv']);
     assert.doesNotMatch(Object.keys(files).join(','),/sessions|idempotency|invitation|telegram_links|devices/);
     assert.doesNotMatch(strFromU8(files['staff.csv']!),/password_hash|token_hash/);

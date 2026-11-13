@@ -16,6 +16,7 @@
     "test:unit": "node --import tsx --test tests/*.test.ts",
     "test:integration": "node --import tsx --test tests/integration/*.test.ts",
     "test:browser": "playwright test",
+    "test:load": "node --import tsx --test tests/load/reports-load.test.ts",
     "test": "npm run test:unit && npm run test:integration",
     "db:migrate": "node --import tsx scripts/database.mjs migrate",
     "db:bootstrap": "node --import tsx scripts/database.mjs bootstrap",

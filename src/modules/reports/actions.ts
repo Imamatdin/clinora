@@ -2,18 +2,20 @@ import { DomainError } from '../identity/access.js';
 import { requireRole, type ClinicContext } from '../../server/roles.js';
 import { records, invoiceAt, serviceDate, inRange, localDate, sum, indexRecords, type Period, type Records, type Row } from './records.js';
 
-export type Detail = { id: string; date: string; label: string; amount: string; patientId?:string; doctorId?: string; doctor?: string; departmentId?: string; department?: string; kind?: string; source?: string };
+/** `rest` marks a remainder row: the count and sum of the rows not listed (see capReport). */
+export type Detail = { id: string; date: string; label: string; amount: string; rest?: number; patientId?:string; doctorId?: string; doctor?: string; departmentId?: string; department?: string; kind?: string; source?: string };
 export type Report = { from: string; to: string; clinic: string; generatedAt: string; snapshot?: boolean; totals: Record<string,string>;
   needsReview?: {id:string;label:string}[]; details: Record<string,Detail[]>; doctors: Group[]; departments: Group[]; sources: Group[];cashShifts?:{id:string;cashier:string;date:string;opening:string;expected:string;counted:string|null;difference:string|null}[] };
 export type Group = { id: string; name: string; amount: string; lines: Detail[]; patientLines?:Detail[];valueLines?:Detail[];discountLines?:Detail[];outstandingLines?:Detail[] };
 const group = (lines: Detail[], key: 'doctor'|'department'|'source'): Group[] => {
-  const map = new Map<string,Group>();
+  const map = new Map<string,Group & {total:bigint}>();
   for (const l of lines) {
     const id = key === 'source' ? l.source ?? '—' : l[key === 'doctor' ? 'doctorId' : 'departmentId'] ?? '—';
-    const row = map.get(id) ?? { id, name: l[key] ?? '—', amount: '0', lines: [] };
-    row.amount = (BigInt(row.amount) + BigInt(l.amount)).toString(); row.lines.push(l); map.set(id,row);
+    let row = map.get(id);
+    if (!row) { row = { id, name: l[key] ?? '—', amount: '0', lines: [], total: 0n }; map.set(id,row); }
+    row.total += BigInt(l.amount); row.lines.push(l);
   }
-  return [...map.values()].sort((a,b) => BigInt(a.amount) > BigInt(b.amount) ? -1 : 1);
+  return [...map.values()].sort((a,b) => a.total > b.total ? -1 : 1).map(({total,...row}) => ({...row,amount:total.toString()}));
 };
 export function computeReport(data: Records, p: Period): Report {
   const index=indexRecords(data);
@@ -45,9 +47,15 @@ export function computeReport(data: Records, p: Period): Report {
       const raw = index.charges.get(line.id)!;
       const d: Detail = { id: line.id,date: serviceDate(raw,data),label: `${v.patient_no} · ${raw.service}`,amount: line.value.toString(),patientId:v.patient_id,
         ...doctorOf(raw),departmentId:raw.department_id,department:raw.department,kind:raw.kind };
-      if(inRange(d.date,p)){add('value',d);add('discounts',{...d,amount:line.discount.toString()});}
-      if(line.payable!==line.allocatedPaid)add('outstanding',{...d,amount:(line.payable-line.allocatedPaid).toString()});
+      // Zero discounts are not listed (they add nothing and were most of a month's rows).
+      if(inRange(d.date,p)){add('value',d);if(line.discount!==0n)add('discounts',{...d,amount:line.discount.toString()});}
+      // Without SQL open balances (pure unit tests), derive them from the loaded ledgers.
+      if(!data.open && line.payable!==line.allocatedPaid)add('outstanding',{...d,amount:(line.payable-line.allocatedPaid).toString()});
     }
+  }
+  if(data.open){
+    details.outstanding=data.open.visits.lines as Detail[];
+    for(const v of data.open.review)if(!needsReview.some(r=>r.id===v.id))needsReview.push(v);
   }
   // Receipt provenance is preserved, including refunds for visits from earlier business days.
   const selectedPayments = data.payments.filter(r=>inRange(r.date,p));
@@ -77,7 +85,8 @@ export function computeReport(data: Records, p: Period): Report {
   details.lab = revenue.filter(l=>l.kind==='lab'); details.ward = revenue.filter(l=>['bed','caretaker'].includes(l.kind!));
   const performance=(key:'doctor'|'department')=>{
     const revenueGroups=new Map(group(revenue,key).map(g=>[g.id,g])),values=new Map(group(details.value!,key).map(g=>[g.id,g]));
-    const discounts=new Map(group(details.discounts!,key).map(g=>[g.id,g])),outstanding=new Map(group(details.outstanding!,key).map(g=>[g.id,g]));
+    const discounts=new Map(group(details.discounts!,key).map(g=>[g.id,g]));
+    const outstanding=new Map<string,Group>(data.open?data.open[key==='doctor'?'doctors':'departments'].map(g=>[g.id,{...g,lines:g.lines as Detail[]}]):group(details.outstanding!,key).map(g=>[g.id,g]));
     return [...new Set([...values.keys(),...revenueGroups.keys(),...outstanding.keys()])].map(id=>{
       const r=revenueGroups.get(id)??{id,name:(values.get(id)??outstanding.get(id))!.name,amount:'0',lines:[]};
       const patients=new Map<string,Detail>();
@@ -92,6 +101,24 @@ export function computeReport(data: Records, p: Period): Report {
       const expected=BigInt(s.opening_cash_uzs)+cash.reduce((n,r)=>n+BigInt(r.amount_uzs)*(r.kind==='payment'?1n:-1n),0n)-sum(outs,'amount_uzs');
       return {id:s.id,cashier:s.cashier,date:s.date,opening:s.opening_cash_uzs,expected:expected.toString(),counted:s.counted_cash_uzs,difference:s.counted_cash_uzs===null?null:(BigInt(s.counted_cash_uzs)-expected).toString()};
     }) };
+}
+/**
+ * Bound what the dashboard sends to a browser or phone: each drill-down list keeps its largest rows
+ * and folds the others into one remainder row, so every list still sums to its total. A month at
+ * 170 visits a day otherwise sent each line up to seven times (36 MB measured, task 024). Exports and
+ * the stored day-close snapshot use the full report.
+ */
+export function capReport(report: Report, top = 100, groupTop = 20): Report {
+  const cap = (lines: Detail[] | undefined, n: number): Detail[] | undefined => {
+    if (!lines || lines.length <= n) return lines;
+    const sorted = [...lines].sort((a,b) => { const x=BigInt(a.amount), y=BigInt(b.amount), ax=x<0n?-x:x, ay=y<0n?-y:y; return ax===ay?0:ax>ay?-1:1; });
+    const rest = sorted.slice(n);
+    return [...sorted.slice(0,n), { id:'rest', date:report.to, label:'', amount:sum(rest,'amount').toString(), rest:rest.reduce((k,l)=>k+(l.rest??1),0) }];
+  };
+  const groups = (list: Group[]) => list.map(g => ({ ...g, lines: cap(g.lines,groupTop)!,
+    ...(g.patientLines ? { patientLines: cap(g.patientLines,groupTop)!, valueLines: cap(g.valueLines,groupTop)!, discountLines: cap(g.discountLines,groupTop)!, outstandingLines: cap(g.outstandingLines,groupTop)! } : {}) }));
+  return { ...report, details: Object.fromEntries(Object.entries(report.details).map(([k,v]) => [k,cap(v,top)!])),
+    doctors: groups(report.doctors), departments: groups(report.departments), sources: groups(report.sources) };
 }
 export async function dashboard(c: ClinicContext,p: Period) {
   await requireRole(c.tx,c.actorId,c.clinicId,['ceo']);

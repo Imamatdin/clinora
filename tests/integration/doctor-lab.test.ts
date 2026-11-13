@@ -207,8 +207,9 @@ test('doctor orders a lab test at the current price; lab enters versioned result
   const ordered = await json(await A.request(base + '/orders', orderInput));
   assert.deepEqual(await json(await A.request(base + '/orders', orderInput)), ordered, 'retry orders once');
   const lineId = ordered.lines[0].id;
-  const row = (await f.pool.query('SELECT status, unit_price_uzs, source, created_by FROM charge_lines WHERE id=$1', [lineId])).rows[0];
-  assert.deepEqual(row, { status: 'ordered', unit_price_uzs: '45000', source: 'doctor', created_by: ids.a });
+  const row = (await f.pool.query('SELECT status, unit_price_uzs, source, created_by, performer_user_id FROM charge_lines WHERE id=$1', [lineId])).rows[0];
+  // Task 023: the ordering doctor is the lab line's performer from the start.
+  assert.deepEqual(row, { status: 'ordered', unit_price_uzs: '45000', source: 'doctor', created_by: ids.a, performer_user_id: ids.a });
 
   const list = await json(await lab.request(url('lab/orders')));
   assert.deepEqual(list.orders.map((o: { id: string }) => o.id), [lineId]);
@@ -222,8 +223,9 @@ test('doctor orders a lab test at the current price; lab enters versioned result
   const confirms = await Promise.all([1, 2].map(() => lab.request(url(`lab/orders/${lineId}/confirm`), { idempotencyKey: key() })));
   assert.deepEqual(confirms.map(r => r.status), [200, 200]);
   assert.deepEqual((await Promise.all(confirms.map(json))).map(b => b.completedNow).sort(), [false, true]);
-  const done = (await f.pool.query('SELECT status, completed_by, unit_price_uzs FROM charge_lines WHERE id=$1', [lineId])).rows[0];
-  assert.deepEqual(done, { status: 'completed', completed_by: ids.lab, unit_price_uzs: '45000' });
+  const done = (await f.pool.query('SELECT status, completed_by, unit_price_uzs, performer_user_id FROM charge_lines WHERE id=$1', [lineId])).rows[0];
+  // Task 023: the technician is completed_by only; the performer (who may earn on it) stays the ordering doctor.
+  assert.deepEqual(done, { status: 'completed', completed_by: ids.lab, unit_price_uzs: '45000', performer_user_id: ids.a });
   // A correction after confirmation is a new version; the charge is untouched.
   const r2 = await json(await lab.request(url(`lab/orders/${lineId}/results`), { idempotencyKey: key(), expectedVersion: 1, values: [values[0]!], comment: 'Қайта ўлчанди' }));
   assert.equal(r2.version, 2);

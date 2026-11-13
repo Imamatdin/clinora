@@ -41,7 +41,7 @@ test('021: three inpatient days and caretaker dates reconcile even with real cre
 test('021: bounded ledger excludes history outside the period; own doctor records exclude another doctor',async t=>{
   const {f,call}=await setup(t),g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
   const date=(await f.pool.query('SELECT business_date FROM business_days WHERE id=$1',[g.day])).rows[0].business_date;
-  await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
+  await f.pool.query(`UPDATE charge_lines SET performer_user_id=$2,status='completed',completed_by=$2,completed_at=now() WHERE id=$1`,[g.line,f.owner.userId]);
   const foreign=id();await f.pool.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,source,created_by) VALUES($1,$2,$3,$4,1,123,'registration',$5)`,[foreign,f.owner.clinicId,g.visit,g.service,f.owner.userId]);
   await transaction(f.pool,async tx=>{
     const c=await requireRole(tx,f.owner.userId,f.owner.clinicId,['ceo']);
@@ -58,7 +58,7 @@ test('021: bounded ledger excludes history outside the period; own doctor record
 });
 test('021: missing payroll rules are visible, finalize names doctors, future corrections are audited',async t=>{
   const {f,call}=await setup(t),g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
-  await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
+  await f.pool.query(`UPDATE charge_lines SET performer_user_id=$2,status='completed',completed_by=$2,completed_at=now() WHERE id=$1`,[g.line,f.owner.userId]);
   const date=(await f.pool.query('SELECT business_date FROM business_days WHERE id=$1',[g.day])).rows[0].business_date,p={from:date,to:date};
   const draft=await call('/payroll/earnings',p);assert.equal(draft.lines[0].status,'rule_missing');assert.equal(draft.lines[0].charge_line_id,g.line);
   await call(`/business-days/${g.day}/close`,{});
@@ -167,7 +167,7 @@ test('021: discount void stores PIN approver separately from audited requesting 
 
 test('021: scoped doctor discount rounding matches complete invoice, including percent and fixed remainders',async t=>{
   const {f,call}=await setup(t),g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
-  await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
+  await f.pool.query(`UPDATE charge_lines SET performer_user_id=$2,status='completed',completed_by=$2,completed_at=now() WHERE id=$1`,[g.line,f.owner.userId]);
   const other=id();await f.pool.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,source,created_by) VALUES($1,$2,$3,$4,1,7,'registration',$5)`,[other,f.owner.clinicId,g.visit,g.service,f.owner.userId]);
   const date=(await f.pool.query('SELECT business_date FROM business_days WHERE id=$1',[g.day])).rows[0].business_date;
   for(const [kind,amount] of [['fixed','100003'],['percent','3333']] as const){
@@ -218,7 +218,7 @@ test('021: unbalanced visit is flagged in a successful immutable close snapshot'
 
 test('021: doctor-only payroll includes later visit-discount changes without new payments or owned lines',async t=>{
   const {f,call}=await setup(t),g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
-  await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
+  await f.pool.query(`UPDATE charge_lines SET performer_user_id=$2,status='completed',completed_by=$2,completed_at=now() WHERE id=$1`,[g.line,f.owner.userId]);
   const date=(await f.pool.query('SELECT business_date FROM business_days WHERE id=$1',[g.day])).rows[0].business_date,next=new Date(Date.parse(date)+86400000).toISOString().slice(0,10);
   await call('/payroll/rules',{userId:f.owner.userId,shareBp:5000,basis:'billed',discountBearer:'proportional',categories:['consultation'],effectiveFrom:date},201);
   await f.pool.query(`INSERT INTO discounts(id,clinic_id,visit_id,kind,amount_uzs,reason,approved_by,created_by,created_at) VALUES($1,$2,$3,'fixed',100000,'Synthetic later waiver',$4,$4,($5::date+time '10:00') AT TIME ZONE 'Asia/Tashkent')`,[id(),f.owner.clinicId,g.visit,f.owner.userId,next]);

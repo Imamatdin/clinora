@@ -50,16 +50,28 @@ export const Void = z.object({ discountId: id, reason }).strict();
 export const Out = z
   .object({ expenseId: id, amount: positive, note: reason })
   .strict();
+/** Task 023: one key per press; `approvalId` is required above the clinic threshold (default 0: always). */
+export const OutRequest = Out.extend({
+  key: z.string().min(8).max(200),
+  approvalId: id.optional(),
+}).strict();
 export const Approved = z.object({ approvalId: id.optional() });
 export const Approval = z
   .object({
     approverId: id,
     pin: z.string().regex(/^\d{4,6}$/),
-    visitId: id,
-    operation: z.enum(["discount", "refund", "void"]),
+    visitId: id.optional(),
+    /** Task 023: a cash-out approval is bound to the cash shift instead of a visit. */
+    shiftId: id.optional(),
+    operation: z.enum(["discount", "refund", "void", "cash_out"]),
     payload: z.unknown(),
   })
-  .strict();
+  .strict()
+  .refine((v) =>
+    v.operation === "cash_out"
+      ? !!v.shiftId && !v.visitId
+      : !!v.visitId && !v.shiftId,
+  );
 const fail = (
   code: "NOT_FOUND" | "FORBIDDEN" | "INVALID_INPUT" | "INVALID_TRANSITION",
 ): never => {
@@ -185,6 +197,14 @@ export async function bill(
   reconciling = false,
 ) {
   await guard(c);
+  return billFor(c, visitId, reconciling);
+}
+/** The bill without the cashier role check, for callers that authorized their own way (task 023 cancellation). */
+export async function billFor(
+  c: ClinicContext,
+  visitId: string,
+  reconciling = false,
+) {
   await visit(c, visitId);
   const lines = (
     await c.tx.query(
@@ -303,7 +323,9 @@ export async function approve(
       ? Refund
       : input.operation === "discount"
         ? Reduction
-        : Void;
+        : input.operation === "cash_out"
+          ? Out
+          : Void;
   const parsed = schema.safeParse(input.payload);
   if (!parsed.success) return fail("INVALID_INPUT");
   const p = (
@@ -340,7 +362,7 @@ export async function approve(
       c.clinicId,
       c.actorId,
       input.approverId,
-      payload(input.operation, input.visitId, parsed.data),
+      payload(input.operation, (input.visitId ?? input.shiftId)!, parsed.data),
     ],
   );
   await audited(c, "approved", approvalId);
@@ -605,10 +627,45 @@ export async function pay(
 export async function cashOut(
   c: ClinicContext,
   shiftId: string,
-  input: z.infer<typeof Out>,
+  request: z.infer<typeof OutRequest>,
 ) {
   await guard(c);
+  const { key, approvalId, ...input } = request;
+  // Task 023: one cash-out per press. A replay returns the recorded row without needing a fresh approval.
+  await c.tx.query("SELECT pg_advisory_xact_lock(hashtextextended($1,23))", [
+    c.clinicId + key,
+  ]);
+  const old = (
+    await c.tx.query(
+      "SELECT * FROM cash_outs WHERE clinic_id=$1 AND idempotency_key=$2",
+      [c.clinicId, key],
+    )
+  ).rows[0];
+  if (old) {
+    if (
+      old.created_by !== c.actorId ||
+      old.cash_shift_id !== shiftId ||
+      old.expense_type_id !== input.expenseId ||
+      old.amount_uzs !== input.amount ||
+      old.note !== input.note
+    )
+      return fail("INVALID_INPUT");
+    return old;
+  }
   const s = await shift(c, shiftId);
+  const threshold = BigInt(
+    (
+      await c.tx.query(
+        "SELECT cash_out_approval_threshold_uzs::text t FROM clinic_settings WHERE clinic_id=$1",
+        [c.clinicId],
+      )
+    ).rows[0]?.t ?? "0",
+  );
+  // Above the threshold a CEO/administrator approves (a manager doing it approves it themselves).
+  const approver =
+    BigInt(input.amount) > threshold
+      ? await authorization(c, "cash_out", shiftId, input, approvalId)
+      : null;
   if (
     !(
       await c.tx.query(
@@ -620,7 +677,7 @@ export async function cashOut(
     return fail("NOT_FOUND");
   const r = (
     await c.tx.query(
-      "INSERT INTO cash_outs(id,clinic_id,cash_shift_id,business_day_id,expense_type_id,amount_uzs,note,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+      "INSERT INTO cash_outs(id,clinic_id,cash_shift_id,business_day_id,expense_type_id,amount_uzs,note,created_by,idempotency_key,approved_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *",
       [
         randomUUID(),
         c.clinicId,
@@ -630,6 +687,8 @@ export async function cashOut(
         input.amount,
         input.note,
         c.actorId,
+        key,
+        approver,
       ],
     )
   ).rows[0];
@@ -655,6 +714,23 @@ export async function close(
       [c.clinicId, s.id],
     )
   ).rows[0]!.amount;
+  // Task 023: every cash-out of the shift is listed on the close report with who approved it.
+  const cashOutList = (
+    await c.tx.query(
+      `SELECT o.id,o.amount_uzs::text amount,o.note,e.name_uz_cyrl expense,o.created_at,cb.display_name created_by,ap.display_name approved_by
+       FROM cash_outs o JOIN expense_types e ON e.id=o.expense_type_id AND e.clinic_id=o.clinic_id JOIN accounts cb ON cb.id=o.created_by
+       LEFT JOIN accounts ap ON ap.id=o.approved_by WHERE o.clinic_id=$1 AND o.cash_shift_id=$2 ORDER BY o.created_at,o.id`,
+      [c.clinicId, s.id],
+    )
+  ).rows.map((o) => ({
+    id: o.id,
+    amount: o.amount,
+    expense: o.expense,
+    note: o.note,
+    createdAt: o.created_at.toISOString(),
+    createdBy: o.created_by,
+    approvedBy: o.approved_by ?? null,
+  }));
   const expected =
     BigInt(s.opening_cash_uzs) +
     BigInt(r.payments) -
@@ -665,6 +741,7 @@ export async function close(
     cashPayments: r.payments,
     cashRefunds: r.refunds,
     cashOuts: outs,
+    cashOutList,
     expected,
     counted: input.counted,
     difference: BigInt(input.counted) - expected,
@@ -704,12 +781,14 @@ async function paymentLots(c: ClinicContext, paymentId: string) {
 /** Reallocate net receipts after a discount change, retaining each payment's provenance.
  * Historical allocations and receipt snapshots remain untouched; corrections append.
  */
-async function reconcile(
+export async function reconcile(
   c: ClinicContext,
   visitId: string,
-  discountId: string,
+  cause: string | { cancelledLineId: string },
 ) {
-  const b = await bill(c, visitId, true);
+  const discountId = typeof cause === "string" ? cause : null;
+  const cancelledLineId = typeof cause === "string" ? null : cause.cancelledLineId;
+  const b = await billFor(c, visitId, true);
   const remaining = new Map(b.invoice.lines.map((l) => [l.id, l.payable]));
   for (const p of b.payments.filter((p) => p.kind === "payment")) {
     const refunded = b.payments
@@ -732,8 +811,8 @@ async function reconcile(
       const delta = l.allocatedPaid - (previous.get(l.id) ?? 0n);
       if (delta !== 0n)
         await c.tx.query(
-          "INSERT INTO cashier_allocation_adjustments(id,clinic_id,payment_id,charge_line_id,discount_id,delta_uzs) VALUES($1,$2,$3,$4,$5,$6)",
-          [randomUUID(), c.clinicId, p.id, l.id, discountId, delta.toString()],
+          "INSERT INTO cashier_allocation_adjustments(id,clinic_id,payment_id,charge_line_id,discount_id,cancelled_line_id,delta_uzs) VALUES($1,$2,$3,$4,$5,$6,$7)",
+          [randomUUID(), c.clinicId, p.id, l.id, discountId, cancelledLineId, delta.toString()],
         );
       remaining.set(l.id, uzs(remaining.get(l.id)! - l.allocatedPaid));
     }

@@ -8,7 +8,7 @@ export const Range = z.object({ from: date, to: date }).strict().refine(v => v.f
   (Date.parse(v.to) - Date.parse(v.from)) / 86400000 <= 366);
 export type Period = z.infer<typeof Range>;
 export type Row = Record<string, any>;
-export type Records = { clinic: Row; version?:string; doctorDiscounts?:Row[]; activities?:Row[]; visits: Row[]; charges: Row[]; discounts: Row[]; payments: Row[]; allocations: Row[]; adjustments: Row[]; cashOuts: Row[]; rules: Row[]; shifts: Row[] };
+export type Records = { clinic: Row; version?:string; doctorIds?:string[]; doctorDiscounts?:Row[]; activities?:Row[]; visits: Row[]; charges: Row[]; discounts: Row[]; payments: Row[]; allocations: Row[]; adjustments: Row[]; cashOuts: Row[]; rules: Row[]; shifts: Row[] };
 type VisitLedger={charges:Row[];discounts:Row[];payments:Row[];allocations:Row[];adjustments:Row[]};
 const scopedDiscounts=new WeakMap<Records,Map<string,Map<string,string>>>();
 const cached=new WeakMap<Records,{visits:Map<string,Row>;charges:Map<string,Row>;ledger:Map<string,VisitLedger>}>();
@@ -62,6 +62,7 @@ export async function records(c: ClinicContext, p: Period, options: {outstanding
     SELECT
     (SELECT to_jsonb(x) FROM clinics x WHERE id=$1) clinic,
     coalesce((SELECT version::text FROM report_versions WHERE clinic_id=$1),'0') version,
+    coalesce((SELECT jsonb_agg(DISTINCT r.user_id) FROM membership_roles r WHERE r.clinic_id=$1 AND r.role='doctor'),'[]') "doctorIds",
     coalesce((SELECT jsonb_agg(x) FROM (SELECT id visit_id,date::text FROM events WHERE $5::uuid IS NOT NULL AND id IN(SELECT id FROM selected)) x),'[]') activities,
     CASE WHEN $5::uuid IS NULL THEN NULL ELSE coalesce((SELECT jsonb_agg(x) FROM (
       SELECT day::date::text date,part.charge_line_id,part.discount_uzs::text amount_uzs
@@ -105,7 +106,9 @@ export function invoiceAt(data: Records, visit: Row, until: string): readonly Li
   }));
   const invoice = calculateInvoice(charges.sort((a,b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)).map(l => ({
     id: l.id, unitPrice: uzs(l.unit_price_uzs), quantity: l.quantity,
-    status: l.cancelled_at && dateOf(l.cancelled_at) > until ? 'ordered' : l.status,
+    // As of `until`: a later cancellation or completion has not happened yet (task 023: shares need a completed line).
+    status: l.cancelled_at && dateOf(l.cancelled_at) > until ? (l.completed_at && dateOf(l.completed_at) <= until ? 'completed' : 'ordered')
+      : l.status === 'completed' && l.completed_at && dateOf(l.completed_at) > until ? 'ordered' : l.status,
     category: l.kind, ...(l.performer_user_id ? { doctorId: l.performer_user_id } : {})
   })), discounts, []);
   const payments = new Map(ledger.payments.filter(p => p.date <= until).map(p => [p.id, p]));

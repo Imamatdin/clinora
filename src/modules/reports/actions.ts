@@ -17,6 +17,9 @@ const group = (lines: Detail[], key: 'doctor'|'department'|'source'): Group[] =>
 };
 export function computeReport(data: Records, p: Period): Report {
   const index=indexRecords(data);
+  // Task 023: the per-doctor breakdown names only performers who hold the doctor role; others group under "—".
+  const doctors=data.doctorIds?new Set(data.doctorIds):null;
+  const doctorOf=(l:Row)=>!l.performer_user_id||(doctors&&!doctors.has(l.performer_user_id))?{}:{doctorId:l.performer_user_id as string,doctor:l.doctor as string};
   const details: Record<string,Detail[]> = Object.fromEntries(['patients','new','returning','outpatient','inpatient','value','discounts','outstanding','collected','cash','card','transfer','refunds','cashOuts','net','lab','ward'].map(k=>[k,[]]));
   const add = (k: string, d: Detail) => details[k]!.push(d);
   const needsReview: {id:string;label:string}[]=[];
@@ -41,7 +44,7 @@ export function computeReport(data: Records, p: Period): Report {
     for (const line of lines) {
       const raw = index.charges.get(line.id)!;
       const d: Detail = { id: line.id,date: serviceDate(raw,data),label: `${v.patient_no} · ${raw.service}`,amount: line.value.toString(),patientId:v.patient_id,
-        doctorId: raw.performer_user_id,doctor: raw.doctor,departmentId:raw.department_id,department:raw.department,kind:raw.kind };
+        ...doctorOf(raw),departmentId:raw.department_id,department:raw.department,kind:raw.kind };
       if(inRange(d.date,p)){add('value',d);add('discounts',{...d,amount:line.discount.toString()});}
       if(line.payable!==line.allocatedPaid)add('outstanding',{...d,amount:(line.payable-line.allocatedPaid).toString()});
     }
@@ -62,14 +65,14 @@ export function computeReport(data: Records, p: Period): Report {
     const payment = selectedById.get(a.payment_id); if (!payment) continue;
     const l = index.charges.get(a.charge_line_id)!;
     if(invalid.has(l.visit_id))continue;
-    revenue.push({id:`${payment.id}:${l.id}`,date:payment.date,label:l.service,amount:(BigInt(a.amount_uzs)*(payment.kind==='payment'?1n:-1n)).toString(),doctorId:l.performer_user_id,doctor:l.doctor,departmentId:l.department_id,department:l.department,kind:l.kind});
+    revenue.push({id:`${payment.id}:${l.id}`,date:payment.date,label:l.service,amount:(BigInt(a.amount_uzs)*(payment.kind==='payment'?1n:-1n)).toString(),...doctorOf(l),departmentId:l.department_id,department:l.department,kind:l.kind});
   }
   for (const a of data.adjustments) {
     const payment=allPayments.get(a.payment_id), date=localDate(a.created_at,data.clinic.timezone);
     if (!payment || !inRange(date,p)) continue;
     const l=index.charges.get(a.charge_line_id)!;
     if(invalid.has(l.visit_id))continue;
-    revenue.push({id:a.id,date,label:l.service,amount:a.delta_uzs,doctorId:l.performer_user_id,doctor:l.doctor,departmentId:l.department_id,department:l.department,kind:l.kind});
+    revenue.push({id:a.id,date,label:l.service,amount:a.delta_uzs,...doctorOf(l),departmentId:l.department_id,department:l.department,kind:l.kind});
   }
   details.lab = revenue.filter(l=>l.kind==='lab'); details.ward = revenue.filter(l=>['bed','caretaker'].includes(l.kind!));
   const performance=(key:'doctor'|'department')=>{
@@ -109,7 +112,9 @@ export async function dayReport(c: ClinicContext,id: string) {
       const expected=BigInt(s.opening_cash_uzs)+BigInt(sums.cash)-BigInt(outs.amount);
       cashShifts.push({id:s.id,cashier:s.cashier,date:day.business_date,opening:s.opening_cash_uzs,expected:expected.toString(),counted:s.counted_cash_uzs?.toString()??null,difference:s.counted_cash_uzs===null?null:(BigInt(s.counted_cash_uzs)-expected).toString()});
     }
-    const total=(await c.tx.query(`SELECT coalesce(sum(amount_uzs) FILTER(WHERE kind='payment'),0)::text total FROM payments WHERE clinic_id=$1 AND business_day_id=$2`,[c.clinicId,id])).rows[0].total;
+    // Task 023: a cashier sees only their own shifts' totals, never the clinic's day total.
+    const total=(await c.tx.query(`SELECT coalesce(sum(p.amount_uzs) FILTER(WHERE p.kind='payment'),0)::text total FROM payments p JOIN cash_shifts s ON s.clinic_id=p.clinic_id AND s.id=p.cash_shift_id
+      WHERE p.clinic_id=$1 AND p.business_day_id=$2 AND s.cashier_user_id=$3`,[c.clinicId,id,c.actorId])).rows[0].total;
     return {...p,clinic:(await c.tx.query('SELECT name FROM clinics WHERE id=$1',[c.clinicId])).rows[0].name,generatedAt:new Date().toISOString(),snapshot:day.status==='closed',totals:{collected:total},details:{},doctors:[],departments:[],sources:[],cashShifts} as Report;
   }
   if(day.status==='closed'){

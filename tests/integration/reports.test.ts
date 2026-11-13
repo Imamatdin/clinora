@@ -19,7 +19,7 @@ test('C8: day close reconciles ledger, rejects open shifts, snapshots and sends 
     await call(`/cashier/visits/${g.visit}/discount`,{kind:'fixed',amount:'100000',reason:'Synthetic waiver'});
     const invoice=await call(`/cashier/visits/${g.visit}`),pay=invoice.payments.find((p:any)=>p.method==='cash');
     await call(`/cashier/visits/${g.visit}/refund`,{shiftId:shift.id,paymentId:pay.id,amount:'50000',reason:'Synthetic refund',key:randomUUID()});
-    await call(`/cashier/shifts/${shift.id}/cash-out`,{expenseId:g.expense,amount:'20000',note:'Synthetic supplies'},201);
+    await call(`/cashier/shifts/${shift.id}/cash-out`,{expenseId:g.expense,amount:'20000',note:'Synthetic supplies',key:randomUUID()},201);
     const date=(await f.pool.query('SELECT business_date FROM business_days WHERE id=$1',[g.day])).rows[0].business_date;
     const report=await call('/reports/dashboard',{from:date,to:date});
     const direct=(await f.pool.query(`SELECT coalesce(sum(amount_uzs) FILTER(WHERE kind='payment'),0)::text collected,coalesce(sum(amount_uzs) FILTER(WHERE kind='refund'),0)::text refunds FROM payments WHERE clinic_id=$1 AND business_day_id=$2`,[f.owner.clinicId,g.day])).rows[0];
@@ -77,14 +77,14 @@ test('C8: dated split, private doctor earnings, concurrent finalization, immutab
   const f=await httpFixture();try{
     const g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId),client=f.client();await client.login();
     const base=`/api/clinics/${f.owner.clinicId}`,date=(await f.pool.query('SELECT business_date FROM business_days WHERE id=$1',[g.day])).rows[0].business_date;
-    await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
+    await f.pool.query(`UPDATE charge_lines SET performer_user_id=$2,status='completed',completed_by=$2,completed_at=now() WHERE id=$1`,[g.line,f.owner.userId]);
     const call=async(path:string,input?:unknown,status=200)=>{const r=await client.request(base+path,input),v=await r.json();assert.equal(r.status,status,JSON.stringify(v));return v;};
     const rule={userId:f.owner.userId,shareBp:5000,basis:'billed',discountBearer:'proportional',categories:['consultation'],effectiveFrom:date};
     await call('/payroll/rules',rule,201);
     await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,status,granted_by) VALUES($1,$2,$3,'active',$4)",[randomUUID(),f.owner.clinicId,f.other.userId,f.owner.userId]);
     await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'doctor',$3)",[f.owner.clinicId,f.other.userId,f.owner.userId]);
     await call('/payroll/rules',{...rule,userId:f.other.userId,shareBp:4000},201);
-    await f.pool.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,performer_user_id,quantity,unit_price_uzs,source,created_by) VALUES($1,$2,$3,$4,$5,1,200000,'registration',$6)`,[randomUUID(),f.owner.clinicId,g.visit,g.service,f.other.userId,f.owner.userId]);
+    await f.pool.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,performer_user_id,quantity,unit_price_uzs,source,created_by,status,completed_by,completed_at) VALUES($1,$2,$3,$4,$5,1,200000,'registration',$6,'completed',$6,now())`,[randomUUID(),f.owner.clinicId,g.visit,g.service,f.other.userId,f.owner.userId]);
     const period={from:date,to:date},before=await call('/payroll/earnings',period);assert.equal(before.lines.find((l:any)=>l.user_id===f.owner.userId).entitlement_uzs,'500000');
     const tomorrow=new Date(Date.parse(date)+86400000).toISOString().slice(0,10);
     await call('/payroll/rules',{...rule,shareBp:8000,effectiveFrom:tomorrow},201);

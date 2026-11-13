@@ -330,13 +330,14 @@ export async function orderServices(ctx: ClinicContext, encounterId: string, raw
     if (!open) return fail('INVALID_TRANSITION');
     const at = new Date(), lines = [] as { id: string; serviceId: string; unitPriceUzs: string }[];
     for (const item of input.items) {
-      const ok = (await c.tx.query('SELECT 1 FROM services WHERE clinic_id=$1 AND id=$2 AND is_active AND kind = ANY($3) FOR SHARE', [c.clinicId, item.serviceId, ORDERABLE])).rowCount;
+      const ok = (await c.tx.query('SELECT kind FROM services WHERE clinic_id=$1 AND id=$2 AND is_active AND kind = ANY($3) FOR SHARE', [c.clinicId, item.serviceId, ORDERABLE])).rows[0];
       if (!ok) return fail('NOT_FOUND');
       const price = await priceAt(c.tx, c.clinicId, item.serviceId, at);
       if (!price) return fail('INVALID_TRANSITION');
       const id = randomUUID();
-      await c.tx.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,status,source,created_by,created_at)
-        VALUES($1,$2,$3,$4,$5,$6,'ordered','doctor',$7,$8)`, [id, c.clinicId, e.visit_id, item.serviceId, item.quantity, price.priceUzs.toString(), c.actorId, at]);
+      // Task 023: a lab line's performer is the ordering doctor; the confirming technician is only completed_by.
+      await c.tx.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,status,source,created_by,created_at,performer_user_id)
+        VALUES($1,$2,$3,$4,$5,$6,'ordered','doctor',$7,$8,$9)`, [id, c.clinicId, e.visit_id, item.serviceId, item.quantity, price.priceUzs.toString(), c.actorId, at, ok.kind === 'lab' ? c.actorId : null]);
       lines.push({ id, serviceId: item.serviceId, unitPriceUzs: price.priceUzs.toString() });
     }
     await recordAudit(c.tx, c.actorId, c.clinicId, 'doctor.services_ordered', e.visit_id, { lines: lines.map(l => l.id) });

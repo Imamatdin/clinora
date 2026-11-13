@@ -41,7 +41,7 @@ export const SaveInput = z.object({
 export const ActiveInput = z.object({ list: CatalogList, id, active: z.boolean(), idempotencyKey: Key }).strict();
 export const PriceInput = z.object({
   serviceId: id, priceUzs: z.string().regex(/^(0|[1-9][0-9]{0,14})$/),
-  /** Defaults to now. A past instant is refused: a new price never reaches back over recorded days. */
+  /** Defaults to now. A past instant is refused, except for a service's first price (task 023). */
   effectiveFrom: z.iso.datetime({ offset: true }).optional(),
   idempotencyKey: Key
 }).strict();
@@ -214,6 +214,9 @@ export async function setPrice(ctx: ClinicContext, raw: z.input<typeof PriceInpu
     const priceId = randomUUID();
     const row = (await ctx.tx.query(`INSERT INTO service_prices(id,clinic_id,service_id,price_uzs,effective_from,set_by)
       SELECT $1,$2,$3,$4,coalesce($5::timestamptz, now()),$6 WHERE coalesce($5::timestamptz, now()) >= now() - interval '1 minute'
+        -- Task 023: a service's first price may be backdated (nothing was ever charged at an earlier price), so
+        -- days already flagged as unpriced can be billed. Later prices stay forward-only.
+        OR NOT EXISTS (SELECT 1 FROM service_prices x WHERE x.clinic_id=$2 AND x.service_id=$3)
       ON CONFLICT (clinic_id, service_id, effective_from) DO NOTHING RETURNING effective_from`,
     [priceId, ctx.clinicId, input.serviceId, input.priceUzs, input.effectiveFrom ?? null, ctx.actorId])).rows[0];
     if (!row) fail(input.effectiveFrom ? 'INVALID_INPUT' : 'STALE_VERSION');

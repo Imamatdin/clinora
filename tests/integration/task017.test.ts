@@ -100,6 +100,18 @@ test('a visit marked for admission can be admitted; an outpatient visit cannot',
   const admit = (visitId: string) => w.post(url('inpatient/admit'), { visitId, departmentId: surg, doctorId: staff.doctorIds[4], bedId: bed, expectedDischarge: null, key: key() });
   assert.equal((await admit(outpatient)).status, 404);
   assert.equal((await admit(admitted)).status, 201);
+  // Ward rounds (the old notebook's assigned-patient list, folded into the doctor home): the attending surgeon sees
+  // the stay and opens a note for it without a queue ticket; another doctor cannot.
+  const surgeon = await signIn('t17.doctor5'), therapist = await signIn('t17.doctor');
+  const rounds = await json(await surgeon.request(url('doctor/inpatients')));
+  assert.deepEqual(rounds.map((x: { name: string }) => x.name), ['Синтетик Ётқизиладиган']);
+  const opened = await json(await surgeon.post(url(`doctor/admissions/${rounds[0].admissionId}/open`), { idempotencyKey: key() }));
+  assert.equal((await f.pool.query('SELECT visit_id FROM encounters WHERE id=$1', [opened.encounterId])).rows[0].visit_id, admitted);
+  const again = await json(await surgeon.post(url(`doctor/admissions/${rounds[0].admissionId}/open`), { idempotencyKey: key() }));
+  assert.equal(again.encounterId, opened.encounterId);
+  assert.equal((await therapist.post(url(`doctor/admissions/${rounds[0].admissionId}/open`), { idempotencyKey: key() })).status, 404);
+  assert.deepEqual(await json(await therapist.request(url('doctor/inpatients'))), []);
+  assert.equal((await w.request(url('doctor/inpatients'))).status, 403);
   // The ward view lists only inpatient visits waiting for a bed.
   const view = await json(await w.request(url('inpatient')));
   assert.equal(view.visits.some((v: { id: string }) => v.id === outpatient), false);

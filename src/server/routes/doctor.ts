@@ -9,6 +9,8 @@ registerRoutes('doctor', [
   { method: 'POST', pattern: new RegExp(`^${TICKET}/start$`), roles: R, handle: async (ctx, [t], b) => ({ body: await d.startVisit(ctx, t!, parse(d.KeyInput, await b())) }) },
   { method: 'POST', pattern: new RegExp(`^${TICKET}/complete$`), roles: R, handle: async (ctx, [t], b) => ({ body: await d.completeConsultation(ctx, t!, parse(d.KeyInput, await b())) }) },
   { method: 'GET', pattern: new RegExp(`^doctor/patients/${uuid}$`), roles: R, handle: async (ctx, [p]) => ({ body: await d.patientCard(ctx, p!) }) },
+  { method: 'GET', pattern: /^doctor\/inpatients$/, roles: R, handle: async ctx => ({ body: await d.myInpatients(ctx) }) },
+  { method: 'POST', pattern: new RegExp(`^doctor/admissions/${uuid}/open$`), roles: R, handle: async (ctx, [a], b) => ({ body: await d.openAdmission(ctx, a!, parse(d.KeyInput, await b())) }) },
   { method: 'GET', pattern: /^doctor\/catalog$/, roles: R, handle: async ctx => ({ body: await d.catalog(ctx) }) },
   { method: 'GET', pattern: new RegExp(`^${ENC}$`), roles: R, handle: async (ctx, [e]) => ({ body: await d.visitView(ctx, e!) }) },
   { method: 'POST', pattern: new RegExp(`^${ENC}/note$`), roles: R, handle: async (ctx, [e], b) => ({ body: await d.saveNote(ctx, e!, parse(d.NoteInput, await b())) }) },

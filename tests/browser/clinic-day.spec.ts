@@ -181,6 +181,11 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await page.getByRole('button', { name: T('surgery.save'), exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: T('pharmacy.saved') })).toBeVisible();
     await noSideScroll(); await shot('07-surgery-recorded');
+    // Ward round: the attending surgeon opens the admitted patient's note from the doctor home (no queue ticket).
+    await nav.getByRole('button', { name: T('module.myQueue'), exact: true }).click();
+    await page.locator('.dr-list li', { hasText: 'Синтетик Стационар Бемор' }).getByRole('button', { name: T('doctor.openNote'), exact: true }).click();
+    await expect(page.locator('section.dr').getByRole('heading', { name: T('doctor.note'), exact: true })).toBeVisible();
+    await expect(page.locator('.dr-patient').getByText('Синтетик Стационар Бемор', { exact: true })).toBeVisible();
     await signOut();
 
     // 8. Inpatient daily bed charges run through yesterday (two bed days).

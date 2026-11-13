@@ -49,7 +49,9 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
     setBusy(true); setError(''); setNotice('');
     try { await work(); } catch (e) { setError(errorText(e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE')); } finally { setBusy(false); }
   };
-  const load = () => request<Ticket[]>(`${queueBase}/mine`).then(setQueue);
+  const [ward, setWard] = useState<{ admissionId: string; name: string; patientNo: number | null; bed: string | null }[]>([]);
+  // Task 017: admitted patients of this doctor (ward rounds) open the same visit screen, without a queue ticket.
+  const load = () => Promise.all([request<Ticket[]>(`${queueBase}/mine`).then(setQueue), request<typeof ward>(`${base}/inpatients`).then(setWard).catch(() => setWard([]))]).then(() => undefined);
   useEffect(() => { load().catch(() => setError(errorText('SERVICE_UNAVAILABLE'))); }, [clinic.id]);
   useEffect(() => {
     if (open) return;
@@ -70,6 +72,10 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
     const r = await post<{ encounterId: string; patientId: string }>(`${base}/tickets/${ticket.id}/start`);
     setOpen({ encounterId: r.encounterId, patientId: r.patientId }); await load();
   });
+  const openStay = (admissionId: string) => run(async () => {
+    const r = await post<{ encounterId: string; patientId: string }>(`${base}/admissions/${admissionId}/open`);
+    setOpen({ encounterId: r.encounterId, patientId: r.patientId });
+  });
   const requeue = (ticket: Ticket) => run(async () => { await post(`${queueBase}/tickets/${ticket.id}/status`, { status: 'waiting' }); await load(); });
 
   const banners = <div aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>;
@@ -88,7 +94,7 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
   return <section className="dr">
     <div className="dr-head"><h2>{t('doctor.title')}</h2></div>
     {banners}
-    {!queue ? <p>{t('doctor.loading')}</p> : !businessDay?.openDay && !tickets.length ? <p className="empty">{t('doctor.noDay')}</p> : <>
+    {!queue ? <p>{t('doctor.loading')}</p> : !businessDay?.openDay && !tickets.length && !ward.length ? <p className="empty">{t('doctor.noDay')}</p> : <>
       <div className="dr-actions">
         <button className="primary big" disabled={busy || (!waiting.length && !active)} onClick={() => void callNext()}>{t('doctor.callNext')}</button>
         <span className="fine">{t('doctor.waitingCount', { count: waiting.length })}</span>
@@ -106,6 +112,9 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
       {!tickets.length && <p className="empty">{t('doctor.empty')}</p>}
       {waiting.length > 0 && <><h3>{t('doctor.waitingList')}</h3><ul className="dr-list">{waiting.map(x =>
         <li key={x.id}><strong>{t('doctor.ticketNo', { number: x.number })}</strong><span>{x.patient.fullName}</span></li>)}</ul></>}
+      {ward.length > 0 && <><h3>{t('doctor.inpatients')}</h3><ul className="dr-list">{ward.map(a =>
+        <li key={a.admissionId}><strong>{a.bed ?? ''}</strong><span>{a.name}</span>
+          <button className="small" disabled={busy} onClick={() => void openStay(a.admissionId)}>{t('doctor.openNote')}</button></li>)}</ul></>}
       {done.length > 0 && <><h3>{t('doctor.doneList')}</h3><ul className="dr-list">{done.map(x =>
         <li key={x.id}><strong>{t('doctor.ticketNo', { number: x.number })}</strong><span>{x.patient.fullName}</span>
           <button className="small" disabled={busy} onClick={() => void start(x)}>{t('doctor.open')}</button></li>)}</ul></>}

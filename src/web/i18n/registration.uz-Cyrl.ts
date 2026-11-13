@@ -62,6 +62,7 @@ export const registration = {
   'registration.waiting': 'Навбатда: {count}',
   'registration.noServices': 'Хизматлар бириктирилмаган',
   'registration.noPrice': 'нархи белгиланмаган',
+  'registration.admit': 'Стационарга ётқизилади',
   'registration.total': 'Жами: {amount}',
   'registration.print': 'Талонларни чоп этиш',
   'registration.printAgain': 'Талонларни қайта чоп этиш',

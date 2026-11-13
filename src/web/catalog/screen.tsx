@@ -7,7 +7,8 @@ import { DtError, type DtExtract } from '../../modules/import1c/dt.js';
 import { FIELDS_FOR, guessMapping, MAPPABLE, rowsFromTable, TableError, type ColumnMapping, type Mappable } from '../../modules/import1c/table.js';
 import { SERVICE_KINDS, type ImportRow, type ServiceKind } from '../../modules/import1c/model.js';
 import { contentHash, pages, readDtInBrowser, readTableInBrowser, supported } from './files.js';
-import { hasKey, languages, pickName, translator, type CatalogKey, type Locale, type Names } from './i18n.js';
+import { hasKey, pickName, translator, type CatalogKey, type Locale, type Names } from './i18n.js';
+import { useLocale } from '../i18n/locale.js';
 
 const LISTS = ['service', 'department', 'serviceGroup', 'doctor', 'district', 'mahalla', 'roomType', 'expenseType'] as const;
 type List = (typeof LISTS)[number];
@@ -30,15 +31,12 @@ const listKey = (l: string) => `catalog.list.${l}` as CatalogKey;
 const kindKey = (k: string) => `catalog.kind.${k}` as CatalogKey;
 
 export function Catalog({ clinic, request, setDirty }: ModuleProps) {
-  const [locale, setLocale] = useState<Locale>('uz-Cyrl'), t = translator(locale);
+  const locale = useLocale(), t = translator(locale);
   const [tab, setTab] = useState<'lists' | 'points' | 'import'>('lists');
   const base = `/api/clinics/${clinic.id}/catalog`;
   return <section className="catalog">
     <div className="catalog-head">
       <h2>{t('catalog.title')}</h2>
-      <label className="catalog-lang">{t('catalog.language')}
-        <select value={locale} onChange={e => setLocale(e.target.value as Locale)}>{languages.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}</select>
-      </label>
     </div>
     <div className="catalog-tabs" role="tablist">
       {(['lists', 'points', 'import'] as const).map(id => <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{t(`catalog.tab.${id}`)}</button>)}

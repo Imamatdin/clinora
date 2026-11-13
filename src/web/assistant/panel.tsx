@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiFailure, type Request } from '../api.js';
-import { errorText } from '../i18n/index.js';
-import { LOCALES, labKey, translator, type AKey, type ALocale } from './i18n.js';
+import { errorText, useLocale } from '../i18n/index.js';
+import { labKey, translator, type AKey, type ALocale } from './i18n.js';
 import './assistant.css';
 
 type FieldView = { key: string; fieldRevision: number; value: unknown; category: string | null; status: string; origin: string | null; evidence: string[];
@@ -18,7 +18,6 @@ const CATEGORY_OPTIONS: Record<string, string[]> = {
   complaints: ['reported'], hpi: ['reported'], pastHistory: ['history', 'reported'], examination: ['observed', 'measured', 'not_examined'],
   diagnosis: ['assessment'], plan: ['clinician_instruction'], labOrders: ['clinician_instruction'], followUp: ['clinician_instruction']
 };
-const loadLocale = (): ALocale => { try { const v = localStorage.getItem('clinora.assistant.locale'); return v === 'uz-Latn' || v === 'ru' ? v : 'uz-Cyrl'; } catch { return 'uz-Cyrl'; } };
 const newKey = () => crypto.randomUUID().replaceAll('-', '');
 async function sha256(data: ArrayBuffer) { return [...new Uint8Array(await crypto.subtle.digest('SHA-256', data))].map(b => b.toString(16).padStart(2, '0')).join(''); }
 const pickMime = () => ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/webm'].find(m => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m));
@@ -30,7 +29,7 @@ type Phase = { kind: 'idle' } | { kind: 'requesting' } | { kind: 'recording'; se
 /** Assistant panel for the encounter the doctor has open. Every decision is checked again on the server. */
 export function AssistantPanel({ clinicId, patientId, encounterId, request, onApproved }: { clinicId: string; patientId: string; encounterId: string; request: Request;
   /** Task 010: lets the host reload its view of the note after an approval. */ onApproved?: () => void }) {
-  const [locale, setLocaleState] = useState<ALocale>(loadLocale);
+  const locale: ALocale = useLocale();
   const t = translator(locale);
   const root = `/api/clinics/${clinicId}/assistant`, base = `${root}/patients/${patientId}/encounters/${encounterId}`;
   const [config, setConfig] = useState<Config | null>(null), [draft, setDraft] = useState<Draft | null>(null);
@@ -42,7 +41,6 @@ export function AssistantPanel({ clinicId, patientId, encounterId, request, onAp
   // Raw audio uploads bypass the JSON client, so the panel fetches the session's CSRF token itself.
   const csrf = useRef('');
 
-  const setLocale = (l: ALocale) => { setLocaleState(l); try { localStorage.setItem('clinora.assistant.locale', l); } catch { /* per-viewer convenience only */ } };
   const show = (e: unknown) => { setError(e instanceof ApiFailure ? (e.code === 'STALE_VERSION' ? t('stale') : errorText(e.code)) : errorText('SERVICE_UNAVAILABLE')); };
   const refresh = useCallback(async () => {
     const [d, p] = await Promise.all([request<Draft>(base), request<Capture[]>(`${root}/captures/pending`)]);
@@ -157,8 +155,7 @@ export function AssistantPanel({ clinicId, patientId, encounterId, request, onAp
   const working = phase.kind === 'uploading' || phase.kind === 'processing' || recording;
 
   return <section className="assistant panel" aria-labelledby="assistant-title" lang={locale}>
-    <div className="section-heading"><div><h2 id="assistant-title">{t('title')}</h2><p className="fine">{t('lead')}</p></div>
-      <div className="lang-switch" role="group" aria-label={t('language')}>{LOCALES.map(l => <button key={l.id} type="button" className={l.id === locale ? 'current' : ''} aria-pressed={l.id === locale} onClick={() => setLocale(l.id)}>{l.label}</button>)}</div></div>
+    <div className="section-heading"><div><h2 id="assistant-title">{t('title')}</h2><p className="fine">{t('lead')}</p></div></div>
     {simulated && <p className="simulated" role="note">{t('simulatedBanner')}</p>}
     {unavailable && <p className="notice" role="note">{t('unavailableBanner')}</p>}
     <div className="banners" aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>

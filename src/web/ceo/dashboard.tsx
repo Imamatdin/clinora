@@ -2,7 +2,7 @@ import { useEffect,useRef,useState } from 'react';
 import type { Report,Detail,Group } from '../../modules/reports/actions.js';
 import type { Download } from '../../modules/reports/exports.js';
 import type { ModuleProps,WebModule } from '../modules.js';
-import { Dates,money,metric,saveFile,t,Confirm,Language,useReportLocale } from './shared.js';
+import { Dates,money,metric,saveFile,t,Confirm,useReportLocale } from './shared.js';
 
 function Ledger({title,lines,onBack}:{title:string;lines:Detail[];onBack:()=>void}) {
   const heading=useRef<HTMLHeadingElement>(null);useEffect(()=>heading.current?.focus(),[]);
@@ -40,7 +40,7 @@ export function Dashboard({clinic,request,day}:ModuleProps) {
   useEffect(()=>{void load(applied);const timer=setInterval(()=>{if(document.visibilityState==='visible')void load(applied);},30000);return()=>{sequence.current++;clearInterval(timer);};},[clinic.id,applied]);
   const exportFile=async(format:'pdf'|'xlsx')=>{setBusy(true);setError(false);try{saveFile(await request<Download>(`/api/clinics/${clinic.id}/reports/export`,{...applied,format}));setNotice(t('ceo.downloaded'));}catch{setError(true);}finally{setBusy(false);}};
   return <section className="ceo-workspace" aria-busy={busy}><header className="ceo-heading"><div><p className="ceo-eyebrow">{t('ceo.eyebrow')}</p><h2>{t('ceo.title')}</h2><p>{t('ceo.lead')}</p></div><button disabled={busy} onClick={()=>{setRange({from:today,to:today});setApplied({from:today,to:today});}}>{t('ceo.today')}</button></header>
-    <details className="ceo-filters"><summary><span>{applied.from} — {applied.to}</span><b>{t('ceo.filters')}</b></summary><Language/><Dates {...range} onChange={(from,to)=>setRange({from,to})} busy={busy} onSubmit={()=>{setReport(null);setApplied({...range});}}/></details>
+    <details className="ceo-filters"><summary><span>{applied.from} — {applied.to}</span><b>{t('ceo.filters')}</b></summary><Dates {...range} onChange={(from,to)=>setRange({from,to})} busy={busy} onSubmit={()=>{setReport(null);setApplied({...range});}}/></details>
     {busy&&<p role="status">{t('ceo.loading')}</p>}{error&&<p role="alert" className="ceo-error">{t('ceo.error')} <button disabled={busy} onClick={()=>void load()}>{t('ceo.retry')}</button></p>}{notice&&<p role="status">{notice}</p>}
     {!error&&report&&<ReportView report={report}/>}
     <details className="ceo-more"><summary>{t('ceo.more')}</summary><div><button disabled={busy||!report} onClick={()=>void exportFile('pdf')}>{t('ceo.pdf')}</button><button disabled={busy||!report} onClick={()=>void exportFile('xlsx')}>{t('ceo.excel')}</button></div></details>
@@ -50,7 +50,7 @@ export function ExportPanel({clinic,request}:ModuleProps) {
   useReportLocale();
   const [busy,setBusy]=useState(false),[error,setError]=useState(false),[done,setDone]=useState(false);
   const run=async()=>{setBusy(true);setError(false);setDone(false);try{saveFile(await request<Download>(`/api/clinics/${clinic.id}/reports/full-export`,{}));setDone(true);}catch{setError(true);}finally{setBusy(false);}};
-  return <section className="ceo-workspace"><header className="ceo-heading"><div><p className="ceo-eyebrow">{t('ceo.eyebrow')}</p><h2>{t('ceo.exportTitle')}</h2><p>{t('ceo.exportLead')}</p></div></header><Language/><p>{t('ceo.full')}</p><Confirm label={t('ceo.full')} text={t('ceo.fullConfirm')} busy={busy} onConfirm={()=>void run()}/>{error&&<p role="alert">{t('ceo.error')}</p>}{done&&<p role="status">{t('ceo.downloaded')}</p>}</section>;
+  return <section className="ceo-workspace"><header className="ceo-heading"><div><p className="ceo-eyebrow">{t('ceo.eyebrow')}</p><h2>{t('ceo.exportTitle')}</h2><p>{t('ceo.exportLead')}</p></div></header><p>{t('ceo.full')}</p><Confirm label={t('ceo.full')} text={t('ceo.fullConfirm')} busy={busy} onConfirm={()=>void run()}/>{error&&<p role="alert">{t('ceo.error')}</p>}{done&&<p role="status">{t('ceo.downloaded')}</p>}</section>;
 }
 export const dashboardModule:WebModule={id:'dashboard',roles:['ceo'],label:'module.dashboard',Screen:Dashboard};
 export const exportModule:WebModule={id:'exports',roles:['ceo'],label:'module.export',Screen:ExportPanel};

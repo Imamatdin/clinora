@@ -233,7 +233,7 @@ export function Cashier({ clinic, request }: ModuleProps) {
               {(["value", "discount", "paid", "due"] as const).map((k) => (
                 <div key={k}>
                   <dt>{t(`cashier.${k}`)}</dt>
-                  <dd>{money(bill.invoice[k])}</dd>
+                  <dd data-testid={`cashier-${k}`}>{money(bill.invoice[k])}</dd>
                 </div>
               ))}
             </dl>
@@ -250,10 +250,10 @@ export function Cashier({ clinic, request }: ModuleProps) {
                 </button>
               ))}
               <button
-                aria-label={t("cashier.backspace")}
+                title={t("cashier.backspace")}
                 onClick={() => setAmount((v) => v.slice(0, -1))}
               >
-                ⌫
+                {t("cashier.erase")}
               </button>
             </div>
             {select(

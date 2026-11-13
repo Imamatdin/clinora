@@ -48,6 +48,7 @@ export const cashier = {
   "cashier.difference": "Фарқ",
   "cashier.closed": "Ёпилган",
   "cashier.backspace": "Охирги рақамни ўчириш",
+  "cashier.erase": "Ўчириш",
   "cashier.note": "Изоҳ",
   "cashier.refundConfirm": "{amount} қайтаришни тасдиқлайсизми?",
   "cashier.closeConfirm": "Саналган нақд пул: {amount}. Сменани ёпамизми?",

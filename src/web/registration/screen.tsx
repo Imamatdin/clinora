@@ -5,7 +5,8 @@ import { ApiFailure } from '../api.js';
 import { enqueue, changeEntry, type OfflineEntry } from './outbox.js';
 import { LocalTickets, OfflineStatus, useRegistrationOutbox } from './offline.js';
 import { formatUzs, uzs } from '../../modules/billing/money.js';
-import { languages, pickName, translator, type Locale, type Names } from './i18n.js';
+import { pickName, translator, type Names } from './i18n.js';
+import { useLocale } from '../i18n/locale.js';
 
 type Service = { id: string; kind: string; names: Names; priceUzs: string | null };
 type Point = { id: string; kind: 'doctor' | 'department' | 'service'; names: Names; waiting: number; services: Service[] };
@@ -29,7 +30,7 @@ function age(birthDate: string | null): number | null {
 const phoneDigits = (value: string) => value.replace(/[^\d+]/g, '').slice(0, 16);
 
 export function Registration({ clinic, request, setDirty, myId, offlineDeviceId }: ModuleProps) {
-  const [locale, setLocale] = useState<Locale>('uz-Cyrl'), t = translator(locale);
+  const locale = useLocale(), t = translator(locale);
   const base = `/api/clinics/${clinic.id}/registration`;
   const owner = offlineDeviceId ? `${myId}:${offlineDeviceId}:${clinic.id}` : null;
   const outbox = useRegistrationOutbox(owner, base, request);
@@ -41,7 +42,7 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
   const [draft, setDraft] = useState<Draft>(emptyDraft), [editing, setEditing] = useState<Detail | null>(null);
   const [matches, setMatches] = useState<Patient[]>([]), [reason, setReason] = useState('');
   const [patient, setPatient] = useState<Patient | null>(null);
-  const [chosen, setChosen] = useState<Record<string, string[]>>({});
+  const [chosen, setChosen] = useState<Record<string, string[]>>({}), [admit, setAdmit] = useState(false);
   const [visit, setVisit] = useState<Visit | null>(null);
   const patientKey = useRef(crypto.randomUUID()), visitKey = useRef<{ signature: string; key: string } | null>(null);
   const locked = useRef(false);
@@ -65,14 +66,14 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
   function reset() {
     setLocal(null); setPrinted(null);
     setStep('find'); setQuery(''); setResults(null); setDraft(emptyDraft); setEditing(null); setMatches([]); setReason('');
-    setPatient(null); setChosen({}); setVisit(null); setDirty(false); patientKey.current = crypto.randomUUID(); visitKey.current = null;
+    setPatient(null); setChosen({}); setAdmit(false); setVisit(null); setDirty(false); patientKey.current = crypto.randomUUID(); visitKey.current = null;
     if (navigator.onLine) void run(loadOptions);
   }
   const edit = (patch: Partial<Draft>) => { setDraft(d => ({ ...d, ...patch })); setMatches([]); patientKey.current = crypto.randomUUID(); setDirty(true); };
 
   function choosePatient(p: Patient) {
     setPatient(p); setStep('route'); setMatches([]); setResults(null);
-    setChosen({});
+    setChosen({}); setAdmit(false);
   }
   async function find(e: FormEvent) {
     e.preventDefault();
@@ -128,7 +129,9 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
       const next = { ...old };
       if (next[point.id]) delete next[point.id];
       else {
-        const first = point.kind === 'doctor' ? point.services.find(s => s.kind === 'consultation' && s.priceUzs !== null) : undefined;
+        // Task 017: a new patient gets the doctor's full consultation, a returning patient the cheaper repeat visit.
+        const priced = point.services.filter(s => s.kind === 'consultation' && s.priceUzs !== null).sort((x, y) => Number(BigInt(x.priceUzs!) - BigInt(y.priceUzs!)));
+        const first = point.kind === 'doctor' ? (patient?.lastVisit ? priced[0] : priced[priced.length - 1]) : undefined;
         next[point.id] = first ? [first.id] : [];
       }
       return next;
@@ -147,7 +150,7 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
   async function printTickets() {
     if (!patient || !Object.keys(chosen).length) { setError(t('registration.choosePoint')); return; }
     const points = Object.entries(chosen).map(([queuePointId, serviceIds]) => ({ queuePointId, serviceIds }));
-    const signature = JSON.stringify({ patientId: patient.id, points });
+    const signature = JSON.stringify({ patientId: patient.id, points, admit });
     if (local || outbox.offline) {
       await run(async () => {
         if (!owner || !offlineDeviceId || !options?.day) throw new ApiFailure('SERVICE_UNAVAILABLE');
@@ -167,7 +170,7 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
     const printWindow = window.open('about:blank', '_blank');
     await run(async () => {
       try {
-        const created = await request<Visit>(`${base}/visits`, { patientId: patient.id, points, idempotencyKey: visitKey.current!.key });
+        const created = await request<Visit>(`${base}/visits`, { patientId: patient.id, points, type: admit ? 'inpatient' : 'outpatient', idempotencyKey: visitKey.current!.key });
         visitKey.current = null; setVisit(created); setStep('done'); setDirty(false);
         if (printWindow) printWindow.location.href = ticketUrl(created.visitId); else setNotice(t('registration.popupBlocked'));
       } catch (e) {
@@ -195,8 +198,6 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
   return <section className="registration" aria-busy={busy}>
     <div className="registration-head">
       <h2>{t('registration.title')}</h2>
-      <label className="registration-lang">{t('registration.language')}
-        <select aria-label={t('registration.language')} value={locale} onChange={e => setLocale(e.target.value as Locale)}>{languages.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}</select></label>
     </div>
     {outbox.offline && <p className="registration-banner" role="status">{t(owner ? 'registration.offline.banner' : 'registration.offline.enroll')}</p>}
     {owner && <OfflineStatus {...outbox} owner={owner} base={base} request={request} locale={locale} t={t} onRoute={async row => {
@@ -272,6 +273,7 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
             : <p className="muted">{t('registration.noServices')}</p>)}
         </li>;
       })}</ul>
+      {!outbox.offline && <label className="registration-admit"><input type="checkbox" checked={admit} onChange={e => { setAdmit(e.target.checked); setDirty(true); }} />{t('registration.admit')}</label>}
       <p className="registration-total">{t('registration.total', { amount: formatUzs(uzs(total)) })}</p>
       <button type="button" className="primary" disabled={busy || !options.day || !Object.keys(chosen).length} onClick={printTickets}>{t('registration.print')}</button>
     </div>}

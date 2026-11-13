@@ -1,6 +1,6 @@
 import type { ceo } from './ceo.uz-Cyrl.js';
 export const ceoUzLatn:Record<keyof typeof ceo,string>={
-  'ceo.filters':'Sana va tilni tanlash',
+  'ceo.filters':'Sanani tanlash',
   'ceo.langCyrl':'Oʻzbekcha · kirill','ceo.langLatn':'Oʻzbekcha · lotin','ceo.langRu':'Ruscha',
   'ceo.title':'Klinika koʻrsatkichlari','ceo.eyebrow':'RAHBAR ISH JOYI','ceo.lead':'Qarorlar uchun aniq raqamlar. Har bir raqam ortidagi yozuvlarni oching.',
   'ceo.live':'Jonli hisobot','ceo.from':'Boshlanish sanasi','ceo.to':'Tugash sanasi','ceo.show':'Hisobotni koʻrsatish','ceo.today':'Bugun','ceo.refresh':'Yangilash',

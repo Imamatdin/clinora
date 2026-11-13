@@ -6,9 +6,8 @@ import type { ClinicMembershipView, CurrentDayView } from '../contracts/clinic.j
 import { MANAGERS, ROLES, type Role } from '../modules/identity/roles.js';
 import { ApiFailure, createRequest } from './api.js';
 import { DayPanel, DayPill } from './day.js';
-import { errorText, setLocale, t, type UiKey } from './i18n/index.js';
+import { currentLocale, errorText, LOCALE_LABELS, LOCALES, setLocale, t, useLocale, type UiKey } from './i18n/index.js';
 import { modulesFor, plannedFor, type ModuleProps } from './modules.js';
-import { Notebook } from './notebook.js';
 import { AssistantPanel } from './assistant/panel.js';
 import { registerVisitPanel } from './doctor/panels.js';
 import { Staff } from './staff.js';
@@ -40,11 +39,19 @@ function RoleModules({ role, busy, guard, props }: { role: Role; busy: boolean; 
   </section>;
 }
 
+/** One language switch for the whole app, in the header on every screen (task 017). */
+function LanguageSwitch() {
+  const locale = useLocale();
+  return <div className="lang-switch" role="group" aria-label={t('app.language')}>{LOCALES.map(l =>
+    <button key={l} type="button" lang={l} className={l === locale ? 'current' : ''} aria-pressed={l === locale} onClick={() => { setLocale(l); document.title = t('app.title'); }}>{LOCALE_LABELS[l]}</button>)}</div>;
+}
+
 function Planned({ role }: { role: Role }) {
   return <ul className="planned">{plannedFor(role).map(key => <li key={key} aria-disabled="true"><span>{t(key)}</span><small>{t('app.comingSoon')}</small></li>)}</ul>;
 }
 
 function App() {
+  useLocale(); // re-render every screen when the interface language changes
   const [reportDayId] = useState(() => new URLSearchParams(location.search).get('report'));
   const [me, setMe] = useState<Me | null>(null), [loading, setLoading] = useState(true), [mode, setMode] = useState<'login' | 'register'>('login');
   const [clinicId, setClinicId] = useState(''), [section, setSection] = useState<Section | ''>('');
@@ -104,7 +111,7 @@ function App() {
     setDay(await request<CurrentDayView>(`/api/clinics/${id}/business-days/current`));
   }
   useEffect(() => {
-    setLocale('uz-Cyrl'); document.title = t('app.title');
+    document.documentElement.lang = currentLocale(); document.title = t('app.title');
     history.replaceState(null, '', location.pathname);
     startTelegram();
     refreshMe().catch(async e => {
@@ -162,6 +169,7 @@ function App() {
       <div className="brand">{t('app.brand')}<span>{t('app.brandTag')}</span></div>
       {clinic && <strong className="clinic-name">{clinic.name}</strong>}
       {clinic && clinic.roles.length > 0 && !me?.mustChangePassword && <DayPill day={day} />}
+      <LanguageSwitch />
       {me && <div className="account"><span className="person">{me.name}</span>
         {onDevice ? <button className="primary" disabled={busy} onClick={() => guard(() => void lock())}>{t('access.device.switchUser')}</button>
           : <>{!me.mustChangePassword && clinic && <button className="quiet" disabled={busy} onClick={() => guard(() => { setDirty(false); setShowMe(true); })}>{t('access.me.button')}</button>}
@@ -207,20 +215,14 @@ function App() {
       {!showMe && clinic && active === 'staff' && <main className="page"><Staff clinicId={clinic.id} request={request} myId={me.id} myRoles={roles} />
         {!onDevice && !inTelegram && <Devices clinicId={clinic.id} request={request} onEnrolled={() => { setMe(null); csrf.current = ''; setSection(''); setDay(null); setNotice(t('access.devices.enrolled')); void refreshDevice(); }} />}</main>}
       {!showMe && clinic && active && active !== 'staff' && <>
-        {active !== 'doctor' && <main className="page home" data-role={active}>
+        <main className="page home" data-role={active}>
           <h1>{t(`home.${active}.title` as UiKey)}</h1><p className="muted">{t(`home.${active}.lead` as UiKey)}</p>
           {(active === 'ceo' || active === 'administrator') && <DayPanel day={day} busy={busy} compact={active==='ceo'}
             onOpen={() => void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/open`, {}); setNotice(t('day.openedNotice')); } finally { await refreshDay().catch(() => {}); } })}
             onClose={(id, date) => { if (confirm(t('day.closeConfirm', { date }))) void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/${id}/close`, {}); setNotice(t('day.closedNotice')); } finally { await refreshDay().catch(() => {}); } }); }} />}
           <RoleModules key={`${clinic.id}:${active}`} role={active} busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, offlineDeviceId: onDevice ? me.session.deviceId : null, setDirty, reportDayId }} />
           <Planned role={active} />
-        </main>}
-        {active === 'doctor' && <>
-          <div className="page home compact" data-role="doctor"><h1>{t('home.doctor.title')}</h1><p className="muted">{t('home.doctor.lead')}</p>
-            <RoleModules key={`${clinic.id}:doctor`} role="doctor" busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, offlineDeviceId: onDevice ? me.session.deviceId : null, setDirty }} /><Planned role="doctor" /></div>
-          <Notebook clinic={clinic} request={request} dirty={dirty} setDirty={setDirty} guard={guard}
-            visitExtra={(patientId, encounterId, refresh) => <AssistantPanel key={encounterId} clinicId={clinic.id} patientId={patientId} encounterId={encounterId} request={request} onApproved={refresh} />} />
-        </>}
+        </main>
       </>}
       {clinic && !sections.length && !invite && <main className="page"><p className="empty">{t('staff.noRoles')}</p></main>}
     </>}

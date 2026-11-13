@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiFailure, type Request } from '../api.js';
-import { errorText } from '../i18n/index.js';
+import { errorText, useLocale } from '../i18n/index.js';
 import type { ModuleProps, WebModule } from '../modules.js';
-import { languages, saveLocale, savedLocale, translator, type LabKey, type Locale } from './i18n.js';
+import { translator, type LabKey } from './i18n.js';
 
 type Order = { id: string; status: string; service: string; patientName: string; patientNo: number | null; orderedBy: string; orderedAt: string; resultVersion: number | null };
 type Value = { name: string; value: string; unit: string; reference: string };
@@ -16,7 +16,7 @@ const blank = (): Value => ({ name: '', value: '', unit: '', reference: '' });
 const time = (iso: string) => new Date(iso).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 
 function LabHome({ clinic, request, setDirty }: ModuleProps) {
-  const [locale, setLocale] = useState<Locale>(savedLocale), t = translator(locale);
+  const t = translator(useLocale());
   const [data, setData] = useState<{ day: { date: string } | null; orders: Order[] } | null>(null), [filter, setFilter] = useState<typeof FILTERS[number]>('ordered');
   const [openId, setOpenId] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const base = `/api/clinics/${clinic.id}/lab/orders`;
@@ -27,16 +27,14 @@ function LabHome({ clinic, request, setDirty }: ModuleProps) {
     const timer = setInterval(() => { if (document.visibilityState === 'visible') load().catch(() => {}); }, 30000);
     return () => clearInterval(timer);
   }, [clinic.id, openId]);
-  const language = <label className="dr-lang">{t('lab.language')}<select aria-label={t('lab.language')} value={locale} onChange={e => { const l = e.target.value as Locale; setLocale(l); saveLocale(l); }}>
-    {languages.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}</select></label>;
 
   if (openId) return <section className="dr">
-    <div className="dr-head"><button className="quiet" onClick={() => { setDirty(false); setOpenId(''); void load(); }}>{t('lab.back')}</button>{language}</div>
+    <div className="dr-head"><button className="quiet" onClick={() => { setDirty(false); setOpenId(''); void load(); }}>{t('lab.back')}</button></div>
     <LabOrder key={openId} t={t} base={base} id={openId} request={request} setDirty={setDirty} />
   </section>;
   const shown = (data?.orders ?? []).filter(o => filter === 'all' || o.status === filter);
   return <section className="dr">
-    <div className="dr-head"><h2>{t('lab.title')}</h2>{language}</div>
+    <div className="dr-head"><h2>{t('lab.title')}</h2></div>
     {error && <p role="alert" className="error">{error}</p>}
     {!data ? <p>{t('lab.loading')}</p> : !data.day ? <p className="empty">{t('lab.noDay')}</p> : <>
       <div className="dr-actions" role="group" aria-label={t('lab.filter')}>

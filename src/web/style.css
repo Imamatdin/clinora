@@ -95,3 +95,16 @@ html.tg a,html.tg .link{color:var(--tg-link,#16685f)}
 html.tg footer{display:none}
 html.tg .secret{background:var(--tg-bg,#fff);color:var(--tg-text,#213c44);border-color:var(--tg-button,#16685f)}
 html.tg .invite-link{background:var(--tg-secondary-bg,#f3f6f5);color:var(--tg-text,#213c44)}
+
+/* Task 017 consistency pass: one rule set for every role screen (docs/PRODUCT.md ease-of-use rules 3-5). */
+body{font-size:16px}
+button,select,input:not([type=checkbox]):not([type=radio]){min-height:48px}
+.small{min-height:48px;font-size:.9rem}
+label{font-size:1rem}
+small,.fine{font-size:.875rem}
+input[type=checkbox],input[type=radio]{width:24px;height:24px;flex:none}
+.lang-switch{display:flex;gap:4px}
+.lang-switch button{min-width:52px;padding:6px 10px}
+.lang-switch button.current{background:#16685f;border-color:#16685f;color:#fff}
+.help-link{font-weight:600;color:#145b54;min-height:48px;display:inline-flex;align-items:center}
+@media(max-width:640px){.lang-switch{order:4}.account{flex-wrap:wrap}}

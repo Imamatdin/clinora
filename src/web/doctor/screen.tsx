@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type MutableRefObject } from 'react';
 import { ApiFailure, type Request } from '../api.js';
-import { errorText } from '../i18n/index.js';
+import { errorText, useLocale } from '../i18n/index.js';
 import type { ModuleProps, WebModule } from '../modules.js';
-import { languages, money, saveLocale, savedLocale, translator, type DoctorKey, type Locale } from './i18n.js';
+import { money, translator, type DoctorKey } from './i18n.js';
 import { VISIT_PANELS } from './panels.js';
 
 /** Task 007's queue API ticket (src/modules/registration: queue/mine, queue/call-next, queue/tickets/:id/status). */
@@ -39,7 +39,7 @@ function useKeys() {
 }
 
 function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps) {
-  const [locale, setLocale] = useState<Locale>(savedLocale), t = translator(locale);
+  const t = translator(useLocale());
   const [queue, setQueue] = useState<Ticket[] | null>(null), [open, setOpen] = useState<{ encounterId: string; patientId: string } | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const keys = useKeys(), base = `/api/clinics/${clinic.id}/doctor`, queueBase = `/api/clinics/${clinic.id}/queue`;
@@ -72,15 +72,13 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
   });
   const requeue = (ticket: Ticket) => run(async () => { await post(`${queueBase}/tickets/${ticket.id}/status`, { status: 'waiting' }); await load(); });
 
-  const language = <label className="dr-lang">{t('doctor.language')}<select aria-label={t('doctor.language')} value={locale} onChange={e => { const l = e.target.value as Locale; setLocale(l); saveLocale(l); }}>
-    {languages.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}</select></label>;
   const banners = <div aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>;
 
   if (open) return <section className="dr">
     <div className="dr-head"><button className="quiet" disabled={busy} onClick={() => {
       const leave = () => { setDirty(false); setOpen(null); void load(); };
       if (leaveRef.current) leaveRef.current(leave); else leave();
-    }}>{t('doctor.back')}</button>{language}</div>
+    }}>{t('doctor.back')}</button></div>
     {banners}
     <VisitScreen key={open.encounterId} t={t} clinicId={clinic.id} base={base} request={request} encounterId={open.encounterId} patientId={open.patientId} setDirty={setDirty} leaveRef={leaveRef} />
   </section>;
@@ -88,7 +86,7 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
   const tickets = queue ?? [], active = tickets.find(x => x.status === 'called' || x.status === 'in_progress');
   const waiting = tickets.filter(x => x.status === 'waiting'), done = tickets.filter(x => x.status === 'completed');
   return <section className="dr">
-    <div className="dr-head"><h2>{t('doctor.title')}</h2>{language}</div>
+    <div className="dr-head"><h2>{t('doctor.title')}</h2></div>
     {banners}
     {!queue ? <p>{t('doctor.loading')}</p> : !businessDay?.openDay && !tickets.length ? <p className="empty">{t('doctor.noDay')}</p> : <>
       <div className="dr-actions">

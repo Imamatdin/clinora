@@ -261,6 +261,7 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
         <button type="button" onClick={startEdit} disabled={busy || outbox.offline || !!local}>{t('registration.edit')}</button>
         <button type="button" onClick={reset}>{t('registration.back')}</button>
       </details>
+      <div className="registration-choose">
       <h3>{t('registration.whoSees')}</h3>
       <ul className="registration-points">{options.points.map(point => {
         const on = !!chosen[point.id];
@@ -273,9 +274,12 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
             : <p className="muted">{t('registration.noServices')}</p>)}
         </li>;
       })}</ul>
+      </div>
+      <div className="registration-summary">
       {!outbox.offline && <label className="registration-admit"><input type="checkbox" checked={admit} onChange={e => { setAdmit(e.target.checked); setDirty(true); }} />{t('registration.admit')}</label>}
       <p className="registration-total">{t('registration.total', { amount: formatUzs(uzs(total)) })}</p>
       <button type="button" className="primary" disabled={busy || !options.day || !Object.keys(chosen).length} onClick={printTickets}>{t('registration.print')}</button>
+      </div>
     </div>}
 
     {step === 'done' && printed && <div className="registration-done"><h3>{t('registration.offline.saved')}</h3><p>{printed.code}</p><p>{t('registration.offline.provisional')}</p>

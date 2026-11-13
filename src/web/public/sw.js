@@ -2,8 +2,10 @@
  * Clinora service worker: caches the app shell only (the page, built JS/CSS, manifest, icons).
  * API responses are never intercepted or stored, so no patient data lands in a browser cache.
  */
-const CACHE = 'clinora-shell-v1';
-const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
+const CACHE = 'clinora-shell-v2';
+/** Task 026: the bundled Onest font (src/web/fonts.css), precached so the installed app keeps its type offline. */
+const FONTS = ['cyrillic', 'cyrillic-ext', 'latin', 'latin-ext'].flatMap(subset => [400, 500, 700].map(weight => `/assets/onest-${subset}-${weight}-normal.woff2`));
+const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', ...FONTS];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -18,7 +20,7 @@ function shellRequest(request) {
   if (request.method !== 'GET' || url.origin !== self.location.origin) return null;
   if (url.pathname === '/api' || url.pathname.startsWith('/api/')) return null;
   if (request.mode === 'navigate' || url.pathname === '/') return 'page';
-  if (/^\/assets\/[A-Za-z0-9_.-]+\.(js|css)$/.test(url.pathname) || SHELL.includes(url.pathname)) return 'static';
+  if (/^\/assets\/[A-Za-z0-9_.-]+\.(js|css|woff2)$/.test(url.pathname) || SHELL.includes(url.pathname)) return 'static';
   return null;
 }
 self.shellRequest = shellRequest;

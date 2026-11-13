@@ -1,48 +1,104 @@
-/* Registrar screen (task 007). Phone first: works at 360 px; large touch targets. */
-.registration { font-size: 1rem; max-width: 760px; }
+/*
+ * Task 026: registration without boxes. Search results, queue points and services are ledger rows; the selected
+ * patient is a heading, not a card; from 1000 px the total and the print button sit in a side column beside the
+ * list. Phone first: works at 360 px, every row and button at least 48 px. Printed tickets keep their format.
+ * Class names the tests use are kept (.registration-card.selected, .registration-point, .registration-services,
+ * .registration-banner, .registration-tickets, .registration-done).
+ */
+.registration { font-size: var(--fs-body); max-width: 1120px; }
 .registration fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
-.registration label { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.6rem 0; }
-.registration input, .registration select, .registration button, .registration .button { min-height: 48px; font-size: 1rem; max-width: 100%; box-sizing: border-box; }
-.registration input:not([type=checkbox]):not([type=radio]), .registration select { width: 100%; padding: 0 0.6rem; }
-.registration input[type=checkbox], .registration input[type=radio] { width: 24px; height: 24px; min-height: 24px; flex: none; }
-.registration button, .registration .button { margin: 0.3rem 0.3rem 0.3rem 0; padding: 0 1rem; }
-.registration .button { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; border: 2px solid currentColor; border-radius: 6px; }
-.registration .primary { display: block; width: 100%; font-size: 1.2rem; font-weight: bold; margin: 0.8rem 0; }
-.registration-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.registration label { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.registration input, .registration select, .registration button, .registration .button { min-height: 48px; font-size: var(--fs-body); max-width: 100%; box-sizing: border-box; }
+.registration input:not([type=checkbox]):not([type=radio]), .registration select { width: 100%; }
+.registration input[type=checkbox], .registration input[type=radio] { width: 24px; height: 24px; min-height: 24px; flex: none; margin: 0; }
+.registration button, .registration .button { margin: 4px 8px 4px 0; padding: 0 16px; }
+.registration .button { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; color: var(--ink); border: 1px solid var(--rule-strong); border-radius: 8px; }
+.registration .primary { display: block; width: 100%; max-width: 420px; font-size: var(--fs-label); font-weight: 700; min-height: 56px; margin: 16px 0; }
+.registration-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.registration-head h2 { margin: 0 0 8px; }
 .registration-lang { flex-direction: row !important; align-items: center; }
 .registration-lang select { width: auto !important; }
-.registration-banner { padding: 0.8rem; border: 2px solid #8a5a00; background: #fff4dc; color: #3d2800; }
-.registration-search { display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end; }
-.registration-search input { font-size: 1.15rem !important; min-height: 56px !important; }
-.registration-search button { min-height: 56px; margin: 0.6rem 0; }
-.registration-results, .registration-points, .registration-services, .registration-tickets { list-style: none; padding: 0; margin: 0.5rem 0; }
-.registration-results li { margin: 0.4rem 0; }
-.registration-card { display: block; width: 100%; text-align: start; padding: 0.8rem !important; border: 2px solid #204b5c; border-radius: 8px; background: #fff; color: #10232b; }
-.registration-card.selected { background: #eaf4f7; }
-.registration-card-body { display: flex; flex-direction: column; gap: 0.2rem; }
-.registration-card-body strong { font-size: 1.15rem; }
-.registration .muted { color: #44545b; }
-.registration-gender { display: flex; gap: 1rem; flex-wrap: wrap; }
-.registration-gender legend { margin-bottom: 0.3rem; }
-.registration .choice { flex-direction: row; align-items: center; gap: 0.6rem; min-height: 48px; margin: 0.2rem 0; }
-.registration-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; max-width: 320px; }
-.registration-keypad button { margin: 0; font-size: 1.3rem; }
-.registration-keypad .wide { grid-column: span 3; font-size: 1rem; }
-.registration-points > li { border: 2px solid #b8c6cc; border-radius: 8px; padding: 0.3rem 0.8rem; margin: 0.5rem 0; }
-.registration-points > li.on { border-color: #204b5c; background: #f2f8fa; }
-.registration-point { flex-direction: row !important; align-items: center; gap: 0.8rem; min-height: 56px; cursor: pointer; }
-.registration-point > span { display: flex; flex-direction: column; }
-.registration-services { padding-inline-start: 2.2rem; }
-.registration-services .price { margin-inline-start: auto; white-space: nowrap; }
-.registration-total { font-size: 1.15rem; font-weight: bold; }
-.registration-duplicates { border: 3px solid #8a5a00; background: #fff8e8; padding: 0.8rem; border-radius: 8px; margin: 0.8rem 0; }
-.registration-tickets li { font-size: 1.25rem; padding: 0.5rem 0; border-bottom: 1px solid #ccd6da; }
-.registration-more summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; }
+.registration-banner { padding: 8px 0; margin: 8px 0; color: var(--warning); font-weight: 500; display: flex; gap: 10px; align-items: baseline; }
+.registration-banner::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: currentColor; transform: translateY(-1px); }
+.registration .muted { color: var(--ink-muted); }
 
-.offline-status { border: 2px solid #93600b; padding: 12px; margin-block: 12px; }
+/* Find: one large field and its button, then results as rows. */
+.registration-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; max-width: 720px; }
+.registration-search label { margin-bottom: 0; }
+.registration-search input { font-size: var(--fs-label) !important; min-height: 56px !important; }
+.registration-search button { min-height: 56px; margin: 0; }
+.registration-results, .registration-points, .registration-services, .registration-tickets { list-style: none; padding: 0; margin: 8px 0; }
+.registration-results { border-top: 1px solid var(--rule); max-width: 720px; margin-top: 16px; }
+.registration-results li { margin: 0; border-bottom: 1px solid var(--rule); }
+.registration-card { display: block; width: 100%; text-align: start; padding: 12px 4px !important; margin: 0 !important; border: 0; border-radius: 0; background: none; color: var(--ink); font-weight: 400; }
+button.registration-card:hover:not(:disabled) { background: var(--hover); }
+.registration-card-body { display: flex; flex-direction: column; gap: 2px; }
+.registration-card-body strong { font-size: var(--fs-label); font-weight: 700; }
+.registration-card-body span { color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.registration-card-body span.muted { font-size: var(--fs-fine); }
+.registration-search ~ .primary, .registration-search ~ .empty + .primary { margin-top: 24px; }
+
+/* Selected patient: a heading block on a hairline, not a card. */
+.registration-card.selected { background: none; padding: 0 0 12px !important; border-bottom: 1px solid var(--rule); }
+.registration-card.selected .registration-card-body strong { font-size: var(--fs-title); letter-spacing: -.02em; line-height: 1.15; }
+
+/* Form. */
+.registration-form { display: block; max-width: 640px; }
+.registration-gender { display: flex; gap: 8px 24px; flex-wrap: wrap; margin: 12px 0; }
+.registration-gender legend { margin-bottom: 4px; font-weight: 500; }
+.registration .choice { flex-direction: row; align-items: center; gap: 12px; min-height: 48px; margin: 0; cursor: pointer; }
+.registration-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-width: 320px; margin: 4px 0 12px; }
+.registration-keypad button { margin: 0; font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
+.registration-keypad .wide { grid-column: span 3; font-size: var(--fs-body); }
+.registration-duplicates { border-top: 2px solid var(--warning); border-bottom: 1px solid var(--rule); padding: 12px 0; margin: 16px 0; }
+.registration-duplicates h3 { color: var(--warning); }
+.registration-duplicates .registration-results li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.registration-duplicates .registration-card { width: auto; flex: 1; }
+
+/* Route: points and services as rows; total and print beside them on desktop. */
+.registration-route { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 56px; align-items: start; }
+.registration-more { border-bottom: 1px solid var(--rule); margin-bottom: 16px; }
+.registration-more summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; color: var(--accent); }
+.registration-choose h3 { margin: 8px 0; }
+.registration-points { border-top: 1px solid var(--rule); margin: 0; }
+.registration-points > li { border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; padding: 0; margin: 0; }
+.registration-points > li.on { background: none; }
+.registration-point { flex-direction: row !important; align-items: center; gap: 16px; min-height: 60px; margin: 0 !important; padding: 8px 4px; cursor: pointer; }
+.registration-point:hover { background: var(--hover); }
+.registration-point > span { display: flex; flex: 1; align-items: baseline; justify-content: space-between; gap: 4px 16px; flex-wrap: wrap; }
+.registration-point strong { font-weight: 500; }
+.registration-points > li.on .registration-point strong { font-weight: 700; }
+.registration-point .muted { font-size: var(--fs-fine); font-variant-numeric: tabular-nums; }
+.registration-services { padding-inline-start: 40px; margin: 0 0 8px; }
+.registration-services li { border-top: 1px solid var(--rule); }
+.registration-services .choice { padding: 4px; }
+.registration-services .choice > span:first-of-type { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.registration-services .price { margin-inline-start: auto; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 500; }
+.registration-choose > .muted, .registration-points p.muted { padding: 0 0 8px 40px; margin: 0; }
+.registration-summary { padding-top: 16px; }
+.registration-admit { flex-direction: row !important; align-items: center; gap: 12px; min-height: 48px; }
+.registration-total { font-size: var(--fs-label); font-weight: 700; font-variant-numeric: tabular-nums; margin: 8px 0 0; padding: 12px 0 0; border-top: 2px solid var(--ink); }
+@media (min-width: 1000px) {
+  .registration-route { grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); }
+  .registration-route > .registration-card.selected, .registration-route > .registration-more { grid-column: 1 / -1; }
+  .registration-summary { position: sticky; top: 16px; padding-top: 52px; }
+}
+
+/* Done. */
+.registration-done h3 { color: var(--done); }
+.registration-tickets { border-top: 1px solid var(--rule); max-width: 640px; }
+.registration-tickets li { font-size: var(--fs-label); padding: 12px 0; border-bottom: 1px solid var(--rule); font-variant-numeric: tabular-nums; }
+.registration-done .primary { margin-top: 16px; }
+@media (max-width: 600px) {
+  .registration .primary { max-width: none; }
+  .registration-card.selected .registration-card-body strong { font-size: var(--fs-label); }
+}
+
+.offline-status { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 12px 0; margin-block: 12px; }
+.offline-status h3, .offline-status > p:first-child { color: var(--warning); }
 .offline-status li { margin-block: 12px; overflow-wrap: anywhere; }
 .offline-status button, .offline-status a { margin: 4px; }
-.offline-attention { border-left: 4px solid #a22; padding: 12px; }
+.offline-attention { color: var(--error); padding: 8px 0; }
 .offline-print { display: none; }
 @media print {
   @page { size: 80mm auto; margin: 3mm; }

@@ -1,107 +1,138 @@
-/* Task 025: the CEO screens use the app's teal palette (src/web/style.css); layout unchanged. */
-.page:has(.ceo-workspace){max-width:1480px;margin:auto;width:100%;padding:28px clamp(16px,3vw,48px)}
-.app:has(.ceo-workspace) .role-modules>.sections{padding:12px 0;background:transparent;margin-bottom:20px}
-.ceo-workspace{--ink:#213c44;--accent:#16685f;--accent-dark:#145b54;--line:#d7e2df;--paper:#fff;color:var(--ink);font-size:16px;line-height:1.55;min-width:0}
-.ceo-workspace button,.ceo-workspace input,.ceo-workspace select{font:inherit;min-height:48px;border:1px solid #bdcecc;border-radius:8px;color:var(--ink);background:var(--paper);padding:10px 15px}
-.ceo-workspace button{cursor:pointer;font-weight:600;transition:background .15s,border-color .15s}
-.ceo-workspace button:hover:not(:disabled){background:#eaf2f0;border-color:#8fb3ad}
+/*
+ * Task 026: CEO dashboard without boxes. KPIs are figures with a small label above, in one row on desktop and
+ * stacked on phones; breakdowns are ledger rows (name left, amount right, hairline between). Desktop layout is a
+ * wide column with a side column; phones are one column. Colors come from the tokens in src/web/style.css.
+ * Selectors that tests rely on are kept: .ceo-kpi-N strong, .ceo-secondary button b, .ceo-row-main b, .ceo-chips.
+ */
+.page:has(.ceo-workspace){max-width:1360px;width:100%;padding:20px var(--gutter) 40px}
+.app:has(.ceo-workspace) .role-modules>.sections{padding:0;margin:0 0 20px}
+.ceo-workspace{--line:var(--rule);color:var(--ink);font-size:var(--fs-body);line-height:1.5;min-width:0}
+.ceo-workspace button{min-height:48px;font:inherit;font-weight:500}
 .ceo-workspace button:disabled{opacity:.55;cursor:wait}
-.ceo-workspace :focus-visible{outline:3px solid #178b7e;outline-offset:4px}
-.ceo-workspace label{font-size:16px;font-weight:500;gap:8px}
-.ceo-workspace .ceo-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-.ceo-workspace .ceo-primary:hover:not(:disabled){background:#12564e;color:#fff}
+.ceo-workspace label{font-size:var(--fs-body);font-weight:500;gap:6px}
+.ceo-workspace h3{font-size:var(--fs-label);font-weight:700;margin:0 0 8px}
+.ceo-workspace .ceo-error{color:var(--error);padding:8px 0;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
 .ceo-language{max-width:240px;margin:0 0 18px}
-.page.home[data-role="ceo"]:has(.ceo-workspace)>.day-panel{max-width:none;display:flex;align-items:center;flex-wrap:wrap;gap:12px 20px;padding:16px 20px;background:#fff;border-color:#d7e2df;border-radius:10px}
-.page.home[data-role="ceo"]:has(.ceo-workspace)>.day-panel h2{font-size:16px;margin:0}.page.home[data-role="ceo"]:has(.ceo-workspace)>.day-panel>button{margin-left:auto;min-height:48px;padding:10px 20px;font-size:16px}.page.home[data-role="ceo"]:has(.ceo-workspace)>.day-panel>p.fine:last-child{width:100%;font-size:14px;color:#5c7379}
-.ceo-heading{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:8px 0 24px}
-.ceo-heading h2{font-size:clamp(26px,3vw,38px);line-height:1.2;font-weight:650;letter-spacing:-.03em;margin:5px 0 12px}
-.ceo-heading p{margin:0;color:#5c7379;max-width:720px}
-.ceo-heading .ceo-eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;color:var(--accent-dark);margin-bottom:10px}
-.ceo-dates{display:flex;align-items:end;flex-wrap:wrap;gap:16px;padding:20px;background:#e8f0ee;border:1px solid var(--line);border-radius:12px;margin-bottom:24px}
-.ceo-dates label{flex:1;min-width:170px;max-width:260px}.ceo-dates button{min-width:210px}
-.ceo-status{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin:22px 0 16px;color:#5c7379}
-.ceo-live{display:inline-flex;align-items:center;gap:9px;font-size:14px;color:#16685f;font-weight:650;background:#e3f4ea;border:1px solid #9fd1b3;border-radius:30px;padding:6px 13px}
-.ceo-live:before{content:'';height:7px;width:7px;background:#16685f;border-radius:100%}
-.ceo-kpis{display:grid;grid-template-columns:1.6fr repeat(3,1fr);gap:14px;margin-bottom:24px}
-.ceo-workspace .ceo-kpi{display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px 22px;min-height:190px;background:var(--paper);border:1px solid var(--line);border-top:3px solid #9fc9c1;box-shadow:0 3px 14px #12302b08}
-.ceo-kpi>span{font-weight:500;font-size:16px}.ceo-kpi strong{font-variant-numeric:tabular-nums;font-size:clamp(25px,2.7vw,42px);font-weight:650;letter-spacing:-.045em;line-height:1.2;margin:22px 0 8px;overflow-wrap:anywhere}
-.ceo-kpi small{display:flex;justify-content:space-between;align-items:center;font-size:15px;color:#5c7379}.ceo-kpi small span{font-size:22px}
-.ceo-workspace .ceo-kpi-0{background:#16685f;color:#fff;border-color:#16685f;border-top-color:#7cc4b6}.ceo-kpi-0 small{color:#d3ece7}.ceo-workspace .ceo-kpi-0:hover:not(:disabled){background:#12564e;color:white}
-.ceo-workspace .ceo-kpi-2{border-top-color:#c27a52}.ceo-workspace .ceo-kpi-3{border-top-color:#8aa19d}
-.ceo-middle{display:grid;grid-template-columns:1fr 1.8fr;gap:24px;margin-bottom:24px}
-.ceo-breakdown{padding:24px;background:var(--paper);border:1px solid var(--line);border-radius:12px;min-width:0}
-.ceo-workspace h3{font-size:18px;font-weight:650;margin:0 0 18px}
-.ceo-breakdown button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;border:0;border-bottom:1px solid #e2eae7;border-radius:0;padding:14px 0;font-weight:400;text-align:left}
-.ceo-breakdown button span:first-child{flex:1}.ceo-breakdown button b{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600}
-.ceo-methods button{display:grid;grid-template-columns:1fr auto;gap:8px 16px}.ceo-methods meter{grid-column:1/-1;width:100%;height:9px;appearance:none;border:0;background:#e2eae7;border-radius:5px}
-.ceo-performance{border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:10px}.ceo-performance-facts button{font-size:16px;color:#5c7379;padding:9px 0;border-bottom:0;min-height:48px}.ceo-performance-facts button b{color:var(--ink)}
-.ceo-methods meter::-webkit-meter-bar{background:#e2eae7;border:0;border-radius:5px}.ceo-methods meter::-webkit-meter-optimum-value{background:#16685f;border-radius:5px}.ceo-methods meter::-moz-meter-bar{background:#16685f}
-.ceo-secondary{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.ceo-secondary button{border:0;border-radius:0;display:flex;justify-content:space-between;align-items:center;gap:16px;text-align:left;font-weight:400;padding:15px 20px}.ceo-secondary b{font-variant-numeric:tabular-nums;white-space:nowrap}
-.ceo-groups{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px}.ceo-empty{color:#5c7379;padding:20px 0}
-.ceo-footnote{font-size:14px;color:#5c7379;line-height:1.6;margin:20px 0 0;max-width:1000px}
-.ceo-workspace .ceo-error{padding:18px;background:#fbefe9;color:#7b3a24;border:1px solid #e7c2b3;border-radius:8px}
-.ceo-more{border-top:1px solid var(--line);padding:18px 0;margin-top:24px}.ceo-more summary{min-height:48px;cursor:pointer;padding:12px 0;font-weight:600}.ceo-more>div{display:flex;gap:12px;flex-wrap:wrap}.ceo-more form{padding:18px 0}
-.ceo-ledger{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:24px}.ceo-ledger h2{font-size:26px;margin-top:24px}.ceo-ledger ol{list-style:none;padding:0;margin:0}.ceo-ledger li{padding:16px 0;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:24px}.ceo-ledger small{display:block;font-size:14px;color:#5c7379;overflow-wrap:anywhere}.ceo-ledger b{white-space:nowrap;font-variant-numeric:tabular-nums}.ceo-ledger strong{font-weight:500}
+.page.home[data-role="ceo"]:has(.ceo-workspace)>h1,.page.home[data-role="ceo"]:has(.ceo-workspace)>p.muted{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* Heading: small label, page title, one line of lead; "Today" is an outlined button. */
+.ceo-heading{display:flex;justify-content:space-between;gap:16px 24px;align-items:flex-end;flex-wrap:wrap;padding:4px 0 16px}
+.ceo-heading h2{font-size:var(--fs-title);line-height:1.15;font-weight:700;letter-spacing:-.025em;margin:2px 0 6px}
+.ceo-heading p{margin:0;color:var(--ink-muted);max-width:70ch}
+.ceo-heading .ceo-eyebrow{font-size:var(--fs-fine);font-weight:500;color:var(--ink-muted);letter-spacing:0;margin:0}
+
+/* Business day and date filter: two plain rows on hairlines. */
+.ceo-day-control,.ceo-filters{border-top:1px solid var(--rule);margin:0;padding:0}
+.ceo-filters{border-bottom:1px solid var(--rule);margin-bottom:8px}
+.ceo-day-control>summary,.ceo-filters>summary{min-height:52px;display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;font-weight:500}
+.ceo-day-control>summary .pill{margin-left:auto}
+.ceo-filters>summary>span{font-variant-numeric:tabular-nums}
+.ceo-filters>summary>b{margin-left:auto;color:var(--accent);font-weight:500;font-size:var(--fs-body)}
+.ceo-day-control .day-panel{border:0;margin:0;padding:4px 0 16px}
+.ceo-day-control .day-panel>h2{display:none}
+.ceo-day-control .day-panel button.big{margin-left:0;min-height:48px;font-size:var(--fs-body);padding:10px 20px}
+.ceo-dates{display:flex;align-items:flex-end;flex-wrap:wrap;gap:16px;padding:4px 0 20px;margin:0}
+.ceo-dates label{flex:1;min-width:160px;max-width:240px}
+.ceo-dates button{min-width:180px}
+
+/* Live/snapshot state: a dot and text. */
+.ceo-status{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px 16px;margin:16px 0 8px;color:var(--ink-muted);font-size:var(--fs-fine);font-variant-numeric:tabular-nums}
+.ceo-live{display:inline-flex;align-items:center;gap:8px;color:var(--ink);font-weight:500}
+.ceo-live::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--done)}
+
+/* Figures: label above, number as type. Buttons, because each opens its ledger. */
+.ceo-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0 32px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:20px 0;margin:0 0 32px}
+.ceo-workspace .ceo-kpi{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;gap:4px;text-align:left;border:0;border-radius:0;background:none;padding:4px 0;min-height:0;color:var(--ink)}
+.ceo-workspace .ceo-kpi:hover:not(:disabled){background:none}
+.ceo-workspace .ceo-kpi:hover:not(:disabled) strong{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px}
+.ceo-kpi>span{font-size:var(--fs-fine);font-weight:500;color:var(--ink-muted)}
+.ceo-kpi strong{font-size:var(--fs-title);font-weight:700;line-height:1.15;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap;overflow-wrap:normal}
+.ceo-kpi small{font-size:var(--fs-fine);color:var(--ink-muted);display:flex;gap:6px;align-items:center}
+.ceo-kpi small span{font-size:var(--fs-fine)}
+
+/* Middle: payment methods (side) and secondary facts (wide, two columns of ledger rows). */
+.ceo-middle{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:24px 48px;margin:0 0 40px;align-items:start}
+.ceo-breakdown{min-width:0;background:none;border:0;padding:0}
+.ceo-breakdown>button,.ceo-performance-facts>button,.ceo-secondary button{width:100%;display:flex;align-items:baseline;justify-content:space-between;gap:12px;border:0;border-bottom:1px solid var(--rule);border-radius:0;background:none;padding:12px 4px;font-weight:400;text-align:left;color:var(--ink)}
+.ceo-breakdown button:hover:not(:disabled),.ceo-secondary button:hover:not(:disabled){background:var(--hover)}
+.ceo-breakdown b,.ceo-secondary b{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:500}
+.ceo-methods>h3{border-bottom:1px solid var(--rule);padding-bottom:8px;margin:0}
+.ceo-methods button{display:grid;grid-template-columns:1fr auto;gap:6px 16px;align-items:baseline}
+.ceo-methods meter{grid-column:1/-1;width:100%;height:4px;appearance:none;border:0;background:var(--rule);border-radius:0}
+.ceo-methods meter::-webkit-meter-bar{background:var(--rule);border:0;border-radius:0;height:4px}
+.ceo-methods meter::-webkit-meter-optimum-value{background:var(--ink-muted);border-radius:0}
+.ceo-methods meter::-moz-meter-bar{background:var(--ink-muted)}
+.ceo-secondary{display:block;columns:2;column-gap:48px;border-top:1px solid var(--rule);background:none;border-radius:0;overflow:visible}
+.ceo-secondary button{break-inside:avoid}
+
+/* Doctors in the wide column, departments and sources beside them. */
+.ceo-groups{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);grid-template-areas:"doctors departments" "doctors sources";gap:32px 48px;align-items:start}
+.ceo-groups>section:nth-child(1){grid-area:doctors}.ceo-groups>section:nth-child(2){grid-area:departments}.ceo-groups>section:nth-child(3){grid-area:sources}
+.ceo-rows{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule)}
+.ceo-row{border-bottom:1px solid var(--rule)}
+.ceo-row>.ceo-row-main{border-bottom:0}
+.ceo-row-head{display:flex;align-items:stretch;gap:0}
+.ceo-breakdown .ceo-row-main{flex:1;width:100%;min-width:0;border:0;border-radius:0;background:none;display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:12px 4px;text-align:left;font-weight:400;color:var(--ink)}
+.ceo-breakdown .ceo-row-main span:first-child{flex:1;overflow-wrap:anywhere}
+.ceo-chevron{color:var(--ink-muted);transition:transform .15s}.ceo-row[data-open=true] .ceo-chevron{transform:rotate(180deg)}
+.ceo-breakdown .ceo-row-open{flex:none;width:48px;display:flex;justify-content:center;align-items:center;border:0;border-radius:0;background:none;color:var(--accent);padding:0}
+.ceo-row .ceo-performance-facts{margin:0 0 8px 16px;padding:0;border-left:1px solid var(--rule)}
+.ceo-row .ceo-performance-facts>button{color:var(--ink-muted);padding:8px 4px 8px 12px;border-bottom:0;min-height:44px}
+.ceo-row .ceo-performance-facts>button b{color:var(--ink)}
+.ceo-chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px}
+.ceo-workspace .ceo-chips button{min-height:44px;padding:6px 14px;border-radius:22px;border:1px solid var(--rule-strong);font-weight:500;width:auto;display:inline-flex;align-items:center;background:none;color:var(--ink)}
+.ceo-workspace .ceo-chips button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.ceo-workspace .ceo-all{width:auto;margin-top:4px;border:0;padding:8px 4px;justify-content:flex-start;color:var(--accent);background:none}
+.ceo-empty{color:var(--ink-muted);padding:12px 0}
+.ceo-footnote{font-size:var(--fs-fine);color:var(--ink-muted);line-height:1.5;margin:24px 0 0;max-width:80ch}
+.ceo-footnote+.ceo-footnote{margin-top:4px}
+.ceo-more{border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);margin-top:24px}
+.ceo-more>div{display:flex;gap:12px;flex-wrap:wrap;padding:0 0 16px}
+.ceo-more form{padding:16px 0}
+.ceo-report>p[role=alert]{color:var(--warning);font-weight:500}
+
+/* Drill-in ledger: one list, back as a text button. */
+.ceo-ledger{background:none;border:0;padding:0;max-width:880px}
+.ceo-ledger>button:first-child{border:0;color:var(--accent);padding:8px 4px;background:none}
+.ceo-ledger h2{font-size:var(--fs-title);margin:12px 0 4px}
+.ceo-ledger>p{color:var(--ink-muted);margin:0 0 16px}
+.ceo-ledger ol{list-style:none;padding:0;margin:0;border-top:1px solid var(--rule)}
+.ceo-ledger li{padding:12px 0;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;align-items:baseline;gap:24px}
+.ceo-ledger small{display:block;font-size:var(--fs-fine);color:var(--ink-muted);overflow-wrap:anywhere}
+.ceo-ledger b{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:500}
+.ceo-ledger strong{font-weight:500}
+.ceo-report>section>h3{margin-top:24px}
+
+/* Other CEO screens (payroll, rules, export) are restyled in Stage B; their layout is kept for now. */
 .ceo-rules{margin-top:30px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:24px}.ceo-rules>label{max-width:450px}.ceo-rule-current{display:flex;align-items:center;gap:24px;padding:24px 0}.ceo-rule-current>strong{font-size:48px;font-weight:600;letter-spacing:-.05em;color:var(--accent)}.ceo-rule-current>span{font-size:16px;color:#5c7379}
 .ceo-rule-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.ceo-rules fieldset{border:1px solid var(--line);border-radius:8px;padding:16px}.ceo-rules legend{padding:0 8px}.ceo-kind-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.ceo-kind-grid label{display:flex;align-items:center;min-height:48px;gap:10px}.ceo-kind-grid input{width:22px;height:22px;min-height:0;accent-color:var(--accent)}
 .ceo-pay-results{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:24px}.ceo-pay-doctor{border-top:1px solid var(--line);padding:16px 0}.ceo-pay-doctor summary{cursor:pointer;min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:16px}.ceo-pay-doctor dl{display:flex;flex-wrap:wrap;gap:24px;margin:16px 0}.ceo-pay-doctor dt{color:#5c7379}.ceo-pay-doctor dd{font-size:24px;margin:4px 0}.ceo-pay-lines{list-style:none;padding:0}.ceo-pay-lines li{display:flex;justify-content:space-between;gap:16px;border-top:1px solid var(--line);padding:12px 0;overflow-wrap:anywhere}.ceo-pay-lines small{display:block;color:#5c7379}.ceo-pay-lines span{min-width:0;font-size:14px}.ceo-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}.ceo-confirm{background:#fbefe9;border:1px solid #e7c2b3;border-radius:8px;padding:18px}.ceo-confirm p{margin:0 0 14px}.ceo-confirm button{margin:0 12px 8px 0}.ceo-history{padding-left:24px}.ceo-history li{border-top:1px solid var(--line);padding:14px 0}.ceo-history p{font-size:16px;margin:4px 0}
-@media(max-width:1100px){.ceo-kpis{grid-template-columns:1fr 1fr}.ceo-middle{grid-template-columns:1fr}.ceo-groups{grid-template-columns:1fr 1fr}.ceo-groups>section:last-child{grid-column:1/-1}}
-@media(max-width:600px){.ceo-heading{align-items:flex-start}.ceo-heading h2{font-size:28px}.ceo-dates{padding:14px;gap:12px}.ceo-dates label{min-width:120px;max-width:none}.ceo-dates input{width:100%;padding:8px}.ceo-dates button{width:100%}.ceo-kpis{gap:10px}.ceo-workspace .ceo-kpi{padding:16px 14px;min-height:160px}.ceo-kpi>span{font-size:16px}.ceo-kpi strong{font-size:28px;margin-top:18px}.ceo-groups{display:flex;flex-direction:column;gap:16px}.ceo-middle{gap:16px}.ceo-breakdown{padding:18px}.ceo-secondary{grid-template-columns:1fr}.ceo-secondary button{padding:15px 18px}.ceo-rule-grid{grid-template-columns:1fr}.ceo-kind-grid{grid-template-columns:1fr 1fr}.ceo-rules,.ceo-pay-results,.ceo-ledger{padding:18px}.ceo-pay-doctor summary{align-items:flex-start;flex-direction:column}.ceo-ledger li{gap:12px}.ceo-ledger li>div{min-width:0}.ceo-ledger b{font-size:16px}.ceo-workspace{width:100%}.ceo-workspace .ceo-kpi-0{grid-column:1/-1;min-height:170px}.ceo-kpi-0 strong{font-size:42px}.ceo-workspace .ceo-kpi-3{grid-column:1/-1;min-height:130px}.ceo-actions>button{width:100%}}
-@media(prefers-reduced-motion:reduce){.ceo-workspace button{transition:none}}
-.page.home[data-role="ceo"]:has(.ceo-workspace)>h1,.page.home[data-role="ceo"]:has(.ceo-workspace)>p.muted{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.ceo-day-control{margin:0 0 12px;border:1px solid #d7e2df;border-radius:10px;background:#fff;padding:8px 16px}.ceo-day-control>summary{cursor:pointer;min-height:48px;font-size:16px;font-weight:600;line-height:48px}.ceo-day-control .day-panel{margin:8px 0;max-width:none;border:0;padding:12px 0}.ceo-day-control .fine{font-size:14px}.ceo-day-control .day-panel>button{font-size:16px;max-width:300px}
-.ceo-filters{background:#e8f0ee;border:1px solid #d7e2df;border-radius:10px;padding:4px 18px;margin:0 0 20px}.ceo-filters>summary{cursor:pointer;min-height:56px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 16px;font-size:16px}.ceo-filters>summary b{font-size:14px;color:#16685f}.ceo-filters>.ceo-dates{padding:0;border:0;margin-bottom:16px}
-@media(max-width:600px){.ceo-heading p:not(.ceo-eyebrow){display:none}.ceo-heading{padding:8px 0 18px;gap:12px}.ceo-heading h2{font-size:26px;margin-bottom:0}.ceo-heading .ceo-eyebrow{font-size:11px;letter-spacing:.08em}.ceo-day-control{padding:6px 12px}.ceo-day-control .pill{font-size:13px;padding:5px 8px}.ceo-filters{padding:8px 14px}.ceo-filters>summary{min-height:48px}.ceo-status{margin:14px 0}.ceo-status>span:last-child{display:none}}
+.ceo-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}.ceo-confirm{border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:16px 0}.ceo-confirm p{margin:0 0 12px;color:var(--warning);font-weight:500}.ceo-confirm button{margin:0 12px 8px 0}.ceo-history{padding-left:24px}.ceo-history li{border-top:1px solid var(--rule);padding:14px 0}.ceo-history p{font-size:16px;margin:4px 0}
 
-/* Task 025: compact breakdowns. One row per item, top three by default, department chips above the doctors. */
-.ceo-rows{list-style:none;margin:0;padding:0}
-.ceo-row{border-bottom:1px solid #e2eae7}
-.ceo-row-head{display:flex;align-items:stretch;gap:4px}
-.ceo-breakdown .ceo-row-main{flex:1;min-width:0;border-bottom:0}
-.ceo-breakdown .ceo-row-main span:first-child{overflow-wrap:anywhere}
-.ceo-chevron{transition:transform .15s;color:#5c7379}.ceo-row[data-open=true] .ceo-chevron{transform:rotate(180deg)}
-.ceo-breakdown .ceo-row-open{flex:none;width:48px;justify-content:center;border-bottom:0;font-size:20px;color:var(--accent)}
-.ceo-row .ceo-performance-facts{padding:0 0 8px 12px;border-left:3px solid #9fc9c1;margin:0 0 10px}
-.ceo-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px}
-.ceo-workspace .ceo-chips button{min-height:44px;padding:6px 14px;border-radius:22px;font-weight:600;width:auto;border:1px solid #bdcecc;display:inline-flex}
-.ceo-workspace .ceo-chips button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
-.ceo-workspace .ceo-all{width:100%;margin-top:12px;justify-content:center;border:1px solid #bdcecc;border-radius:8px;color:var(--accent)}
+@media(max-width:1100px){.ceo-middle{grid-template-columns:1fr}.ceo-groups{grid-template-columns:1fr 1fr;grid-template-areas:"doctors doctors" "departments sources"}}
+@media(max-width:600px){
+.page:has(.ceo-workspace){padding:8px 16px 16px}
+.app:has(.ceo-workspace) .role-modules>.sections{margin-bottom:8px}
+.ceo-heading{padding:4px 0 8px;align-items:center;flex-wrap:nowrap}
+.ceo-heading p:not(.ceo-eyebrow){display:none}
+.ceo-heading h2{margin:0}
+.ceo-heading>button{flex:none}
+.ceo-filters>summary{flex-wrap:nowrap;gap:8px}.ceo-filters>summary>span{font-size:var(--fs-fine);min-width:0}.ceo-filters>summary>b{white-space:nowrap}
+.ceo-dates{gap:12px}.ceo-dates label{min-width:120px;max-width:none}.ceo-dates button{width:100%}
+.ceo-status{margin:8px 0 4px}.ceo-status>span:last-child{display:none}
+.ceo-kpis{grid-template-columns:1fr;padding:0;border-bottom:0;margin-bottom:24px}
+.ceo-workspace .ceo-kpi{grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:0 8px;padding:10px 0;border-bottom:1px solid var(--rule)}
+.ceo-kpi>span{grid-column:1/-1}
+.ceo-kpi strong{grid-column:1}
+.ceo-kpi small{grid-column:2}
+.ceo-middle{gap:24px;margin-bottom:24px}
+.ceo-breakdown>button,.ceo-secondary button{padding:10px 4px}
+.ceo-methods button{gap:4px 16px}
+.ceo-secondary{columns:1}
+.ceo-groups{display:flex;flex-direction:column;gap:24px}
+.ceo-footnote{margin-top:16px}
+.ceo-more{margin-top:16px}
+.ceo-rule-grid{grid-template-columns:1fr}.ceo-kind-grid{grid-template-columns:1fr 1fr}.ceo-rules,.ceo-pay-results{padding:18px}.ceo-pay-doctor summary{align-items:flex-start;flex-direction:column}.ceo-actions>button{width:100%}
+.ceo-ledger li{gap:12px}.ceo-ledger li>div{min-width:0}
+}
 @media(prefers-reduced-motion:reduce){.ceo-chevron{transition:none}}
-/* Task 025: about three phone screens for the default dashboard; nothing removed, only tightened. */
-@media(max-width:600px){
-.ceo-heading{padding:4px 0 12px}.ceo-heading h2{font-size:22px;margin:2px 0 0}.ceo-heading .ceo-eyebrow{margin-bottom:2px}
-.ceo-filters{margin-bottom:12px}
-.ceo-kpis{margin-bottom:14px}
-.ceo-workspace .ceo-kpi{min-height:0;padding:12px 14px}.ceo-kpi strong{font-size:26px;margin:8px 0 2px}
-.ceo-workspace .ceo-kpi-0{min-height:0}.ceo-kpi-0 strong{font-size:34px}.ceo-workspace .ceo-kpi-3{min-height:0}
-.ceo-middle{margin-bottom:14px;gap:14px}
-.ceo-breakdown{padding:14px 16px}.ceo-workspace h3{margin-bottom:8px}
-.ceo-breakdown button{padding:10px 0}
-.ceo-secondary{grid-template-columns:1fr 1fr}
-.ceo-secondary button{flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;padding:10px 14px;font-size:14px;line-height:1.3}
-.ceo-secondary b{font-size:16px}
-.ceo-groups{gap:14px}
-.ceo-footnote{margin-top:12px}
-.ceo-status{margin:8px 0 10px}
-.ceo-more{margin-top:12px;padding:8px 0}
-}
-@media(max-width:600px){
-.page:has(.ceo-workspace){padding:10px 16px 16px}
-.app:has(.ceo-workspace) .role-modules>.sections{padding:6px 0;margin-bottom:6px}
-.ceo-day-control{margin-bottom:6px}
-.ceo-methods button{gap:4px 16px;padding:8px 0}.ceo-methods meter{height:6px}
-.ceo-kpis{gap:8px}
-.ceo-workspace .ceo-kpi-3{display:grid;grid-template-columns:1fr auto;align-items:center;gap:0 12px}
-.ceo-workspace .ceo-kpi-3 strong{margin:0;grid-row:1/3;grid-column:2;font-size:24px}
-.ceo-footnote{font-size:13px;line-height:1.45}
-}
-@media(max-width:600px){
-.ceo-workspace .ceo-kpi{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:4px 8px}
-.ceo-kpi>span{grid-column:1/-1}.ceo-kpi strong{margin:0}.ceo-kpi small{gap:8px;padding-bottom:4px}
-.ceo-workspace .ceo-kpi-1 strong,.ceo-workspace .ceo-kpi-2 strong{grid-column:1/-1}
-.ceo-workspace .ceo-kpi-3>span{grid-column:1}.ceo-workspace .ceo-kpi-3 small{grid-column:1}
-}
-@media(max-width:600px){
-.ceo-workspace .ceo-kpi-3>span{grid-column:1/-1}.ceo-workspace .ceo-kpi-3 strong{grid-row:auto;grid-column:1;font-size:26px}.ceo-workspace .ceo-kpi-3 small{grid-column:2}
-}

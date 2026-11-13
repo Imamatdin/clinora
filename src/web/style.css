@@ -1,9 +1,22 @@
+@import "./fonts.css";
 @import './cashier/style.css';
 @import './inpatient/style.css';
 @import './registration/style.css';
 @import './catalog/style.css';
 @import './doctor/style.css';
-:root{font-family:ui-sans-serif,system-ui,sans-serif;color:#213c44;background:#f3f6f5;line-height:1.5;font-synthesis:none}
+/*
+ * Task 026 design tokens. Ink, one muted ink, one hairline, the brand teal as the only accent (primary button,
+ * current tab, focus ring, links). Status colors only mark a state, as text or a small dot. Four type sizes.
+ */
+:root{
+  --paper:#fbfbf9;--ink:#14252a;--ink-muted:#56666b;--rule:#dfe4e2;--rule-strong:#7f8c8a;--field:#edf0ef;--hover:#eff3f2;
+  --accent:#13675e;--accent-hover:#0e5049;--on-accent:#fff;
+  --owed:#a4461e;--error:#b42318;--warning:#8a5a00;--done:#25724a;
+  --fs-title:2rem;--fs-label:1.125rem;--fs-body:1rem;--fs-fine:.875rem;
+  --font:"Onest",ui-sans-serif,system-ui,sans-serif;--gutter:clamp(16px,3vw,40px);
+  font-family:var(--font);color:var(--ink);background:var(--paper);line-height:1.5;font-synthesis:none;-webkit-font-smoothing:antialiased
+}
+@media(max-width:600px){:root{--fs-title:1.625rem}}
 *{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}button{cursor:pointer;border:1px solid #bdcecc;border-radius:6px;background:#fff;color:#244b51;padding:9px 14px;font-weight:600}button:hover{background:#eaf2f0}button:disabled{opacity:.55;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid #178b7e;outline-offset:3px}button.primary{background:#16685f;border-color:#16685f;color:white}.primary:hover{background:#12564e}.quiet,.link{background:none;border:0}.link{padding:12px 0;text-decoration:underline}input,select,textarea{width:100%;min-width:0;border:1px solid #bdcecc;border-radius:5px;padding:10px;color:#213c44;background:#fff}textarea{resize:vertical;line-height:1.6}label{display:grid;gap:6px;font-size:.85rem;font-weight:600;min-width:0}form{display:grid;gap:16px}small,.fine{font-size:.75rem;font-weight:400;color:#5c7379}.muted{color:#5c7379}.topbar{display:flex;gap:20px;align-items:center;padding:15px 28px;background:#fff;border-bottom:1px solid #d7e2df;flex-wrap:wrap}.brand{font-size:1.5rem;font-weight:750;letter-spacing:-.06em;color:#145b54;display:flex;gap:18px;align-items:center}.brand span{font-weight:500;letter-spacing:.02em;font-size:.75rem;color:#66807d}.pill{font-size:.7rem;color:#516c68;background:#edf3ed;border:1px solid #d6e2d5;border-radius:20px;padding:4px 10px}.account{margin-left:auto;display:flex;gap:16px;align-items:center;font-size:.85rem}.clinicbar{display:flex;justify-content:space-between;align-items:center;padding:15px 28px;gap:20px;border-bottom:1px solid #d7e2df}.clinicbar label{display:flex;align-items:center;gap:12px}.clinicbar select{min-width:200px}.clinicbar p{margin:0}.workspace{display:grid;grid-template-columns:280px minmax(0,1fr);min-height:calc(100vh - 180px)}.patients{padding:22px 20px;border-right:1px solid #d7e2df;background:#f9fbfa;min-width:0}.section-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}h1,h2,h3,h4,p{overflow-wrap:anywhere}h1{font-size:1.7rem;line-height:1.2;margin:8px 0 12px;letter-spacing:-.025em}h2{font-size:1.05rem;margin:0 0 10px}h3{font-size:1rem}h4{font-size:.85rem}.small{font-size:.75rem;padding:6px 9px}.search{gap:8px;margin-top:18px}.search button{font-size:.8rem;padding:6px}.patient-row,.visit-row{width:100%;text-align:left;display:grid;gap:5px;border:1px solid transparent;border-radius:5px;padding:12px;background:transparent;margin:6px 0;font-size:.85rem;font-weight:400;overflow-wrap:anywhere}.patient-row span,.visit-row span{font-size:.75rem;color:#5c7379}.selected{background:#e5f0ec;border-color:#b0ccc1}.owner{margin-top:28px;border-top:1px solid #d7e2df;padding-top:18px;font-size:.8rem}.owner summary{cursor:pointer;font-weight:600}.owner textarea{font-size:.7rem;overflow-wrap:anywhere}.owner form{gap:10px}.chart{padding:24px 28px;min-width:0}.patient-header{display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid #d7e2df;padding-bottom:18px}.patient-header p{margin:0;font-size:.85rem}.eyebrow{font-size:.68rem!important;letter-spacing:.12em;font-weight:700;color:#6a807b;margin:0 0 8px}.notebook{display:grid;grid-template-columns:minmax(170px,30%) minmax(0,1fr);gap:24px;padding-top:24px}.timeline{min-width:0}.visit-row{border:1px solid #d7e2df;background:white;margin:12px 0;padding:14px}.visit-row.selected{border-color:#1d7b6b;background:#edf5f1}.visit-row strong{font-size:.82rem}.draft-tag{display:inline-block;font-size:.68rem!important;color:#796037!important;background:#f6f0e5;border-radius:4px;padding:3px 6px;width:fit-content;font-weight:500}.assessment-preview{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.editor,.panel{background:white;border:1px solid #d7e2df;border-radius:8px;padding:24px;min-width:0}.editor h2{font-size:1rem}.editor .fine{margin-top:0;margin-bottom:22px}.editor form{gap:18px}.savebar{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid #e2eae7;padding-top:16px;flex-wrap:wrap}.savebar p{font-size:.8rem;color:#5c7379;margin:0}.error,.notice{padding:12px 16px;border-radius:5px;font-size:.85rem;margin:8px 0}.error{background:#fff0ec;color:#813b2c;border:1px solid #edc3b8}.notice{background:#e6f2ec;color:#215f48;border:1px solid #bddbc9}.banners{padding:0 28px}.banners:empty{display:none}.conflict{margin-top:20px;border:1px solid #dfc69b;background:#fffbf2;padding:16px;font-size:.85rem}.conflict button{margin:5px 5px 5px 0;font-size:.8rem}.conflict pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;background:#fff;padding:12px;max-height:350px;overflow:auto}.empty{color:#61777a;font-size:.85rem;padding:18px 0}.editor-empty{min-height:260px;display:flex;flex-direction:column;justify-content:center;text-align:center}.welcome{max-width:650px;padding:45px 15px}.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}.panel{max-width:650px}.auth{max-width:440px;margin:65px auto;padding:0 24px}.auth h1{font-size:2rem}.auth form{margin-top:30px}.auth .primary{margin-top:6px}.pending{max-width:640px;padding:30px;margin:20px auto;background:white;border:1px solid #d7e2df;border-radius:8px}footer{padding:16px 28px;border-top:1px solid #d7e2df;font-size:.7rem;color:#6a807b;background:#f9fbfa}
 input,textarea{font-weight:400}.modal-backdrop{position:fixed;inset:0;z-index:20;background:#13352ba8;display:grid;place-items:center;padding:18px}.modal{background:white;border-radius:8px;padding:24px;max-width:460px;width:100%;box-shadow:0 18px 60px #143a2a44}.modal button{margin:5px 8px 5px 0}
 @media(min-width:1440px){.chart{padding:28px 40px}.notebook{grid-template-columns:260px minmax(0,1fr)}}
@@ -145,3 +158,111 @@ html.tg .tabs-menu{background:var(--tg-bg,#fff)}
 /* When even the current tab and "More" are wider than the row, the visible labels wrap instead of overflowing. */
 .sections>button{flex:0 1 auto;min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.2}
 @media(min-width:900px){.sections{flex-wrap:wrap}.sections>button{white-space:nowrap}}
+
+/* ==========================================================================================================
+   Task 026 design layer: structure without boxes. One page background, hairline rules between rows, type for
+   hierarchy. Shared by every screen; screen sheets (ceo, cashier, registration) build on these primitives.
+   Only modals and the two popup menus are raised (tests/css-rules.test.ts).
+   ========================================================================================================== */
+html,body{background:var(--paper)}
+body{color:var(--ink);font-size:var(--fs-body)}
+h1,h2,h3,h4{color:var(--ink);letter-spacing:-.01em}
+h1{font-size:var(--fs-title);font-weight:700;line-height:1.15;letter-spacing:-.025em;margin:4px 0 8px}
+h2,h3{font-size:var(--fs-label);font-weight:700;line-height:1.3;margin:0 0 8px}
+h4{font-size:var(--fs-body);font-weight:700;margin:0}
+small,.fine,.muted{color:var(--ink-muted)}
+small,.fine{font-size:var(--fs-fine)}
+a{color:var(--accent)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.tnum,b,strong,dd,.amount{font-variant-numeric:tabular-nums}
+
+/* Controls: one solid primary per area; everything else outlined (no fill) or a text button. */
+button{background:transparent;color:var(--ink);border:1px solid var(--rule-strong);border-radius:8px;padding:10px 16px;font-weight:500;font-size:var(--fs-body)}
+button:hover:not(:disabled){background:var(--hover)}
+button.primary,button.ceo-primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:700}
+button.primary:hover:not(:disabled),button.ceo-primary:hover:not(:disabled){background:var(--accent-hover);border-color:var(--accent-hover)}
+button.quiet,button.link,.text-button{border-color:transparent;background:transparent;color:var(--accent);padding-left:4px;padding-right:4px;font-weight:500}
+button.link{text-decoration:underline;text-underline-offset:3px}
+/* Fields stay unmistakable for people new to computers: a filled well with a dark underline. */
+input:not([type=checkbox]):not([type=radio]),select,textarea{background:var(--field);color:var(--ink);border:0;border-bottom:2px solid var(--ink-muted);border-radius:6px 6px 0 0;padding:10px 12px}
+input:not([type=checkbox]):not([type=radio]):hover,select:hover,textarea:hover{border-bottom-color:var(--ink)}
+input:not([type=checkbox]):not([type=radio]):focus,select:focus,textarea:focus{border-bottom-color:var(--accent)}
+input[type=checkbox],input[type=radio]{accent-color:var(--accent)}
+label{font-size:var(--fs-body);font-weight:500;color:var(--ink)}
+fieldset{border:0;padding:0;margin:0;min-width:0}
+details>summary{cursor:pointer;min-height:48px;display:flex;align-items:center;gap:8px;font-weight:500;list-style:none}
+details>summary::-webkit-details-marker{display:none}
+details>summary::after{content:'';width:7px;height:7px;border-right:2px solid var(--ink-muted);border-bottom:2px solid var(--ink-muted);transform:rotate(45deg) translateY(-2px);margin-left:4px}
+details[open]>summary::after{transform:rotate(225deg) translate(-2px,0)}
+
+/* Status: color only as text or a small dot, never a filled badge. */
+.error,.notice{background:none;border:0;border-radius:0;padding:6px 0;margin:6px 0;font-size:var(--fs-body);font-weight:500;display:flex;gap:10px;align-items:baseline}
+.error{color:var(--error)}.notice{color:var(--done)}
+.error::before,.notice::before,.dot::before{content:'';flex:none;width:8px;height:8px;border-radius:50%;background:currentColor;transform:translateY(-1px)}
+.empty{color:var(--ink-muted);font-size:var(--fs-body);text-align:left}
+.banners{padding:0 var(--gutter)}
+
+/* Shell: the header sits on the page itself; a hairline separates it from the work. */
+.topbar{background:transparent;border-bottom:1px solid var(--rule);padding:12px var(--gutter);gap:24px}
+.brand{color:var(--ink);font-weight:700;letter-spacing:-.04em;font-size:1.5rem}
+.brand span{color:var(--ink-muted);font-size:var(--fs-fine);letter-spacing:0;font-weight:400}
+.clinic-name{color:var(--ink);font-weight:500;font-size:var(--fs-body)}
+.person{font-weight:500}
+.pill{background:none;border:0;border-radius:0;padding:0;color:var(--ink-muted);font-size:var(--fs-fine);font-weight:500;display:inline-flex;align-items:center;gap:8px}
+.pill.day-open,.pill.day-closed{background:none;border:0;font-size:var(--fs-fine);font-weight:500;color:var(--ink)}
+.pill.day-open::before,.pill.day-closed::before{content:'';flex:none;width:8px;height:8px;border-radius:50%}
+.pill.day-open::before{background:var(--done)}.pill.day-closed::before{background:var(--owed)}
+.lang-switch{gap:0}
+.lang-switch button{border:0;border-radius:0;min-width:44px;padding:6px 8px;color:var(--ink-muted);font-weight:500}
+.lang-switch button.current{background:none;color:var(--accent);font-weight:700;box-shadow:none;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px}
+.help-link{color:var(--accent);font-weight:500}
+footer{background:none;border-top:1px solid var(--rule);color:var(--ink-muted);font-size:var(--fs-fine);padding:16px var(--gutter)}
+.page{padding:20px var(--gutter) 40px;max-width:1200px}
+.page h1{font-size:var(--fs-title)}
+.page.home>p.muted{margin:0 0 20px;max-width:70ch}
+
+/* Tabs: text on a hairline; the current tab is teal with a 2 px underline (reads in greyscale too). */
+.sections{background:transparent;border-bottom:1px solid var(--rule);padding:0 var(--gutter);gap:4px}
+.sections button,.sections>.tabs-more>button{border:0;border-radius:0;background:none;color:var(--ink-muted);font-weight:500;padding:12px 10px;min-height:48px;border-bottom:2px solid transparent;margin-bottom:-1px}
+.sections button:hover:not(:disabled){background:none;color:var(--ink)}
+.sections button.current{background:none;color:var(--accent);font-weight:700;border-bottom-color:var(--accent)}
+.role-modules>.sections{padding:0;margin:0 0 24px}
+.tabs-menu{background:var(--paper);border:1px solid var(--rule);border-radius:10px;box-shadow:0 12px 32px #0f1f2329}
+.tabs-menu button{border:0;border-bottom:0;border-radius:6px}
+.tabs-menu button.current{border-bottom:0;background:var(--hover)}
+
+/* Day panel: a row of facts and one action, no card. */
+.panel{background:none;border:0;border-radius:0;padding:0}
+.day-panel{border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:16px 0;margin:8px 0 24px;max-width:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px}
+.day-panel h2{font-size:var(--fs-body);margin:0}
+.day-panel>p{margin:0}.day-panel>p.fine:last-child{flex-basis:100%}
+.day-panel .pill{font-size:var(--fs-body)}
+.day-panel button.big{margin-left:auto}
+.day-state .pill{font-size:var(--fs-body);padding:0}
+
+/* Planned (coming soon) list: plain ledger rows, muted. */
+.planned{display:block;margin:32px 0 0;border-top:1px solid var(--rule)}
+.planned:empty{display:none}
+.planned li{border:0;border-bottom:1px solid var(--rule);border-radius:0;background:none;padding:12px 0;display:flex;justify-content:space-between;gap:16px;color:var(--ink-muted)}
+.planned small{text-transform:none;letter-spacing:0}
+
+/* Modal and phone menu: the only raised surfaces. */
+.modal-backdrop{background:#0f1f2399}
+.modal{background:var(--paper);border-radius:12px;box-shadow:0 24px 64px #0f1f2340}
+.header-menu-toggle{border:1px solid var(--rule-strong)}
+@media(max-width:899.98px){
+.header-menu[data-open=true] .header-menu-panel{background:var(--paper);border:1px solid var(--rule);box-shadow:0 12px 32px #0f1f2329}
+.header-menu-panel .account button{border:1px solid var(--rule-strong);color:var(--ink)}
+.topbar{padding:8px 16px}
+}
+.install{background:none;border:0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);border-radius:0;margin:0 var(--gutter);padding:12px 0}
+
+/* Ledger: rows separated by hairlines, name left, amount right in tabular figures; the whole row is the target. */
+.ledger{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule)}
+.ledger>li{border-bottom:1px solid var(--rule)}
+.ledger-row{display:flex;align-items:baseline;justify-content:space-between;gap:16px;min-height:48px;padding:12px 0;width:100%;text-align:left}
+button.ledger-row{border:0;border-radius:0;background:none;font-weight:400;padding:12px 4px;margin:0}
+button.ledger-row:hover:not(:disabled){background:var(--hover)}
+.ledger-row>.amount,.ledger-row>b{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:500}
+.label{font-size:var(--fs-fine);color:var(--ink-muted);font-weight:500;margin:0}

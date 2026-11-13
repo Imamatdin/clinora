@@ -1,49 +1,81 @@
-.cashier fieldset {
-  border: 0;
-  padding: 0;
+/*
+ * Task 026: cashier without boxes. The bill is a ledger (service left, amount right, hairline between); totals
+ * end with the amount due set large; the payment column sits beside the bill from 1000 px. The thermal receipt
+ * (.cashier-print and the print rules below) keeps its paper format.
+ */
+.cashier{max-width:1120px;font-size:var(--fs-body)}
+.cashier>h2{margin:0 0 16px}
+.cashier>p[role=alert]{color:var(--error);font-weight:500}
+.cashier>p[role=status]{color:var(--ink-muted)}
+.cashier fieldset{border:0;padding:0;margin:0;min-width:0}
+.cashier label{font-size:var(--fs-body);display:flex;flex-direction:column;gap:6px;margin:12px 0;max-width:420px}
+.cashier input,.cashier select,.cashier button{min-height:48px;font-size:var(--fs-body);max-width:100%}
+.cashier button{margin:4px 8px 4px 0}
+
+/* Shift and search: one row each on desktop. */
+.cashier-shift{border-bottom:1px solid var(--rule);padding-bottom:12px;margin-bottom:12px}
+.cashier-open{display:flex;flex-wrap:wrap;align-items:flex-end;gap:0 16px}
+.cashier-open label{flex:1;min-width:180px;margin-bottom:4px}
+.cashier-search{display:flex;flex-wrap:wrap;align-items:flex-end;gap:0 12px;margin:0 0 8px}
+.cashier-search label{flex:1;min-width:220px;max-width:520px;margin-bottom:4px}
+.cashier-search button{margin-bottom:4px}
+.cashier-matches{margin:8px 0 24px;max-width:720px}
+.cashier .ledger-row{margin:0;min-height:52px;border-bottom:1px solid var(--rule)}
+
+/* Bill and payment. */
+.cashier-desk{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);gap:24px 56px;align-items:start;margin:24px 0 8px;border-top:1px solid var(--rule);padding-top:20px}
+.cashier-bill h3{font-size:var(--fs-title);margin:0 0 16px;letter-spacing:-.02em}
+.cashier-group{margin:0 0 16px}
+.cashier-group h4{font-size:var(--fs-fine);font-weight:500;color:var(--ink-muted);margin:0;padding:0 0 6px;border-bottom:1px solid var(--rule)}
+.cashier-line{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 16px;margin:0;padding:10px 0;border-bottom:1px solid var(--rule);min-height:48px}
+.cashier-line>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.cashier-line>b{white-space:nowrap;font-weight:500;font-variant-numeric:tabular-nums}
+.cashier-line.cancelled{color:var(--ink-muted)}.cashier-line.cancelled>b{text-decoration:line-through}
+.cashier .cashier-cancel{flex-basis:100%;border:0;color:var(--accent);padding:4px 0;min-height:44px;margin:0;text-align:left;width:auto;justify-self:start}
+.cashier-totals{margin:8px 0 0;max-width:none}
+.cashier .cashier-totals>div{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:8px 0;border-bottom:1px solid var(--rule)}
+.cashier-totals dt{color:var(--ink-muted)}
+.cashier-totals dd{margin:0;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:500}
+.cashier .cashier-totals>.cashier-total-due{border-bottom:0;padding-top:12px}
+.cashier-total-due dt{color:var(--ink);font-weight:700}
+.cashier-total-due dd{font-size:var(--fs-title);font-weight:700;letter-spacing:-.02em}
+.cashier-total-due dd.owed{color:var(--owed)}
+
+.cashier-pay{min-width:0;position:sticky;top:16px}
+.cashier-pay>label:first-child{margin-top:0}
+.cashier-pay>label:first-child input{font-size:var(--fs-title);font-weight:700;font-variant-numeric:tabular-nums;min-height:60px}
+.cashier .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:320px;margin:8px 0 12px}
+.cashier .keypad button{margin:0;font-size:var(--fs-label);font-variant-numeric:tabular-nums;min-height:52px}
+.cashier .primary{display:block;width:100%;max-width:420px;font-size:var(--fs-label);min-height:56px;margin:12px 0 4px}
+.cashier-confirm{border-top:2px solid var(--ink);border-bottom:1px solid var(--rule);padding:16px 0;margin:12px 0;max-width:420px}
+.cashier-confirm p{margin:0 0 12px;font-weight:500}
+.cashier .cashier-confirm .primary{display:inline-block;width:auto;min-width:140px;margin:0 8px 0 0}
+
+/* Secondary actions: plain rows that open in place. */
+.cashier details{margin:16px 0 0;border-top:1px solid var(--rule)}
+.cashier details[open]{padding-bottom:12px}
+.cashier details+details,.cashier .cashier-desk+details{margin-top:24px}
+.cashier summary{min-height:52px;cursor:pointer}
+.cashier-close{display:flex;flex-wrap:wrap;align-items:flex-end;gap:0 16px;border-top:1px solid var(--rule);margin-top:24px;padding-top:8px}
+.cashier-close label{flex:1;min-width:200px;margin-bottom:4px}
+.cashier-close button{margin-bottom:4px}
+.cashier-reports{margin:16px 0;max-width:720px}
+.cashier-printable{margin:24px 0;border-top:1px solid var(--rule);padding-top:16px}
+
+/* Legacy inline dialog selector kept for screens not yet restyled. */
+.cashier [role="dialog"]:not(.cashier-confirm){padding:1rem;border-top:2px solid var(--ink)}
+
+@media(max-width:999.98px){
+.cashier-desk{grid-template-columns:1fr;gap:16px}
+.cashier-pay{position:static}
 }
-.cashier label {
-  font-size: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  margin: 0.7rem 0;
+@media(max-width:600px){
+.cashier-bill h3{font-size:var(--fs-label)}
+.cashier .keypad{max-width:none}
+.cashier .primary{max-width:none}
+.cashier label{max-width:none}
 }
-.cashier input,
-.cashier select,
-.cashier button {
-  min-height: 48px;
-  font-size: 1rem;
-  max-width: 100%;
-}
-.cashier button {
-  margin: 0.3rem;
-}
-.cashier .primary {
-  display: block;
-  width: 100%;
-  font-size: 1.25rem;
-}
-.cashier .keypad {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  max-width: 320px;
-}
-.cashier dl > div {
-  display: flex;
-  justify-content: space-between;
-}
-.cashier details {
-  margin: 1rem 0;
-}
-.cashier summary {
-  min-height: 48px;
-  cursor: pointer;
-}
-.cashier [role="dialog"] {
-  padding: 1rem;
-  border: 3px solid #204b5c;
-}
+
 .cashier-print {
   max-width: 76mm;
   font-size: 16px;

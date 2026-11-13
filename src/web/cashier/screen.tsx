@@ -143,8 +143,9 @@ export function Cashier({ clinic, request }: ModuleProps) {
       {busy && <p role="status">{t("cashier.loading")}</p>}
       {saved && <p role="status">{t("cashier.saved")}</p>}
       <fieldset disabled={busy}>
+        <div className="cashier-shift">
         {!data.shifts.some((s: Row) => s.status === "open") ? (
-          <div>
+          <div className="cashier-open">
             {select("cashier.desk", desk, setDesk, data.desks, (r) => r.name)}
             {field("cashier.opening", opening, setOpening, true)}
             <button
@@ -173,7 +174,9 @@ export function Cashier({ clinic, request }: ModuleProps) {
               r.id,
           )
         )}
+        </div>
         <form
+          className="cashier-search"
           onSubmit={(e) => {
             e.preventDefault();
             void run(async () => {
@@ -188,9 +191,10 @@ export function Cashier({ clinic, request }: ModuleProps) {
         {searched && !matches.length && (
           <p role="status">{t("cashier.empty")}</p>
         )}
-        {matches.map((p) => (
+        {matches.length > 0 && <div className="ledger cashier-matches">{matches.map((p) => (
           <button
             key={p.id}
+            className="ledger-row"
             onClick={() =>
               void run(async () => {
                 setVisit(p.id);
@@ -201,9 +205,10 @@ export function Cashier({ clinic, request }: ModuleProps) {
           >
             {p.patient_no} · {p.full_name}
           </button>
-        ))}
+        ))}</div>}
         {bill && (
-          <>
+          <div className="cashier-desk">
+            <div className="cashier-bill">
             <h3>{bill.patient.full_name}</h3>
             {[
               ...new Set<string>(
@@ -212,7 +217,7 @@ export function Cashier({ clinic, request }: ModuleProps) {
                 ),
               ),
             ].map((group) => (
-              <section key={group}>
+              <section key={group} className="cashier-group">
                 <h4>{group}</h4>
                 {bill.lines
                   .filter(
@@ -223,12 +228,13 @@ export function Cashier({ clinic, request }: ModuleProps) {
                   .map((l: Row) => {
                     const total = bill.invoice.lines.find((n: Row) => n.id === l.id);
                     return (
-                      <p key={l.id}>
-                        {l.name} × {l.quantity} · {money(total.payable)}
-                        {l.status === "cancelled" && <> · {t("cashier.cancelled")}</>}
+                      <p key={l.id} className={`cashier-line${l.status === "cancelled" ? " cancelled" : ""}`}>
+                        <span>{l.name} × {l.quantity}{l.status === "cancelled" && <> · {t("cashier.cancelled")}</>}</span>
+                        <b>{money(total.payable)}</b>
                         {/* Task 023: an unpaid ordered line that will not be performed leaves the bill. The reason is asked for and recorded. */}
                         {l.status === "ordered" && total.allocatedPaid === "0" && (
                           <button
+                            className="cashier-cancel"
                             onClick={() => {
                               const why = window.prompt(`${l.name}: ${t("cashier.reason")}`)?.trim();
                               if (why)
@@ -246,14 +252,16 @@ export function Cashier({ clinic, request }: ModuleProps) {
                   })}
               </section>
             ))}
-            <dl>
+            <dl className="cashier-totals">
               {(["value", "discount", "paid", "due"] as const).map((k) => (
-                <div key={k}>
+                <div key={k} className={`cashier-total-${k}`}>
                   <dt>{t(`cashier.${k}`)}</dt>
-                  <dd data-testid={`cashier-${k}`}>{money(bill.invoice[k])}</dd>
+                  <dd data-testid={`cashier-${k}`} className={k === "due" && bill.invoice.due !== "0" ? "owed" : undefined}>{money(bill.invoice[k])}</dd>
                 </div>
               ))}
             </dl>
+            </div>
+            <div className="cashier-pay">
             {field("cashier.amount", amount, setAmount, true)}
             <div className="keypad">
               {"1234567890".split("").map((n) => (
@@ -294,6 +302,7 @@ export function Cashier({ clinic, request }: ModuleProps) {
                 role="dialog"
                 aria-modal="true"
                 aria-label={t("cashier.take")}
+                className="cashier-confirm"
               >
                 <p>
                   {t("cashier.confirm", {
@@ -303,6 +312,7 @@ export function Cashier({ clinic, request }: ModuleProps) {
                   })}
                 </p>
                 <button
+                  className="primary"
                   onClick={() =>
                     void run(async () => {
                       const payload = { shiftId: shift, amount, method };
@@ -324,7 +334,7 @@ export function Cashier({ clinic, request }: ModuleProps) {
                 </button>
               </section>
             )}
-            <details>
+            <details className="cashier-more">
               <summary>{t("cashier.more")}</summary>
               {bill.receipts?.map((r: Row) => (
                 <button
@@ -431,9 +441,10 @@ export function Cashier({ clinic, request }: ModuleProps) {
                 {t("cashier.refund")}
               </button>
             </details>
-          </>
+            </div>
+          </div>
         )}
-        <details>
+        <details className="cashier-out">
           <summary>{t("cashier.out")}</summary>
           {select(
             "cashier.expense",
@@ -482,6 +493,7 @@ export function Cashier({ clinic, request }: ModuleProps) {
             {t("cashier.out")}
           </button>
         </details>
+        <div className="cashier-close">
         {field("cashier.counted", counted, setCounted, true)}
         <button
           disabled={!shift}
@@ -504,20 +516,23 @@ export function Cashier({ clinic, request }: ModuleProps) {
         >
           {t("cashier.close")}
         </button>
+        </div>
+        {data.shifts.some((s: Row) => s.status === "closed") && <div className="ledger cashier-reports">
         {data.shifts
           .filter((s: Row) => s.status === "closed")
           .map((s: Row) => (
-            <button key={s.id} onClick={() => setPrintable(s.close_report)}>
+            <button key={s.id} className="ledger-row" onClick={() => setPrintable(s.close_report)}>
               {t("cashier.report")} ·{" "}
               {new Date(s.opened_at).toLocaleDateString()}
             </button>
           ))}
+        </div>}
       </fieldset>
       {printable && (
-        <>
+        <div className="cashier-printable">
           <button onClick={() => window.print()}>{t("cashier.print")}</button>
           <CashierPrint value={printable} />
-        </>
+        </div>
       )}
     </section>
   );

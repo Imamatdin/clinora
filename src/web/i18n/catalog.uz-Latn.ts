@@ -133,7 +133,7 @@ export const catalogUzLatn: Record<keyof typeof catalogUzCyrl, string> = {
   'catalog.import.outcome.unchanged': 'oʻzgarmagan',
   'catalog.import.tooMany': 'Faylda {count} ta yozuv: bir marta yuklashda 50 000 tagacha.',
   'catalog.import.noRows': 'Faylda yuklash mumkin boʻlgan yozuv yoʻq.',
-  'catalog.err.NOT_A_DT': 'Bu 1C .dt fayli emas. 1C Konfigurator → Administrirovanie → Vygruzit informatsionnuyu bazu orqali olingan faylni tanlang.',
+  'catalog.err.NOT_A_DT': 'Bu 1C .dt fayli emas. 1C Konfigurator › Administrirovanie › Vygruzit informatsionnuyu bazu orqali olingan faylni tanlang.',
   'catalog.err.CORRUPT': 'Fayl shikastlangan: uni ochib boʻlmadi. 1C dan qayta yuklab oling.',
   'catalog.err.TRUNCATED': 'Fayl oxirigacha yozilmagan (kesilgan). 1C dan qayta yuklab oling.',
   'catalog.err.UNRECOGNIZED_LAYOUT': 'Bu 1C konfiguratsiyasi tanilmadi. Katalogni Excel yoki CSV roʻyxat sifatida yuklang.',

@@ -22,7 +22,8 @@ import { handleAssistant, startAssistantHousekeeping } from './assistant.js';
 import { startReportWorker } from '../modules/reports/notify.js';
 
 const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
+  '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2' };
 /** Installed-app files copied from src/web/public. A fixed list: nothing else at the root is served. */
 const PUBLIC_FILES = ['sw.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png', 'icons/icon.svg',
   'ticket.css', 'ticket.js', ...ROLES.map(r => `help/${r}.png`)];
@@ -41,7 +42,7 @@ export async function createApp(webDirectory?: string, config?: ApiConfig, optio
     // Task 017: printable cheat sheets are the same app page at /help/<role>.
     for (const role of ROLES) files.set(`/help/${role}`, files.get('/')!);
     for (const name of await readdir(join(webDirectory, 'assets'))) {
-      if (!/^[a-zA-Z0-9_.-]+\.(js|css)$/.test(name)) continue;
+      if (!/^[a-zA-Z0-9_.-]+\.(js|css|woff2)$/.test(name)) continue; // woff2: the bundled Onest font (task 026)
       files.set('/assets/' + name, { body: await readFile(join(webDirectory, 'assets', name)), contentType: mime[extname(name)]! });
     }
     for (const name of PUBLIC_FILES) {

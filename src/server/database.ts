@@ -48,3 +48,13 @@ export async function migrate(pool: pg.Pool) {
     }
   });
 }
+
+/**
+ * Task 022: a database rule rejected the write (closed business day, discharged stay, append-only or immutable row,
+ * status transition, CHECK constraint). That is a conflict with the record's state, not an outage: 409, plain message.
+ * restrict_violation and check_violation. Any other failure (including a plain RAISE) stays 503.
+ */
+export const RULE_VIOLATION_MESSAGE = 'This record is closed or can no longer be changed this way (closed business day, discharged stay or append-only record).';
+export function isRuleViolation(error: unknown): boolean {
+  return !!error && typeof error === 'object' && 'code' in error && ['23001', '23514'].includes(String((error as { code: unknown }).code));
+}

@@ -284,6 +284,13 @@ test('Telegram: one webhook and one link; deduplicated voice, confirmed attach, 
   await hook({ update_id: ++updateId + 10, message: { message_id: 101, date: 1, chat, from, text: '/start ' + token } });
   await hook({ update_id: ++updateId + 10, callback_query: { id: 'cb1', data: 'link:' + token, from, message: { message_id: 102, date: 1, chat } } });
   assert.equal(last(), notice('linked'));
+  // Task 022: Telegram voice capture is a clinic setting, off by default. Off: the panel hides it and a voice note is refused, nothing stored.
+  assert.deepEqual((await (await A.client.request(`/api/clinics/${C}/assistant/config`)).json()).telegram, { available: false, linked: true });
+  const capturesBefore = await captures();
+  assert.equal((await voice(19, 190)).status, 200);
+  assert.equal(last(), notice('voiceDisabled'));
+  assert.equal(await captures(), capturesBefore, 'disabled: no capture stored');
+  assert.equal((await owner.request(`/api/clinics/${C}/settings/access`, { assignmentDays: 30, telegramVoice: true })).status, 200);
   const cfg = await (await A.client.request(`/api/clinics/${C}/assistant/config`)).json();
   assert.deepEqual(cfg.telegram, { available: true, linked: true }, 'panel sees the 004 link');
   assert.deepEqual((await (await B.client.request(`/api/clinics/${C}/assistant/config`)).json()).telegram, { available: true, linked: false });

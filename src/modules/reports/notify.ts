@@ -1,6 +1,6 @@
 import type { ApiConfig } from '../../server/notebook.js';
 import { transaction } from '../../server/database.js';
-import { renderNotice } from '../telegram/notify.js';
+import { dispatchAccountNotices, renderNotice } from '../telegram/notify.js';
 /** Transactional outbox: known successes are retained per recipient. Delivery is at least once:
  * an uncertain network outcome or a worker crash can produce a duplicate notice on retry. */
 export async function dispatchReports(config:ApiConfig,clinicId?:string) {
@@ -19,7 +19,7 @@ export async function dispatchReports(config:ApiConfig,clinicId?:string) {
     for(const row of recipients){
       if(delivered.has(row.chat))continue;
       try {
-        const result=await telegram.api.call('sendMessage',{chat_id:row.chat,...renderNotice('day.closed',notice.totals,'uz-Cyrl',`${config.origin}/?report=${notice.business_day_id}`)});
+        const result=await telegram.api.call('sendMessage',{chat_id:row.chat,...renderNotice('day.closed',{},'uz-Cyrl',`${config.origin}/?report=${notice.business_day_id}`)});
         if(result.ok)delivered.add(row.chat);else failed++;
       }catch{failed++;}
       await tx.query('SELECT 1'); // Keep the short API timeout below the transaction idle timeout.
@@ -31,7 +31,8 @@ export async function dispatchReports(config:ApiConfig,clinicId?:string) {
 }
 export function startReportWorker(config:ApiConfig) {
   let running=false,stopped=false;
-  const tick=async()=>{if(running||stopped||!config.telegram)return;running=true;try{await dispatchReports(config);}catch{/* Durable pending row is retried on the next tick. */}finally{running=false;}};
+  const tick=async()=>{if(running||stopped||!config.telegram)return;running=true;try{await dispatchReports(config);}catch{/* Durable pending row is retried on the next tick. */}
+    try{await dispatchAccountNotices(config.pool,config.telegram,config.origin);}catch{/* Task 022 account notices: retried on the next tick. */}finally{running=false;}};
   const timer=setInterval(()=>void tick(),1000);timer.unref();
   return ()=>{stopped=true;clearInterval(timer);};
 }

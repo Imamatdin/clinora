@@ -3,6 +3,7 @@ import { EmptyInput } from '../../contracts/clinic.js';
 import { MANAGERS, ROLES } from '../../modules/identity/roles.js';
 import { listDevices, myAccess, revokeDevice, staffAccess, unlockPin } from '../../modules/devices/actions.js';
 import { manageableMember, unlink } from '../../modules/telegram/links.js';
+import { clearApprovalLock } from '../../modules/identity/approval-pin.js';
 import { registerRoutes } from './registry.js';
 import { parse, uuid } from './types.js';
 
@@ -18,6 +19,9 @@ registerRoutes('access', [
     handle: async (ctx, [user], body) => { parse(EmptyInput, await body()); await manageableMember(ctx, user!); return { body: await unlink(ctx, user!) }; } },
   { method: 'POST', pattern: new RegExp(`^staff/${uuid}/pin-unlock$`), roles: MANAGERS,
     handle: async (ctx, [user], body) => { parse(EmptyInput, await body()); return { body: await unlockPin(ctx, user!) }; } },
+  // Task 022: a CEO or another administrator clears an approver's approval-PIN lock (audited).
+  { method: 'POST', pattern: new RegExp(`^staff/${uuid}/approval-unlock$`), roles: MANAGERS,
+    handle: async (ctx, [user], body) => { parse(EmptyInput, await body()); return { body: await clearApprovalLock(ctx, user!) }; } },
   { method: 'GET', pattern: /^devices$/, roles: MANAGERS, handle: async ctx => ({ body: await listDevices(ctx) }) },
   { method: 'POST', pattern: new RegExp(`^devices/${uuid}/revoke$`), roles: MANAGERS,
     handle: async (ctx, [device], body) => { parse(EmptyInput, await body()); return { body: await revokeDevice(ctx, device!) }; } },

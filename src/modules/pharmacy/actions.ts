@@ -56,7 +56,7 @@ async function visitAccess(ctx: ClinicContext, visitId: string) {
   const row = (await ctx.tx.query('SELECT patient_id FROM visits WHERE clinic_id=$1 AND id=$2', [ctx.clinicId,visitId])).rows[0];
   if (!row) return fail('NOT_FOUND');
   if (!ctx.roles.some(r => ['ceo','administrator','pharmacy','inpatient'].includes(r))) {
-    if (!(await ctx.tx.query('SELECT 1 FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3', [ctx.clinicId,row.patient_id,ctx.actorId])).rowCount) return fail('FORBIDDEN');
+    if (!(await ctx.tx.query('SELECT 1 WHERE patient_access_active($1,$2,$3)', [ctx.clinicId,row.patient_id,ctx.actorId])).rowCount) return fail('FORBIDDEN');
   }
 }
 export async function visitForCharge(ctx: ClinicContext, visitId: string) {
@@ -67,7 +67,7 @@ export async function visitForCharge(ctx: ClinicContext, visitId: string) {
     FOR UPDATE OF v FOR SHARE OF d`, [ctx.clinicId,visitId])).rows[0];
   if (!row) return fail('NOT_FOUND');
   if (!ctx.roles.some(r => ['ceo','administrator','pharmacy','inpatient'].includes(r))) {
-    if (!(await ctx.tx.query('SELECT 1 FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3', [ctx.clinicId,row.patient_id,ctx.actorId])).rowCount) return fail('FORBIDDEN');
+    if (!(await ctx.tx.query('SELECT 1 WHERE patient_access_active($1,$2,$3)', [ctx.clinicId,row.patient_id,ctx.actorId])).rowCount) return fail('FORBIDDEN');
   }
   return row;
 }

@@ -5,6 +5,7 @@ import { DomainError } from '../identity/access.js';
 import { CEO_ONLY, Role, type Role as RoleName } from '../identity/roles.js';
 import { recordAudit, type ClinicContext } from '../../server/roles.js';
 import { passwordHash } from '../../server/security.js';
+import { queueAccountNotice } from '../identity/approval-pin.js';
 
 /*
  * Staff management server actions. Each takes a ClinicContext produced by requireRole
@@ -98,15 +99,69 @@ export async function setStatus(ctx: ClinicContext, userId: string, input: z.inf
   return { status: input.status };
 }
 
-export async function resetPassword(ctx: ClinicContext, userId: string): Promise<{ temporaryPassword: string }> {
+export type PendingConfirmation = { pendingConfirmation: true; requestId: string };
+const CONFIRMED_USE_MINUTES = 60;
+/**
+ * Task 022: an administrator who resets a doctor's password or issues their Telegram invite could then act as that
+ * doctor. That reset needs a CEO's confirmation first (CEO accounts are already CEO-only). Returns null when the
+ * caller may go ahead now (a CEO, a non-doctor target, or a confirmed request, which this call uses up);
+ * otherwise the open request, created on first call and announced to the clinic's CEOs.
+ */
+export async function credentialGate(ctx: ClinicContext, userId: string, kind: 'password' | 'telegram'): Promise<PendingConfirmation | null> {
+  if (ctx.roles.includes('ceo')) return null;
+  const doctor = (await ctx.tx.query("SELECT 1 FROM membership_roles WHERE clinic_id=$1 AND user_id=$2 AND role='doctor'", [ctx.clinicId, userId])).rowCount;
+  if (!doctor) return null;
+  // Serialize concurrent requests for one target so only one request row (and one CEO notice) is created.
+  await ctx.tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,22022))', [`${ctx.clinicId}:${userId}:${kind}`]);
+  const used = (await ctx.tx.query(`UPDATE credential_requests SET used_at=now() WHERE id=(SELECT id FROM credential_requests
+      WHERE clinic_id=$1 AND target_id=$2 AND kind=$3 AND requested_by=$4 AND confirmed_at IS NOT NULL AND used_at IS NULL AND expires_at>now()
+      ORDER BY confirmed_at DESC LIMIT 1) RETURNING id`, [ctx.clinicId, userId, kind, ctx.actorId])).rows[0];
+  if (used) { await recordAudit(ctx.tx, ctx.actorId, ctx.clinicId, 'staff.credential_request_used', used.id); return null; }
+  const open = (await ctx.tx.query(`SELECT id FROM credential_requests WHERE clinic_id=$1 AND target_id=$2 AND kind=$3 AND requested_by=$4
+      AND confirmed_at IS NULL AND used_at IS NULL AND expires_at>now() ORDER BY created_at DESC LIMIT 1`, [ctx.clinicId, userId, kind, ctx.actorId])).rows[0];
+  if (open) return { pendingConfirmation: true, requestId: open.id };
+  const requestId = randomUUID();
+  await ctx.tx.query(`INSERT INTO credential_requests(id,clinic_id,target_id,kind,requested_by,expires_at) VALUES($1,$2,$3,$4,$5,now()+interval '24 hours')`,
+    [requestId, ctx.clinicId, userId, kind, ctx.actorId]);
+  await recordAudit(ctx.tx, ctx.actorId, ctx.clinicId, 'staff.credential_requested', requestId, { target: userId, kind });
+  const ceos = (await ctx.tx.query(`SELECT r.user_id FROM membership_roles r JOIN memberships m ON m.clinic_id=r.clinic_id AND m.user_id=r.user_id AND m.status='active'
+    WHERE r.clinic_id=$1 AND r.role='ceo'`, [ctx.clinicId])).rows;
+  for (const ceo of ceos) await queueAccountNotice(ctx.tx, { accountId: ceo.user_id, clinicId: ctx.clinicId, kind: 'credential_request', actorId: ctx.actorId });
+  return { pendingConfirmation: true, requestId };
+}
+
+/** Open requests for the CEO's confirmation screen: who asked, for whom, what. */
+export async function credentialRequests(ctx: ClinicContext) {
+  const rows = (await ctx.tx.query(`SELECT q.id, q.kind, q.created_at, q.target_id, t.display_name target, r.display_name requester
+    FROM credential_requests q JOIN accounts t ON t.id=q.target_id JOIN accounts r ON r.id=q.requested_by
+    WHERE q.clinic_id=$1 AND q.confirmed_at IS NULL AND q.used_at IS NULL AND q.expires_at>now() ORDER BY q.created_at`, [ctx.clinicId])).rows;
+  return rows.map(r => ({ id: r.id as string, kind: r.kind as 'password' | 'telegram', createdAt: r.created_at.toISOString() as string,
+    targetId: r.target_id as string, target: r.target as string, requester: r.requester as string }));
+}
+/** A CEO confirms one request. The administrator then repeats the reset within an hour; the confirmation is single-use. */
+export async function confirmCredentialRequest(ctx: ClinicContext, requestId: string): Promise<{ confirmed: true }> {
+  if (!ctx.roles.includes('ceo')) fail('FORBIDDEN');
+  const row = (await ctx.tx.query(`UPDATE credential_requests SET confirmed_by=$3, confirmed_at=now(), expires_at=now()+make_interval(mins => $4)
+    WHERE clinic_id=$1 AND id=$2 AND confirmed_at IS NULL AND used_at IS NULL AND expires_at>now() AND requested_by<>$3 RETURNING target_id, kind`,
+    [ctx.clinicId, requestId, ctx.actorId, CONFIRMED_USE_MINUTES])).rows[0];
+  if (!row) return fail('NOT_FOUND');
+  await recordAudit(ctx.tx, ctx.actorId, ctx.clinicId, 'staff.credential_confirmed', requestId, { target: row.target_id, kind: row.kind });
+  return { confirmed: true };
+}
+
+export async function resetPassword(ctx: ClinicContext, userId: string): Promise<{ temporaryPassword: string } | PendingConfirmation> {
   notSelf(ctx, userId);
   const t = await target(ctx, userId);
   ceoRule(ctx, t.roles);
   // An account another clinic or the person themself controls must never be taken over from here.
   if (!t.managedHere) fail('FORBIDDEN');
+  const pending = await credentialGate(ctx, userId, 'password');
+  if (pending) return pending;
   const password = temporaryPassword();
   await ctx.tx.query('UPDATE accounts SET password_hash=$2, must_change_password=true WHERE id=$1', [userId, await passwordHash(password)]);
   await ctx.tx.query('DELETE FROM sessions WHERE user_id=$1', [userId]);
   await recordAudit(ctx.tx, ctx.actorId, ctx.clinicId, 'staff.password_reset', userId);
+  // The person learns of it on Telegram now and in the app on next sign-in, with who and when.
+  await queueAccountNotice(ctx.tx, { accountId: userId, clinicId: ctx.clinicId, kind: 'password_reset', actorId: ctx.actorId });
   return { temporaryPassword: password };
 }

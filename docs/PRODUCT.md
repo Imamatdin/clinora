@@ -35,6 +35,17 @@ The clinical notebook built in tasks 001-002 stays. It becomes the doctor's visi
 - One backend, one database, live updates across devices.
 - Bot messages carry notices and a button into the app, never diagnoses, results or patient details.
 
+## Security and access rules (task 022, 13 November 2026)
+
+- **Telegram voice capture** is a clinic setting, **off by default**. The CEO turns it on under Staff → Access settings. While off, a doctor's voice note to the bot is answered "recording through Telegram is off in your clinic; record in the app" and nothing is stored. In-app recording in the doctor assistant is always available.
+- **Day-close notice** in Telegram says only "Day closed" with a button into the app. Collected, refunds and expenses appear only inside the app (day report), never in Telegram.
+- **No public self-registration.** Accounts exist only as staff created by an administrator (then linked by a Telegram invite) or by invitation to an existing account.
+- **Approval PINs** (discounts, refunds, voids, out-of-stock ward dispenses): one failure counter per approver across every computer and session. Five wrong PINs lock that person's approving until a CEO or another administrator clears it (audited); there is no time-based unlock. The approver gets a Telegram notice without amounts or patient data. CEO and administrator PINs have at least 6 digits; an older or shorter PIN must be changed (prompted at next sign-in) before it approves anything. A guess is counted only against a real visit, payment or stay in the clinic.
+- **Credential resets.** When someone else resets a person's password or issues their Telegram invite, the person gets a Telegram notice (sent to the chat linked at that moment) and, on next sign-in, "Your password was reset by <name> at <time>". An administrator's reset or invite for a doctor waits for a CEO's confirmation (Staff → Requests to confirm); after confirming, the administrator repeats the action within an hour, once. CEO accounts are managed only by a CEO.
+- **Doctor notes.** Only the encounter's own doctor reads the draft, writes or approves it (doctor workspace, notebook and assistant alike). Other doctors with access to the patient see only approved versions.
+- **Routing access** lasts while the visit is open and for 30 days after it closes (CEO setting, Staff → Access settings), and for the whole inpatient stay. Routing the patient again grants it again. A doctor keeps reading their own approved notes after access ends.
+- A write refused by a database rule (closed business day, discharged stay, append-only record) answers 409 with a plain message, not a server error.
+
 ## Ease-of-use rules (apply to every screen)
 
 The test: a 60-year-old doctor who only uses Telegram finishes the task on the first try without help.

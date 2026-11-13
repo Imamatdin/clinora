@@ -14,10 +14,11 @@ const Count = z.number().int().min(0).max(100000);
 const NoParams = z.object({}).strict();
 
 export const NOTICE_TEMPLATES = {
-  'day.closed': { params: z.object({collected:z.string().regex(/^\d{1,30}$/),refunds:z.string().regex(/^\d{1,30}$/),cashOuts:z.string().regex(/^\d{1,30}$/)}).strict(), text: {
-    'uz-Cyrl':'Иш куни ёпилди. Тушум: {collected} сўм. Қайтарилди: {refunds} сўм. Харажат: {cashOuts} сўм.',
-    'uz-Latn':'Ish kuni yopildi. Tushum: {collected} soʻm. Qaytarildi: {refunds} soʻm. Xarajat: {cashOuts} soʻm.',
-    ru:'Рабочий день закрыт. Поступления: {collected} сум. Возвраты: {refunds} сум. Расходы: {cashOuts} сум.' } },
+  // Task 022: no money in Telegram. The totals are inside the app behind the button.
+  'day.closed': { params: NoParams, text: {
+    'uz-Cyrl': 'Иш куни ёпилди.',
+    'uz-Latn': 'Ish kuni yopildi.',
+    ru: 'Рабочий день закрыт.' } },
   'queue.new_patient': { params: NoParams, text: {
     'uz-Cyrl': 'Навбатингизга янги бемор қўшилди. Тафсилотлар фақат иловада.',
     'uz-Latn': 'Navbatingizga yangi bemor qoʻshildi. Tafsilotlar faqat ilovada.',
@@ -34,6 +35,23 @@ export const NOTICE_TEMPLATES = {
     'uz-Cyrl': 'Иш куни ҳали очилмаган.',
     'uz-Latn': 'Ish kuni hali ochilmagan.',
     ru: 'Рабочий день ещё не открыт.' } },
+  // Task 022: notices about the person's own account. Who and when are shown inside the app.
+  'access.password_reset': { params: NoParams, text: {
+    'uz-Cyrl': 'Clinora паролингиз бошқа ходим томонидан тикланди. Бу сизнинг розилигингиз билан бўлмаган бўлса, дарҳол раҳбарга хабар беринг.',
+    'uz-Latn': 'Clinora parolingiz boshqa xodim tomonidan tiklandi. Bu sizning roziligingiz bilan boʻlmagan boʻlsa, darhol rahbarga xabar bering.',
+    ru: 'Ваш пароль Clinora сбросил другой сотрудник. Если это было без вашего согласия, сразу сообщите руководителю.' } },
+  'access.telegram_invite': { params: NoParams, text: {
+    'uz-Cyrl': 'Clinora ҳисобингиз учун янги Telegram таклифи яратилди. Бу сизнинг розилигингиз билан бўлмаган бўлса, дарҳол раҳбарга хабар беринг.',
+    'uz-Latn': 'Clinora hisobingiz uchun yangi Telegram taklifi yaratildi. Bu sizning roziligingiz bilan boʻlmagan boʻlsa, darhol rahbarga xabar bering.',
+    ru: 'Для вашего аккаунта Clinora создано новое приглашение Telegram. Если это было без вашего согласия, сразу сообщите руководителю.' } },
+  'access.approval_locked': { params: NoParams, text: {
+    'uz-Cyrl': 'Тасдиқлаш PIN-коди 5 марта нотўғри киритилди. Тасдиқлаш қулфланди; уни раҳбар ёки бошқа администратор очади.',
+    'uz-Latn': 'Tasdiqlash PIN-kodi 5 marta notoʻgʻri kiritildi. Tasdiqlash qulflandi; uni rahbar yoki boshqa administrator ochadi.',
+    ru: 'PIN подтверждения введён неверно 5 раз. Подтверждение заблокировано; разблокирует руководитель или другой администратор.' } },
+  'access.credential_request': { params: NoParams, text: {
+    'uz-Cyrl': 'Администратор шифокорнинг кириш маълумотларини тиклаш учун тасдиғингизни сўрамоқда.',
+    'uz-Latn': 'Administrator shifokorning kirish maʼlumotlarini tiklash uchun tasdigʻingizni soʻramoqda.',
+    ru: 'Администратор просит вашего подтверждения на сброс доступа врача.' } },
   'access.linked': { params: NoParams, text: {
     'uz-Cyrl': 'Clinora ҳисобингиз ушбу Telegram ҳисобига боғланди.',
     'uz-Latn': 'Clinora hisobingiz ushbu Telegram hisobiga bogʻlandi.',
@@ -78,4 +96,27 @@ export async function notifyStaff<T extends NoticeTemplate>(pool: pg.Pool, teleg
     if (result.ok) sent++; else failed++;
   }
   return { recipients: rows.length, sent, failed };
+}
+
+/**
+ * Task 022: sends queued account notices (password reset, Telegram invite, approval lock, CEO confirmation request)
+ * to the chat that was linked when the notice was made. A known success or an uncertain timeout finishes the row
+ * (a timeout may already have been delivered, so it is never retried blindly); a definite failure is retried with
+ * backoff up to five attempts. The in-app copy is unaffected.
+ */
+export async function dispatchAccountNotices(pool: pg.Pool, telegram: TelegramConfig | undefined, appUrl: string, limit = 20): Promise<number> {
+  if (!telegram) return 0;
+  const rows = (await pool.query(`UPDATE account_notices SET telegram_attempts=telegram_attempts+1,
+      next_attempt_at=now()+make_interval(secs => least(3600, power(2, least(telegram_attempts+1, 12))::int))
+    WHERE id IN (SELECT id FROM account_notices WHERE telegram_done_at IS NULL AND next_attempt_at<=now() ORDER BY next_attempt_at LIMIT $1 FOR UPDATE SKIP LOCKED)
+    RETURNING id, kind, telegram_chat::text chat, telegram_attempts`, [limit])).rows;
+  let sent = 0;
+  for (const row of rows) {
+    const template = `access.${row.kind}` as NoticeTemplate;
+    const result = await telegram.api.call('sendMessage', { chat_id: row.chat, ...renderNotice(template, {} as never, 'uz-Cyrl', appUrl) }).catch(() => ({ ok: false, uncertain: true }) as const);
+    if (result.ok) sent++;
+    const done = result.ok || result.uncertain || row.telegram_attempts >= 5;
+    if (done) await pool.query('UPDATE account_notices SET telegram_done_at=now() WHERE id=$1', [row.id]);
+  }
+  return sent;
 }

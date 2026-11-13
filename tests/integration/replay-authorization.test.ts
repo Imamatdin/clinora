@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { httpFixture,patientInput,encounterInput,noteInput,key } from './fixture.js';
+import { httpFixture,patientInput,encounterInput,noteInput,key,plainAccount } from './fixture.js';
 
 async function assignedFixture() {
   const f=await httpFixture(), c=f.client();
   const email='replay-doctor@example.test';
-  assert.equal((await c.request('/api/auth/register',{email,password:f.password,displayName:'Synthetic Assigned Clinician'})).status,202);
+  await plainAccount(f.pool,{email,password:f.password,displayName:'Synthetic Assigned Clinician'});
   const me=await c.login(email);
   await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,role,clinical_access,patient_scope,status,granted_by) VALUES($1,$2,$3,'clinician',true,'assigned','active',$4)",
     [randomUUID(),f.owner.clinicId,me.id,f.owner.userId]);

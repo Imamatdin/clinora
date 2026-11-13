@@ -5,7 +5,7 @@ import { DomainError } from '../modules/identity/access.js';
 import { renderApprovedPdf, type ApprovedRow } from '../modules/assistant/pdf.js';
 import { assistantProviders } from '../modules/assistant/runtime.js';
 import * as svc from '../modules/assistant/service.js';
-import { transaction } from './database.js';
+import { isRuleViolation, RULE_VIOLATION_MESSAGE, transaction } from './database.js';
 import type { ApiConfig } from './notebook.js';
 import { actorFor } from './notebook.js';
 import { same } from './security.js';
@@ -111,6 +111,7 @@ export async function handleAssistant(req: IncomingMessage, res: ServerResponse,
   } catch (error) {
     if (error instanceof DomainError) failWith(error.code);
     else if (error && typeof error === 'object' && 'code' in error && error.code === '23505') failWith('IDEMPOTENCY_CONFLICT');
+    else if (isRuleViolation(error)) send(409, { error: { code: 'INVALID_TRANSITION', message: RULE_VIOLATION_MESSAGE, requestId } });
     else failWith('SERVICE_UNAVAILABLE'); // Never expose SQL, provider errors or clinical values.
   }
   return true;

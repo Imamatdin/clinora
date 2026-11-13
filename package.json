@@ -26,7 +26,8 @@
     "check": "npm run typecheck && npm test && npm run build && npm run test:built && npm run test:browser",
     "telegram:setup": "node --import tsx scripts/telegram-setup.mjs",
     "icons": "node scripts/render-icons.mjs",
-    "assistant:eval": "node --import tsx scripts/assistant-eval.mjs"
+    "assistant:eval": "node --import tsx scripts/assistant-eval.mjs",
+    "smoke:deploy": "node scripts/smoke-deploy.mjs"
   },
   "dependencies": {
     "fflate": "0.8.3",

@@ -19,8 +19,9 @@ const appEnv = process.env.APP_ENV ?? 'development';
 if (!['development', 'test', 'staging', 'production'].includes(appEnv)) throw new Error('APP_ENV must be development, test, staging or production');
 const trustProxyHops = parseTrustedHops(process.env.TRUST_PROXY_HOPS);
 const deployed = process.env.NODE_ENV === 'production' || appEnv === 'staging' || appEnv === 'production';
-if (deployed && (!databaseUrl || !secureCookies || !origin.startsWith('https://'))) {
-  throw new Error('Deployed environments require DATABASE_URL, HTTPS APP_ORIGIN and COOKIE_SECURE=true');
+if (deployed) {
+  const missing = [!databaseUrl && 'DATABASE_URL', !origin.startsWith('https://') && 'APP_ORIGIN (https://…)', !secureCookies && 'COOKIE_SECURE=true'].filter(Boolean);
+  if (missing.length) throw new Error(`Deployed environments require DATABASE_URL, HTTPS APP_ORIGIN and COOKIE_SECURE=true. Missing or wrong: ${missing.join(', ')}`);
 }
 // Bot token and webhook secret come from the environment only; startup fails on a partial or malformed set.
 const telegram = telegramConfigFromEnv(process.env);

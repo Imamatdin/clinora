@@ -14,18 +14,21 @@ GitHub push to main
             2. docker build (Dockerfile)
             3. trivy secret scan of every image layer     ── leak → stop
             4. push to Artifact Registry  <region>-docker.pkg.dev/<project>/clinora/clinora:<commit>
-            5. Cloud Run job clinora-staging-migrate      ── failure → stop, previous revision keeps serving
+            5. Cloud Run job clinora-staging-migrate (schema owner)  ── failure → stop, previous revision keeps serving
+                 one transaction per file, lock_timeout 5 s with retries, per-file statement timeout
             6. gcloud run services replace deploy/gcp/service.yaml
                  new revision starts → startup probe GET /readyz (DB reachable + all shipped migrations applied)
                  probe fails → revision never gets traffic, previous revision keeps serving
             7. smoke test https://next.clinoraa.uz (readyz, healthz, HSTS, CSP, /.env = 404)
                  failure → traffic returned to the previous revision automatically
 
-Cloud Run service clinora-staging  (distroless Node 22, uid nonroot, 1 vCPU / 512 MiB, 0–2 instances)
+Cloud Run service clinora-staging  (distroless Node 22, uid nonroot, 1 vCPU / 512 MiB, 1–2 instances,
+  CPU always allocated, request timeout 300 s for the streamed full export)
   └─ Cloud SQL PostgreSQL 17 clinora-staging (db-g1-small, zonal, daily backup 02:00 Tashkent,
      point-in-time recovery, 14 backups kept, encrypted connections only, deletion protection)
      connected through the built-in Cloud SQL socket /cloudsql/<connection-name>
-Secret Manager: clinora-staging-database-url (the whole DATABASE_URL), read only by the runtime identity
+Secret Manager: clinora-staging-database-url (app login, DML only), read by the runtime and migrate identities
+                clinora-staging-migrator-database-url (schema owner), read only by the migrate identity
 ```
 
 The image is host-agnostic: any container host works with `DATABASE_URL`, `APP_ENV`, `APP_ORIGIN`
@@ -40,10 +43,60 @@ Identities (least privilege; no JSON keys anywhere):
 
 | Identity | Roles | Why |
 | --- | --- | --- |
-| `clinora-staging-run` (runtime, also runs migrations) | Cloud SQL Client (project); Secret Accessor on `clinora-staging-database-url` only | Connect to the database and read its own URL |
-| `clinora-deployer` (GitHub Actions via WIF) | Cloud Run Developer; Service Account User on the runtime identity only; Artifact Registry Writer on the `clinora` repository only | Deploy revisions/jobs, run them as the runtime identity, push images. It never connects to the database or reads secrets, so it does not get Cloud SQL Client or Secret Accessor (narrower than the brief; the two extra roles are required to push and to deploy as the runtime identity) |
+| `clinora-staging-run` (runtime) | Cloud SQL Client (project); Secret Accessor on `clinora-staging-database-url` only | Connect as the DML-only app role. It cannot read the owner credential |
+| `clinora-staging-migrate` (migrate job, task 024) | Cloud SQL Client (project); Secret Accessor on both database secrets | Run DDL as `clinora_migrator`; create or update the `clinora_app` role and its password from the app secret |
+| `clinora-deployer` (GitHub Actions via WIF) | Cloud Run Developer; Service Account User on the runtime and migrate identities only; Artifact Registry Writer on the `clinora` repository only | Deploy revisions/jobs, run them as the runtime identity, push images. It never connects to the database or reads secrets, so it does not get Cloud SQL Client or Secret Accessor (narrower than the brief; the two extra roles are required to push and to deploy as the runtime identity) |
 | WIF provider `github/clinora-repo` | Accepts only tokens whose `repository_id` is this repository and `ref` is `refs/heads/main` | A fork, another repository or another branch cannot impersonate the deployer |
 | Teammate (e.g. Iko), optional | Cloud Run Developer, Logs Viewer, Service Account User on runtime identity | Can deploy and read logs; founders keep project Owner |
+
+## Database roles and migrations (task 024)
+
+| Role | Created by | Can | Cannot |
+| --- | --- | --- | --- |
+| `clinora_migrator` | `bootstrap.sh` (`gcloud sql users create`) | Own and change the schema; run migrations | Is never given to the running app |
+| `clinora_app` | the migrate job, in SQL (`src/server/database.ts` `grantApplication`) | `SELECT, INSERT, UPDATE, DELETE` on tables, sequences | Own anything; `CREATE` in the schema; `TRUNCATE`; `ALTER`/`DROP` tables; drop or disable triggers (append-only, closed day); write `schema_migrations`; `CREATEROLE`/`CREATEDB` |
+
+`clinora_app` is deliberately **not** created with `gcloud sql users create`: Cloud SQL makes such users members
+of `cloudsqlsuperuser` (CREATEROLE, CREATEDB). The migrate job creates it with `NOCREATEROLE NOCREATEDB`, sets
+its password as a SCRAM verifier (the plain password never appears in SQL text or server logs), revokes any role
+membership and re-applies the grants on every run. Tested in `tests/integration/migrations.test.ts`.
+
+Migration runner (`migrate()`): a session advisory lock (one runner at a time); each file in its own transaction;
+`lock_timeout` 5 s, so an `ALTER` waiting behind a long read gives up instead of queueing every request behind it,
+then retries with doubling back-off (6 attempts); statement timeout 15 min by default, or per file with a first-lines
+comment `-- clinora:statement_timeout=30min` (never the app's 10 s cap); the job's task timeout is 30 min. A failed
+file rolls back alone; files before it stay applied and the job exits non-zero, so the deploy stops and the previous
+revision keeps serving. Rules for authors: expand, then contract (add columns/tables; drop in a later release), build
+large indexes with a separate `CREATE INDEX CONCURRENTLY` file only after testing (it cannot run in a transaction,
+so it needs a runner change first), and backfill in batches.
+
+### Role split on an existing database [founder, once]
+
+Only if `bootstrap.sh` printed the NOTE (an earlier bootstrap created `clinora_app` as the table owner). Before the
+next deploy, from Cloud Shell, as the `postgres` user:
+```sql
+REASSIGN OWNED BY clinora_app TO clinora_migrator;   -- tables, functions, triggers move to the owner
+REVOKE cloudsqlsuperuser FROM clinora_app;
+```
+Then merge to `main`; the migrate job applies the DML-only grants. Check: `\du clinora_app` shows no attributes
+and no memberships.
+
+## Background work and instance settings (task 024)
+
+Assistant transcription and drafting run inside the web process after the HTTP response. With request-based
+billing Cloud Run throttles CPU outside requests and those jobs stall, so the service runs with **CPU always
+allocated** (`run.googleapis.com/cpu-throttling: 'false'`, instance-based billing) and **one minimum instance**,
+which also removes the cold start at opening time. Cost at Tier 1 list price (Nov 2026, us-central1; check
+<https://cloud.google.com/run/pricing> for the chosen region): 1 vCPU x 2.63 M s x USD 0.000018 + 0.5 GiB x 2.63 M s
+x USD 0.000002, minus the instance free tier (240,000 vCPU-s, 450,000 GiB-s), is **about USD 45 per month** for the
+always-on instance; the second instance costs the same rate while it runs. Cloud Tasks was the alternative: cheaper
+at idle, but it needs a queue, an authenticated task endpoint and retry/idempotency work for every job type. Revisit
+it when jobs need to survive instance restarts or more than two instances. Jobs that are running while an instance
+is replaced (deploy, scale-in) are lost and must be resumable from their stored state; that is the existing lease
+design of the assistant captures, not a new guarantee.
+
+The request timeout is 300 s because the full clinic export is streamed: two synthetic years (370k charge lines)
+produced 57 MB in about 22 s locally. Other routes keep the app's own limits.
 
 ## Host security settings (verified locally in the container; re-verify on the real host)
 
@@ -166,15 +219,18 @@ The next merge to `main` moves traffic to the new revision again. Rolling back c
 migrations; migrations must stay backward-compatible with the previous release (add, never rename or
 drop in the same release).
 
-**Rotate the database password:**
+**Rotate the application password** (the migrate job sets the role's password from the secret):
 ```bash
 NEW=$(openssl rand -hex 32)
-gcloud sql users set-password clinora_app --instance clinora-staging --password "$NEW"
 printf 'postgresql://clinora_app:%s@/clinora_staging?host=/cloudsql/<SQL_CONNECTION>' "$NEW" | gcloud secrets versions add clinora-staging-database-url --data-file=-
 unset NEW
+gcloud run jobs execute clinora-staging-migrate --region <REGION> --wait   # ALTER ROLE clinora_app PASSWORD <new verifier>
 gcloud run services update clinora-staging --region <REGION> --update-labels rotated=$(date +%Y%m%d)   # new revision reads the new secret version
 ```
-Existing connections keep working until they close; the new revision uses the new password. Then
+Between the job and the new revision, new connections from the old revision fail (the old password no longer
+works); run the two commands back to back, outside clinic hours. Existing pooled connections keep working until
+they close. **Rotate the migrator password** with `gcloud sql users set-password clinora_migrator …` and a new
+version of `clinora-staging-migrator-database-url`; the app is unaffected. Then
 `gcloud secrets versions disable <old-version> --secret clinora-staging-database-url`.
 Other secrets: add a version, redeploy, disable the old version.
 
@@ -198,15 +254,32 @@ For a real recovery, restore into a new instance the same way, point the secret 
 | `/readyz` 503 with Cloud SQL stopped, old revision keeps serving | not yet run |
 | Rollback timed | not yet run |
 | Restore into scratch instance | not yet run |
+| Role split: `\du clinora_app` shows no attributes or memberships; app cannot `DROP TRIGGER payments_append_only ON payments` | not yet run (tested in CI against PostgreSQL 17, not on Cloud SQL) |
+| Minimum instance and CPU always allocated visible on the revision; first-month bill matches the estimate | not yet run |
 | Spoofed `X-Forwarded-For` does not change the rate-limit key | not yet run |
 
-## Creating production later
+## Production checklist (before the first real patient)
 
-Founders decide real-data handling first (consent, where records may be stored, retention, who has
-access). Then: a separate Google Cloud project (or at minimum a separate service, Cloud SQL instance,
-secrets and runtime identity); `APP_ENV=production`; regional or high-availability Cloud SQL with
-longer backup retention; a separate WIF provider bound to a protected release branch or tag with a
-required reviewer on the `production` GitHub environment; no demo seed job; minimum one instance to
-avoid cold starts at the clinic's opening hour; alerting on 5xx and failed probes; a restore test
-before go-live and on a schedule; and a review of the C9 gate (per-account login limiting so a clinic
-behind one public IP is never locked out).
+Nothing below is done. Each line needs a named owner and a recorded result (date, command, outcome) in this file.
+
+1. **Real-data decision by the founders, in writing:** consent wording, where records may be stored (region, and
+   whether a non-Uzbek region is acceptable under Uzbekistan's personal data law; get legal advice), retention and
+   deletion, who may access production, breach notification. No real patient is entered before this exists.
+2. **Separate environment:** its own Google Cloud project (preferred) or at least its own Cloud SQL instance,
+   database, service, runtime and migrate identities. Staging data, demo seed jobs and staging secrets never touch it.
+   `APP_ENV=production` (the demo seed refuses to run).
+3. **Separate secrets:** production `*-database-url`, `*-migrator-database-url` and Telegram secrets generated in
+   the production project; never copied from staging. Secret Accessor only for the identity that needs each one.
+4. **Role split in place:** migrations as `clinora_migrator`, app as DML-only `clinora_app` (section above), verified
+   on the real instance with `\du` and a failed `DROP TRIGGER` as the app user.
+5. **Backups with a tested restore:** regional (high-availability) Cloud SQL, automated backups with point-in-time
+   recovery, retention agreed with the founders (at least 30 days suggested). A restore into a scratch instance is
+   performed and timed before go-live and then on a schedule (e.g. monthly), with row counts checked against the
+   source. An untested backup does not count.
+6. **Deploy path:** a separate WIF provider bound to a protected release branch or tag, a required reviewer on the
+   `production` GitHub environment, same gates as staging (checks, secret scans, migrate, readiness, smoke, rollback).
+7. **Operations:** alerting on 5xx rate, failed readiness probes, failed migrate job and Cloud SQL storage; minimum
+   one instance (already in the template); the C9 gate (per-account login limiting, TLS, secure cookies, trusted
+   proxy) re-verified on the real host.
+8. **Load:** the task-024 load test (two synthetic years, 150 outpatients and 20 inpatient admissions a day) passes
+   in CI; re-run it against a production-sized Cloud SQL tier before go-live, since CI uses a local container.

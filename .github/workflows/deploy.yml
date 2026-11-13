@@ -18,6 +18,8 @@ env:
   SERVICE: clinora-staging
   MIGRATE_JOB: clinora-staging-migrate
   DB_SECRET: clinora-staging-database-url
+  # Schema owner credential (task 024 role split): read only by the migrate identity, never by the app.
+  MIGRATOR_SECRET: clinora-staging-migrator-database-url
   DOMAIN: next.clinoraa.uz
   GITLEAKS_IMAGE: zricethezav/gitleaks:v8.18.4
   TRIVY_IMAGE: aquasec/trivy:0.56.2
@@ -37,6 +39,7 @@ jobs:
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       REGION: ${{ vars.GCP_REGION }}
       RUNTIME_SA: ${{ vars.GCP_RUNTIME_SA }}
+      MIGRATE_SA: ${{ vars.GCP_MIGRATE_SA }}
       SQL_CONNECTION: ${{ vars.GCP_SQL_CONNECTION }}
       COMMIT: ${{ github.event.workflow_run.head_sha }}
       TELEGRAM_BOT_USERNAME: ${{ vars.GCP_TELEGRAM_BOT_USERNAME }}
@@ -74,10 +77,14 @@ jobs:
           echo "Serving before deploy: ${prev:-none (first deploy)}"
       - name: Migrate (failure stops the deploy; previous revision keeps serving)
         run: |
+          [ -n "$MIGRATE_SA" ] || { echo "::error::Repository variable GCP_MIGRATE_SA is missing; re-run deploy/gcp/bootstrap.sh (task 024 role split)"; exit 1; }
+          # Runs as the schema owner (DATABASE_URL) and keeps the app role DML-only (APP_DATABASE_URL);
+          # each file has its own transaction, 5 s lock timeout with retries and its own statement timeout.
           gcloud run jobs deploy "$MIGRATE_JOB" --region "$REGION" --image "$IMAGE" \
-            --args dist/server/server/migrate-cli.js --service-account "$RUNTIME_SA" \
-            --set-cloudsql-instances "$SQL_CONNECTION" --set-secrets "DATABASE_URL=${DB_SECRET}:latest" \
-            --max-retries 0 --task-timeout 10m --quiet
+            --args dist/server/server/migrate-cli.js --service-account "$MIGRATE_SA" \
+            --set-cloudsql-instances "$SQL_CONNECTION" \
+            --set-secrets "DATABASE_URL=${MIGRATOR_SECRET}:latest,APP_DATABASE_URL=${DB_SECRET}:latest" \
+            --max-retries 0 --task-timeout 30m --quiet
           gcloud run jobs execute "$MIGRATE_JOB" --region "$REGION" --wait --quiet
       - name: Deploy revision (traffic shifts only after /readyz passes)
         run: |

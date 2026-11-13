@@ -34,6 +34,8 @@ jobs:
       - run: npm run typecheck
       - run: npx playwright install --with-deps chromium
       - run: npm test
+      # Task 024: two synthetic years; every report operation must answer in under 2 s on this runner.
+      - run: npm run test:load
       - run: npm run build
       - run: npm run test:built
       - run: npm run test:browser

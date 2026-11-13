@@ -17,7 +17,15 @@ spec:
         app: clinora
         commit: ${COMMIT_LABEL}
       annotations:
-        autoscaling.knative.dev/minScale: '0'
+        # Task 024: assistant transcription and drafting run in-process after the HTTP response. With
+        # request-based billing Cloud Run throttles CPU between requests and those jobs stall, so CPU
+        # stays allocated (instance-based billing) and one instance is always warm (also no cold start
+        # at opening time). Cost at Tier 1 list price (1 vCPU, 512 MiB, us-central1, Nov 2026):
+        # 2.63M vCPU-s x $0.000018 + 1.31M GiB-s x $0.000002, minus the instance free tier, about
+        # USD 45 per month for the minimum instance; a second instance costs the same rate while it runs.
+        # Re-check https://cloud.google.com/run/pricing for the chosen region.
+        run.googleapis.com/cpu-throttling: 'false'
+        autoscaling.knative.dev/minScale: '1'
         # pool max 8 per instance x 2 instances + migration job stays under db-g1-small's connection limit.
         autoscaling.knative.dev/maxScale: '2'
         run.googleapis.com/cloudsql-instances: ${SQL_CONNECTION}
@@ -25,7 +33,9 @@ spec:
     spec:
       serviceAccountName: ${RUNTIME_SA}
       containerConcurrency: 40
-      timeoutSeconds: 30
+      # 300 s: the streamed full clinic export of two synthetic years took 22 s locally (task 024);
+      # every other route is still bounded by the app's own limits (15 s request read, 10 s statements).
+      timeoutSeconds: 300
       containers:
         - image: ${IMAGE}
           ports:

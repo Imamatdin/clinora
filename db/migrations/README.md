@@ -29,3 +29,9 @@ links are not carried over), then the 003C link, link-code and update tables are
 Task 017 adds `023_lab_late_confirmation.sql`: `charge_lines.completed_business_day_id` (the day a completion was
 posted to) and `lab_pending_confirmations` (late lab confirmations made while no business day was open; they post
 when the next day opens). Closed-day snapshots and line values are never rewritten.
+
+Task 024 adds `026_report_scale.sql`: `report_visit_open` (visits with a non-zero balance, kept by triggers under a
+per-visit lock), `report_line_parts` (set-based invoice arithmetic for many visits and days) and an index on
+adjustments by payment. Reports read the requested range plus these open balances, never the whole history.
+From task 024 the runner applies each file in its own transaction with `lock_timeout` 5 s (retried) and a
+per-file statement timeout (`-- clinora:statement_timeout=30min` in the first five lines); see docs/DEPLOY.md.

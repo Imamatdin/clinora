@@ -10,7 +10,7 @@ import { ceoUzLatn } from '../src/web/i18n/ceo.uz-Latn.js';
 import { ceoRu } from '../src/web/i18n/ceo.ru.js';
 function data():Records{return {
   clinic:{name:'Synthetic clinic',timezone:'Asia/Tashkent'},visits:[{id:'v',date:'2026-11-10',patient_id:'p',patient_no:'1',full_name:'Synthetic patient',type:'outpatient',status:'active',first_date:'2026-11-10'}],
-  charges:[{id:'l',visit_id:'v',created_at:'2026-11-10T08:00:00Z',unit_price_uzs:'1000000',quantity:1,status:'ordered',kind:'consultation',performer_user_id:'doctor',service:'Synthetic consultation',doctor:'Synthetic doctor'}],discounts:[],payments:[{id:'p1',visit_id:'v',date:'2026-11-10',amount_uzs:'500000',kind:'payment',method:'cash'},{id:'p2',visit_id:'v',date:'2026-11-11',amount_uzs:'200000',kind:'refund',method:'cash'}],
+  charges:[{id:'l',visit_id:'v',created_at:'2026-11-10T08:00:00Z',unit_price_uzs:'1000000',quantity:1,status:'completed',completed_at:'2026-11-10T08:00:00Z',kind:'consultation',performer_user_id:'doctor',service:'Synthetic consultation',doctor:'Synthetic doctor'}],discounts:[],payments:[{id:'p1',visit_id:'v',date:'2026-11-10',amount_uzs:'500000',kind:'payment',method:'cash'},{id:'p2',visit_id:'v',date:'2026-11-11',amount_uzs:'200000',kind:'refund',method:'cash'}],
   allocations:[{payment_id:'p1',charge_line_id:'l',amount_uzs:'500000'},{payment_id:'p2',charge_line_id:'l',amount_uzs:'200000'}],adjustments:[],cashOuts:[],shifts:[],rules:[{id:'rule',user_id:'doctor',doctor_share_bp:5000,basis:'paid',discount_bearer:'proportional',categories:['consultation'],effective_from:'2026-01-01'}]
 };}
 test('payroll accrues paid earnings once, reverses refunds in the later period and preserves dated rules',()=>{
@@ -58,4 +58,19 @@ test('021: payroll lists missing rules and preserves other doctors earnings',()=
   const lines=computePayroll(d,{from:'2026-11-10',to:'2026-11-10'});
   assert.equal(lines.find(l=>l.user_id==='doctor')!.entitlement_uzs,250000n);
   assert.equal(lines.find(l=>l.user_id==='missing-doctor')!.status,'rule_missing');
+});
+test('023: billed-basis shares count only performed lines, from the date they were performed',()=>{
+  const d=data();d.charges[0]={...d.charges[0],status:'ordered',completed_at:null};
+  assert.deepEqual(computePayroll(d,{from:'2026-11-10',to:'2026-11-10'}).filter(l=>l.entitlement_uzs!==0n),[]);
+  const later=data();later.charges[0]={...later.charges[0],completed_at:'2026-11-11T08:00:00Z'};
+  assert.deepEqual(computePayroll(later,{from:'2026-11-10',to:'2026-11-10'}).filter(l=>l.entitlement_uzs!==0n),[]);
+  // Paid basis: performed on the 11th, after that day's refund: half of the 300000 net receipts.
+  assert.equal(computePayroll(later,{from:'2026-11-11',to:'2026-11-11'}).find(l=>l.user_id==='doctor')!.entitlement_uzs,150000n);
+});
+test('023: payroll and the per-doctor report name only performers holding the doctor role',()=>{
+  const d={...data(),doctorIds:['doctor']};d.charges.push({...d.charges[0],id:'tech',performer_user_id:'technician'});
+  const lines=computePayroll(d,{from:'2026-11-10',to:'2026-11-10'});
+  assert.deepEqual([...new Set(lines.map(l=>l.user_id))],['doctor']);
+  const report=computeReport(d,{from:'2026-11-10',to:'2026-11-10'});
+  assert.ok(!report.doctors.some(g=>g.id==='technician'));
 });

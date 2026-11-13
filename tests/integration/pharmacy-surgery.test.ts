@@ -97,7 +97,7 @@ test('doctor dispensing is assigned-patient only and cached responses do not byp
 test('surgery charges join the patient bill, replay once, reject foreign notes and mismatched admission',async()=>{
   await f.pool.query("INSERT INTO service_prices(id,clinic_id,service_id,price_uzs,effective_from,set_by) VALUES($1,$2,$3,99000,now(),$4)",[key(),f.owner.clinicId,ids.operation,f.owner.userId]);
   // A late-entered operation keeps its actual time and historical price, even if registration came later.
-  const input={visitId:ids.visit,serviceId:ids.operation,surgeonId:f.owner.userId,performedAt:new Date(Date.now()-7200000).toISOString(),idempotencyKey:key()};
+  const input={visitId:ids.visit,serviceId:ids.operation,surgeonId:f.owner.userId,performedAt:new Date(Date.now()-7200000).toISOString(),idempotencyKey:key(),backdateReason:'Synthetic late entry (business day fixed in the past)'};
   const r=await client.request(url('surgery'),input);assert.equal(r.status,201);const result=await r.json();
   assert.deepEqual(await (await client.request(url('surgery'),input)).json(),result);
   const bill=(await f.pool.query(`SELECT c.* FROM charge_lines c JOIN visits v ON v.clinic_id=c.clinic_id AND v.id=c.visit_id WHERE v.patient_id=$1 AND c.source='surgery'`,[ids.patient])).rows;
@@ -114,7 +114,7 @@ test('inpatient surgery links the matching admission and notebook document witho
   await f.pool.query("INSERT INTO encounters(id,clinic_id,patient_id,clinician_id,data,visit_id) VALUES($1,$2,$3,$4,'{}',$5)",[encounter,c,ids.patient,u,visit]);
   await f.pool.query('INSERT INTO documents(id,clinic_id,patient_id,encounter_id) VALUES($1,$2,$3,$4)',[document,c,ids.patient,encounter]);
   const options=await (await client.request(url('surgery/options'))).json();assert.ok(options.notes.some((n:{id:string})=>n.id===document));
-  const input={visitId:visit,admissionId:admission,documentId:document,serviceId:ids.operation,surgeonId:u,performedAt:new Date().toISOString(),idempotencyKey:key()};
+  const input={visitId:visit,admissionId:admission,documentId:document,serviceId:ids.operation,surgeonId:u,performedAt:new Date().toISOString(),idempotencyKey:key(),backdateReason:'Synthetic late entry (business day fixed in the past)'};
   const response=await client.request(url('surgery'),input);assert.equal(response.status,201);const result=await response.json();
   const row=(await f.pool.query('SELECT * FROM surgeries WHERE id=$1',[result.id])).rows[0];assert.equal(row.document_id,document);assert.equal(row.admission_id,admission);
   assert.equal((await client.request(url('surgery'),{...input,visitId:ids.visit,idempotencyKey:key()})).status,404);

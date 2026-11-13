@@ -83,19 +83,26 @@ test('minimum same-day stay, optional caretaker and service retries',async t=>{
   assert.equal((await f.pool.query('SELECT sum(qty)::int n FROM stock_movements WHERE service_id=$1',[g.services.medicine])).rows[0].n,8);
   const final=await post(`/${id}/discharge`,{key:key()});assert.equal(final.value,'120000');
 });
-test('business-day opener accrues existing stays atomically; missing historical price rolls back the opening',async t=>{
+test('business-day opener accrues existing stays; an unpriced bed is flagged and never blocks the day (task 023)',async t=>{
   const {f,g,client,base}=await setup(t,2,1);
   const oldDay=(await f.pool.query("SELECT id FROM business_days WHERE clinic_id=$1 AND status='open'",[g.clinic])).rows[0].id;
-  assert.equal((await client.request(`/api/clinics/${g.clinic}/business-days/${oldDay}/close`,{})).status,200);
   const noPrice=key();await f.pool.query("INSERT INTO services(id,clinic_id,kind,name_uz_cyrl) VALUES($1,$2,'bed','No price')",[noPrice,g.clinic]);
   await f.pool.query('UPDATE beds SET bed_service_id=$2 WHERE id=$1',[g.bed,noPrice]);
+  // Before task 023 an unpriced bed made close/open fail; now both succeed and the days are flagged.
+  assert.equal((await client.request(`/api/clinics/${g.clinic}/business-days/${oldDay}/close`,{})).status,200);
   const openPath=`/api/clinics/${g.clinic}/business-days/open`;
-  assert.equal((await client.request(openPath,{})).status,422);
-  assert.equal((await f.pool.query("SELECT count(*)::int n FROM business_days WHERE clinic_id=$1 AND status='open'",[g.clinic])).rows[0].n,0);
-  assert.equal((await f.pool.query('SELECT count(*)::int n FROM charge_lines WHERE visit_id=$1',[g.visit])).rows[0].n,0);
-  await f.pool.query("INSERT INTO service_prices(id,clinic_id,service_id,price_uzs,effective_from,set_by) VALUES($1,$2,$3,100000,'2000-01-01',$4)",[key(),g.clinic,noPrice,g.actor]);
   assert.equal((await client.request(openPath,{})).status,201);
+  assert.equal((await f.pool.query('SELECT count(*)::int n FROM charge_lines WHERE visit_id=$1',[g.visit])).rows[0].n,0);
+  const ward=await (await client.request(base)).json();
+  assert.deepEqual(ward.attention.map((a:any)=>a.date).sort(),[g.start,new Date(Date.parse(g.start)+86400000).toISOString().slice(0,10)]);
+  // The service's first price may be backdated; later prices may not.
+  const price=(body:unknown)=>client.request(`/api/clinics/${g.clinic}/catalog/prices`,body);
+  assert.equal((await price({serviceId:noPrice,priceUzs:'100000',effectiveFrom:'2000-01-01T00:00:00Z',idempotencyKey:key()})).status,201);
+  assert.equal((await price({serviceId:noPrice,priceUzs:'120000',effectiveFrom:'2001-01-01T00:00:00Z',idempotencyKey:key()})).status,422);
+  const through=new Date(Date.parse(g.today)-86400000).toISOString().slice(0,10);
+  assert.equal((await client.request(base+'/daily',{key:key(),through})).status,200);
   assert.equal((await f.pool.query('SELECT count(*)::int n FROM bed_day_charges WHERE admission_id=$1',[g.admission])).rows[0].n,2);
+  assert.deepEqual((await (await client.request(base)).json()).attention,[]);
   const dispensed=await client.request(base+`/${g.admission}/services`,{key:key(),serviceId:g.services.medicine,quantity:1});assert.equal(dispensed.status,200);
   const r=await client.request(base+`/${g.admission}/services`,{key:key(),serviceId:g.services.other,quantity:0});assert.equal(r.status,422);
 });

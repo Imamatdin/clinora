@@ -91,5 +91,7 @@ export const doctorRu: Record<keyof typeof doctor, string> = {
   'doctor.complete': 'Завершить приём',
   'doctor.completeConfirm': 'Завершить приём? Консультация будет отмечена как выполненная.',
   'doctor.completed': 'Приём завершён.',
-  'doctor.otherFields': 'Поля, утверждённые через голосового помощника'
+  'doctor.otherFields': 'Поля, утверждённые через голосового помощника',
+  "doctor.cancelOrder": "Отменить заказ",
+  "doctor.cancelReason": "Причина отмены",
 };

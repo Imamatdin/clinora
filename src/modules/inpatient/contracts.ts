@@ -15,8 +15,12 @@ export const ChangeRuleInput = z.object({...Key, rule:RuleInput}).strict();
 /** After discharge, `lines` are frozen as of `linesAsOf`; paid and due are computed as of `paymentsAsOf`. */
 export type InvoiceView = {clinic:string; patient:string; patientNo:number; admissionId:string; visitId:string; issuedAt:string; linesAsOf:string; paymentsAsOf:string;
   lines:{id:string; name:string; quantity:number; price:string; value:string; source:string}[];
-  value:string; discount:string; payable:string; paid:string; due:string};
+  value:string; discount:string; payable:string; paid:string; due:string;
+  /** Task 023: stay days that could not be priced at discharge (not charged; they stay flagged for the administrator). */
+  needsAttention?:{kind:'bed'|'caretaker'; date:string; service:string}[]};
+export type AttentionView = {id:string; admission_id:string; kind:'bed'|'caretaker'; date:string; service:string; patient:string};
 export type WardView = {
+  attention:AttentionView[];
   today:string; rule:z.infer<typeof RuleInput>; effectiveRule:z.infer<typeof RuleInput>;
   beds:{id:string; room:string; label:string; department_id:string|null; admission_id:string|null; patient:string|null}[];
   visits:{id:string; patient:string; patient_no:number}[];

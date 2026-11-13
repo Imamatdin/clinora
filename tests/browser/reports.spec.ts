@@ -13,7 +13,7 @@ for(const width of [1440,390])test(`C8: real dashboard, drilldown, PDF download 
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
   const f=await processFixture();try{
     const g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
-    await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
+    await f.pool.query(`UPDATE charge_lines SET performer_user_id=$2,status='completed',completed_by=$2,completed_at=now() WHERE id=$1`,[g.line,f.owner.userId]); // Task 023: only performed lines earn.
     await transaction(f.pool,async tx=>{
       const c=await requireRole(tx,f.owner.userId,f.owner.clinicId,['ceo']);
       const date=(await tx.query('SELECT business_date FROM business_days WHERE id=$1',[g.day])).rows[0].business_date;
@@ -63,7 +63,7 @@ test('C8: dashboard shows recoverable server errors and a true empty state',asyn
 test('021: missing-rule payroll names the doctor and refuses confirmation clearly',async({page})=>{
   const f=await processFixture();try{
     const g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
-    await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
+    await f.pool.query(`UPDATE charge_lines SET performer_user_id=$2,status='completed',completed_by=$2,completed_at=now() WHERE id=$1`,[g.line,f.owner.userId]); // Task 023: only performed lines earn.
     await page.setViewportSize({width:390,height:1000});await page.goto(f.origin);
     await page.getByLabel(T('auth.identifier'),{exact:true}).fill('owner@example.test');await page.getByLabel(T('auth.password'),{exact:true}).fill(f.password);await page.getByRole('button',{name:T('auth.signIn'),exact:true}).click();
     await page.getByRole('button',{name:T('module.payroll'),exact:true}).click();await expect(page.getByRole('heading',{name:C('ceo.payrollTitle'),exact:true})).toBeVisible();

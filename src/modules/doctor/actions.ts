@@ -238,7 +238,7 @@ export async function visitView(ctx: ClinicContext, encounterId: string) {
     WHERE t.clinic_id=$1 AND t.visit_id=$2 ORDER BY t.created_at DESC LIMIT 1`, [c.clinicId, e.visit_id, c.actorId])).rows[0] ?? null : null;
   const visit = e.visit_id ? (await c.tx.query('SELECT status FROM visits WHERE clinic_id=$1 AND id=$2', [c.clinicId, e.visit_id])).rows[0] : null;
   // Only lines this doctor ordered or performs; other doctors' services and prices stay with the cashier.
-  const charges = e.visit_id ? (await c.tx.query(`SELECT l.id, s.name_uz_cyrl service, s.kind, l.status, l.quantity, l.unit_price_uzs::text unit_price_uzs, l.created_at,
+  const charges = e.visit_id ? (await c.tx.query(`SELECT l.id, s.name_uz_cyrl service, s.kind, l.status, l.quantity, l.unit_price_uzs::text unit_price_uzs, l.created_at, l.created_by=$3 mine,
       (SELECT max(version) FROM lab_results r WHERE r.clinic_id=l.clinic_id AND r.charge_line_id=l.id) result_version
     FROM charge_lines l JOIN services s ON s.clinic_id=l.clinic_id AND s.id=l.service_id
     WHERE l.clinic_id=$1 AND l.visit_id=$2 AND (l.created_by=$3 OR l.performer_user_id=$3 OR l.queue_ticket_id=$4)
@@ -253,7 +253,7 @@ export async function visitView(ctx: ClinicContext, encounterId: string) {
     otherFields: (current?.fields ?? []).filter(f => !OWNED.has(f.key)).map(f => ({ key: f.key, value: f.value })),
     approval: approvalView(approval, e.current_version_id),
     charges: charges.map(l => ({ id: l.id as string, service: l.service as string, kind: l.kind as string, status: l.status as string, quantity: l.quantity as number,
-      unitPriceUzs: l.unit_price_uzs as string, resultVersion: (l.result_version ?? null) as number | null }))
+      unitPriceUzs: l.unit_price_uzs as string, resultVersion: (l.result_version ?? null) as number | null, mine: l.mine as boolean }))
   };
 }
 
@@ -337,13 +337,14 @@ export async function orderServices(ctx: ClinicContext, encounterId: string, raw
     if (!open) return fail('INVALID_TRANSITION');
     const at = new Date(), lines = [] as { id: string; serviceId: string; unitPriceUzs: string }[];
     for (const item of input.items) {
-      const ok = (await c.tx.query('SELECT 1 FROM services WHERE clinic_id=$1 AND id=$2 AND is_active AND kind = ANY($3) FOR SHARE', [c.clinicId, item.serviceId, ORDERABLE])).rowCount;
+      const ok = (await c.tx.query('SELECT kind FROM services WHERE clinic_id=$1 AND id=$2 AND is_active AND kind = ANY($3) FOR SHARE', [c.clinicId, item.serviceId, ORDERABLE])).rows[0];
       if (!ok) return fail('NOT_FOUND');
       const price = await priceAt(c.tx, c.clinicId, item.serviceId, at);
       if (!price) return fail('INVALID_TRANSITION');
       const id = randomUUID();
-      await c.tx.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,status,source,created_by,created_at)
-        VALUES($1,$2,$3,$4,$5,$6,'ordered','doctor',$7,$8)`, [id, c.clinicId, e.visit_id, item.serviceId, item.quantity, price.priceUzs.toString(), c.actorId, at]);
+      // Task 023: a lab line's performer is the ordering doctor; the confirming technician is only completed_by.
+      await c.tx.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,status,source,created_by,created_at,performer_user_id)
+        VALUES($1,$2,$3,$4,$5,$6,'ordered','doctor',$7,$8,$9)`, [id, c.clinicId, e.visit_id, item.serviceId, item.quantity, price.priceUzs.toString(), c.actorId, at, ok.kind === 'lab' ? c.actorId : null]);
       lines.push({ id, serviceId: item.serviceId, unitPriceUzs: price.priceUzs.toString() });
     }
     await recordAudit(c.tx, c.actorId, c.clinicId, 'doctor.services_ordered', e.visit_id, { lines: lines.map(l => l.id) });

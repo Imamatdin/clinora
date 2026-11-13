@@ -293,7 +293,7 @@ export async function createVisit(ctx: ClinicContext, raw: z.input<typeof VisitI
         const price = await priceAt(ctx.tx, ctx.clinicId, serviceId, at);
         if (!price) return fail('INVALID_TRANSITION'); // Never charge an unpriced service as zero.
         await ctx.tx.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,performer_user_id,queue_ticket_id,quantity,unit_price_uzs,status,source,created_by)
-          VALUES($1,$2,$3,$4,$5,$6,1,$7,'ordered','registration',$8)`,
+          VALUES($1,$2,$3,$4,CASE WHEN (SELECT kind FROM services WHERE clinic_id=$2 AND id=$4)='lab' THEN NULL ELSE $5::uuid END,$6,1,$7,'ordered','registration',$8)`, // Task 023: a lab ordered at registration has no performer.
           [randomUUID(), ctx.clinicId, visitId, serviceId, point.kind === 'doctor' ? point.user_id : null, ticketId, price.priceUzs.toString(), ctx.actorId]);
         charges++;
       }

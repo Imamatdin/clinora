@@ -5,13 +5,21 @@ import { Key, once, fail, visitForCharge, addCharge } from '../pharmacy/actions.
 
 export const SURGERY = ['ceo','administrator','doctor','inpatient'] as const;
 export const SurgeryInput = z.object({ idempotencyKey: Key, visitId: z.uuid(), admissionId: z.uuid().optional(),
-  surgeonId: z.uuid(), serviceId: z.uuid(), performedAt: z.iso.datetime({ offset: true }), documentId: z.uuid().optional() });
+  surgeonId: z.uuid(), serviceId: z.uuid(), performedAt: z.iso.datetime({ offset: true }), documentId: z.uuid().optional(),
+  /** Task 023: required (and only accepted from a CEO or administrator) when performedAt is outside the current business day. */
+  backdateReason: z.string().trim().min(1).max(500).optional() });
 export async function recordSurgery(ctx: ClinicContext, raw: z.input<typeof SurgeryInput>) {
   ctx = await requireRole(ctx.tx,ctx.actorId,ctx.clinicId,SURGERY); const input = SurgeryInput.parse(raw);
   const visit = await visitForCharge(ctx,input.visitId);
   return once(ctx,'surgery.record',input,async () => {
     const at = new Date(input.performedAt);
     if (at > new Date()) return fail('INVALID_INPUT');
+    // Task 023: the surgery must fall within the open business day unless a CEO or administrator records a reason.
+    const day = (await ctx.tx.query(`SELECT d.business_date::text date, ($2::timestamptz AT TIME ZONE c.timezone)::date::text performed
+      FROM business_days d JOIN clinics c ON c.id=d.clinic_id WHERE d.clinic_id=$1 AND d.status='open'`, [ctx.clinicId, at])).rows[0];
+    if (!day) return fail('INVALID_TRANSITION');
+    const outside = day.performed !== day.date;
+    if (outside && !(input.backdateReason && ctx.roles.some(r => r === 'ceo' || r === 'administrator'))) return fail(input.backdateReason ? 'FORBIDDEN' : 'INVALID_INPUT');
     await requireRole(ctx.tx,input.surgeonId,ctx.clinicId,['doctor']);
     if (!ctx.roles.some(r => ['ceo','administrator','inpatient'].includes(r)) && input.surgeonId !== ctx.actorId) return fail('FORBIDDEN');
     if (!(await ctx.tx.query("SELECT 1 FROM doctor_profiles WHERE clinic_id=$1 AND user_id=$2 AND is_active FOR SHARE", [ctx.clinicId,input.surgeonId])).rowCount) return fail('INVALID_INPUT');
@@ -22,7 +30,7 @@ export async function recordSurgery(ctx: ClinicContext, raw: z.input<typeof Surg
     const chargeLineId = await addCharge(ctx,input.visitId,input.serviceId,1,'surgery',at,input.surgeonId), id = randomUUID();
     await ctx.tx.query(`INSERT INTO surgeries(id,clinic_id,visit_id,admission_id,surgeon_user_id,service_id,performed_at,document_id,created_by,charge_line_id)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [id,ctx.clinicId,input.visitId,input.admissionId ?? null,input.surgeonId,input.serviceId,at,input.documentId ?? null,ctx.actorId,chargeLineId]);
-    await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'surgery.recorded',id,{ chargeLineId }); return { id, chargeLineId };
+    await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'surgery.recorded',id,{ chargeLineId, ...(outside ? { outsideBusinessDay: true, performedDate: day.performed, reason: input.backdateReason } : {}) }); return { id, chargeLineId };
   });
 }
 export async function surgeryOptions(ctx: ClinicContext) {

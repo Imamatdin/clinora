@@ -71,7 +71,7 @@ export const coreUzLatn: Record<keyof typeof core, string> = {
   "day.staleOpen": "Oldingi ish kuni ({date}) hali yopilmagan.",
   "day.openButton": "Ish kunini ochish",
   "day.closeButton": "Ish kunini yopish",
-  "day.closeConfirm": "{date} ish kunini yopasizmi? Yopilgan kun qayta ochilmaydi.",
+  "day.closeConfirm": "{date} ish kunini yopasizmi? Yopilgan kunni faqat bosh shifokor bugun, sabab bilan qayta ocha oladi.",
   "day.openedBy": "Ochdi: {name} · {time}",
   "day.closedBy": "Yopdi: {name} · {time}",
   "day.openedNotice": "Ish kuni ochildi.",
@@ -155,4 +155,8 @@ export const coreUzLatn: Record<keyof typeof core, string> = {
   "notebook.keepLead": "Bu qayddan chiqsangiz, saqlanmagan matn oʻchadi.",
   "notebook.keepEditing": "Tahrirlashni davom ettirish",
   "notebook.discardContinue": "Oʻzgarishlarni tashlab, davom etish",
+  "day.reopenButton": "Ish kunini qayta ochish",
+  "day.reopenReason": "Kun nega qayta ochilmoqda? (sabab jurnalga yoziladi)",
+  "day.reopenedNotice": "Ish kuni qayta ochildi. Oldingi yopilish hisoboti saqlandi.",
+  "day.noShowConfirm": "{count} ta tashrifda birorta xizmat bajarilmagan: {names}. Kelmadi deb belgilab, buyurtmalarini bekor qilamizmi?",
 };

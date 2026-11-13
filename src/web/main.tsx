@@ -216,7 +216,13 @@ function App() {
           <h1>{t(`home.${active}.title` as UiKey)}</h1><p className="muted">{t(`home.${active}.lead` as UiKey)} <a className="help-link" href={`/help/${active}`} target="_blank" rel="noopener">{t('app.help')}</a></p>
           {(active === 'ceo' || active === 'administrator') && <DayPanel day={day} busy={busy} compact={active==='ceo'}
             onOpen={() => void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/open`, {}); setNotice(t('day.openedNotice')); } finally { await refreshDay().catch(() => {}); } })}
-            onClose={(id, date) => { if (confirm(t('day.closeConfirm', { date }))) void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/${id}/close`, {}); setNotice(t('day.closedNotice')); } finally { await refreshDay().catch(() => {}); } }); }} />}
+            onClose={(id, date) => { if (confirm(t('day.closeConfirm', { date }))) void run(async () => { try {
+              // Task 023: visits where nothing was performed can be marked as no-shows before the close.
+              const absent = await request<{ visitId: string; patient: string }[]>(`/api/clinics/${clinic.id}/business-days/${id}/no-show`);
+              if (absent.length && confirm(t('day.noShowConfirm', { count: String(absent.length), names: absent.slice(0, 10).map(v => v.patient).join(', ') })))
+                await request(`/api/clinics/${clinic.id}/business-days/${id}/no-show`, { idempotencyKey: crypto.randomUUID(), visitIds: absent.map(v => v.visitId) });
+              await request(`/api/clinics/${clinic.id}/business-days/${id}/close`, {}); setNotice(t('day.closedNotice')); } finally { await refreshDay().catch(() => {}); } }); }}
+            onReopen={roles.includes('ceo') ? (id) => { const reason = prompt(t('day.reopenReason'))?.trim(); if (reason) void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/${id}/reopen`, { reason }); setNotice(t('day.reopenedNotice')); } finally { await refreshDay().catch(() => {}); } }); } : undefined} />}
           <RoleModules key={`${clinic.id}:${active}`} role={active} busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, offlineDeviceId: onDevice ? me.session.deviceId : null, setDirty, reportDayId }} />
           <Planned role={active} />
         </main>

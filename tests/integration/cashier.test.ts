@@ -74,7 +74,7 @@ test("cashier HTTP workflow: concurrent idempotency, approval, targeted refunds,
     );
     await call(
       `/shifts/${s.id}/cash-out`,
-      { expenseId: g.expense, amount: "10000", note: "Synthetic supply" },
+      { expenseId: g.expense, amount: "10000", note: "Synthetic supply", key: id() },
       201,
     );
     b = await call(`/visits/${g.visit}`);
@@ -86,7 +86,7 @@ test("cashier HTTP workflow: concurrent idempotency, approval, targeted refunds,
     await call(`/visits/${g.visit}/payments`, { ...payment, key: id() }, 409);
     await call(
       `/shifts/${s.id}/cash-out`,
-      { expenseId: g.expense, amount: "1", note: "Closed" },
+      { expenseId: g.expense, amount: "1", note: "Closed", key: id() },
       409,
     );
     await call(`/shifts/${s.id}/close`, { counted: "0" }, 409);

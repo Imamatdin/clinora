@@ -1,8 +1,9 @@
 import { EmptyInput, StaffCreateInput, StaffRolesInput, StaffStatusInput } from '../../contracts/clinic.js';
 import { MANAGERS, ROLES } from '../../modules/identity/roles.js';
 import { changeRoles, confirmCredentialRequest, createStaff, credentialRequests, listStaff, resetPassword, setStatus } from '../../modules/staff/actions.js';
-import { closeDay, currentDay, openDay } from '../../modules/business-days/actions.js';
+import { closeDay, currentDay, openDay, reopenDay } from '../../modules/business-days/actions.js';
 import { AccessSettingsInput, accessSettings, updateAccessSettings } from '../../modules/settings/actions.js';
+import { z } from 'zod';
 import { registerRoutes } from './registry.js';
 import { parse, uuid } from './types.js';
 
@@ -13,6 +14,8 @@ registerRoutes('core', [
     handle: async (ctx, _p, body) => { parse(EmptyInput, await body()); return { status: 201, body: await openDay(ctx) }; } },
   { method: 'POST', pattern: new RegExp(`^business-days/${uuid}/close$`), roles: MANAGERS,
     handle: async (ctx, [day], body) => { parse(EmptyInput, await body()); return { body: await closeDay(ctx, day!) }; } },
+  { method: 'POST', pattern: new RegExp(`^business-days/${uuid}/reopen$`), roles: ['ceo'],
+    handle: async (ctx, [day], body) => ({ body: await reopenDay(ctx, day!, parse(z.object({ reason: z.string().trim().min(1).max(500) }).strict(), await body()).reason) }) },
   { method: 'GET', pattern: /^staff$/, roles: MANAGERS, handle: async ctx => ({ body: await listStaff(ctx) }) },
   { method: 'POST', pattern: /^staff$/, roles: MANAGERS,
     handle: async (ctx, _p, body) => ({ status: 201, body: await createStaff(ctx, parse(StaffCreateInput, await body())) }) },

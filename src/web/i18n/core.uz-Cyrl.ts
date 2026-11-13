@@ -78,7 +78,7 @@ export const core = {
   'day.staleOpen': 'Олдинги иш куни ({date}) ҳали ёпилмаган.',
   'day.openButton': 'Иш кунини очиш',
   'day.closeButton': 'Иш кунини ёпиш',
-  'day.closeConfirm': '{date} иш кунини ёпасизми? Ёпилган кун қайта очилмайди.',
+  'day.closeConfirm': '{date} иш кунини ёпасизми? Ёпилган кунни фақат бош шифокор бугун, сабаб билан қайта оча олади.',
   'day.openedBy': 'Очди: {name} · {time}',
   'day.closedBy': 'Ёпди: {name} · {time}',
   'day.openedNotice': 'Иш куни очилди.',
@@ -166,4 +166,8 @@ export const core = {
   'notebook.keepLead': 'Бу қайддан чиқсангиз, сақланмаган матн ўчади.',
   'notebook.keepEditing': 'Таҳрирлашни давом эттириш',
   'notebook.discardContinue': 'Ўзгаришларни ташлаб, давом этиш',
+  "day.reopenButton": "Иш кунини қайта очиш",
+  "day.reopenReason": "Кун нега қайта очилмоқда? (сабаб журналга ёзилади)",
+  "day.reopenedNotice": "Иш куни қайта очилди. Олдинги ёпилиш ҳисоботи сақланди.",
+  "day.noShowConfirm": "{count} та ташрифда бирорта хизмат бажарилмаган: {names}. Келмади деб белгилаб, буюртмаларини бекор қиламизми?",
 } as const;

@@ -118,7 +118,8 @@ export async function ward(ctx:ClinicContext):Promise<WardView> {
     JOIN accounts a ON a.id=m.user_id AND a.status='active' JOIN account_pins p ON p.account_id=a.id
     WHERE m.clinic_id=$1 AND m.status='active' AND EXISTS(SELECT 1 FROM membership_roles r WHERE r.clinic_id=m.clinic_id AND r.user_id=m.user_id AND r.role IN ('ceo','administrator'))
     ORDER BY a.display_name,a.id`,[ctx.clinicId])).rows:[];
-  return JSON.parse(json({today:c.today,rule:settings.rows[0].bed_day_rule,effectiveRule:await ruleAt(ctx,c.today),beds:beds.rows,visits:visits.rows,departments:departments.rows,doctors:doctors.rows,services:services.rows,admissions:admissions.rows,approvers}));
+  const flags=doctorOnly?[]:await attention(ctx);
+  return JSON.parse(json({attention:flags,today:c.today,rule:settings.rows[0].bed_day_rule,effectiveRule:await ruleAt(ctx,c.today),beds:beds.rows,visits:visits.rows,departments:departments.rows,doctors:doctors.rows,services:services.rows,admissions:admissions.rows,approvers}));
 }
 export async function admit(ctx:ClinicContext,raw:unknown) {
   const i=parse(AdmitInput,raw);await guard(ctx);
@@ -145,7 +146,9 @@ export async function admit(ctx:ClinicContext,raw:unknown) {
 export async function transfer(ctx:ClinicContext,id:string,raw:unknown) {
   const i=parse(TransferInput,raw);await guard(ctx);
   return retry(ctx,i.key,{action:'transfer',id,...i},async()=>{
-    const a=await stay(ctx,id);await freeBed(ctx,i.bedId,a.department_id);const c=await clock(ctx);
+    const a=await stay(ctx,id);const bed=await freeBed(ctx,i.bedId,a.department_id);const c=await clock(ctx);
+    // Task 023: the new bed bills from its first full date on; a price in force now covers every later date.
+    if(!await priceAt(ctx.tx,ctx.clinicId,bed.bed_service_id,c.instant))return fail('INVALID_INPUT');
     await ctx.tx.query('UPDATE bed_assignments SET to_at=$3 WHERE clinic_id=$1 AND admission_id=$2 AND to_at IS NULL',[ctx.clinicId,id,c.instant]);
     await ctx.tx.query('INSERT INTO bed_assignments(id,clinic_id,admission_id,bed_id,from_at) VALUES($1,$2,$3,$4,$5)',[randomUUID(),ctx.clinicId,id,i.bedId,c.instant]);
     await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.transferred',id);return {id};
@@ -174,9 +177,45 @@ export async function addCaretaker(ctx:ClinicContext,id:string,raw:unknown) {
   return retry(ctx,i.key,{action:'caretaker',id,...i},async()=>{
     await stay(ctx,id);const c=await clock(ctx);
     if(i.dailyServiceId&&!(await ctx.tx.query("SELECT 1 FROM services WHERE clinic_id=$1 AND id=$2 AND kind='caretaker' AND is_active",[ctx.clinicId,i.dailyServiceId])).rowCount)return fail('INVALID_INPUT');
+    // Task 023: caretaker days bill from today, priced at the start of each date. Prices only move forward,
+    // so a price in force at the start of today covers every date this caretaker will be billed.
+    if(i.dailyServiceId&&!await priceAt(ctx.tx,ctx.clinicId,i.dailyServiceId,await dayStart(ctx,c.today)))return fail('INVALID_INPUT');
     const caretakerId=randomUUID();await ctx.tx.query('INSERT INTO caretakers(id,clinic_id,admission_id,full_name,phone,from_date,daily_service_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[caretakerId,ctx.clinicId,id,i.fullName,i.phone,c.today,i.dailyServiceId]);
     await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.caretaker_added',id);return {id:caretakerId};
   });
+}
+
+async function dayStart(ctx:ClinicContext,date:string):Promise<Date> {
+  return (await ctx.tx.query('SELECT ($2::date::timestamp AT TIME ZONE timezone) start FROM clinics WHERE id=$1',[ctx.clinicId,date])).rows[0].start;
+}
+type StayDay={admission:string;visit:string;kind:'bed'|'caretaker';caretaker?:string;date:string;service:string;quantity:number;at:Date};
+/**
+ * Task 023: posts one dated bed or caretaker charge. A day the service has no price for is not charged and not
+ * fatal: it is flagged "needs attention" for the ward and administrator. While the stay is admitted, a later run
+ * charges it once a price covers it (a service's first price may be backdated). After discharge the database
+ * refuses new charges on the stay, so a flag left at discharge stays visible for the administrator to settle.
+ */
+async function stayDay(ctx:ClinicContext,d:StayDay):Promise<boolean> {
+  const price=await priceAt(ctx.tx,ctx.clinicId,d.service,d.at);
+  if(!price) {
+    const r=await ctx.tx.query(`INSERT INTO inpatient_attention(id,clinic_id,admission_id,kind,charge_date,service_id,caretaker_id,quantity,priced_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,[randomUUID(),ctx.clinicId,d.admission,d.kind,d.date,d.service,d.caretaker??null,d.quantity,d.at]);
+    if(r.rowCount)await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.unpriced_day',d.admission,{kind:d.kind,date:d.date,serviceId:d.service});
+    return false;
+  }
+  const charge=await line(ctx,d.visit,d.service,d.quantity,d.at,d.kind==='bed'?'bed_day':'caretaker');
+  if(d.kind==='bed')await ctx.tx.query('INSERT INTO bed_day_charges(clinic_id,admission_id,charge_date,charge_line_id) VALUES($1,$2,$3,$4)',[ctx.clinicId,d.admission,d.date,charge]);
+  else await ctx.tx.query('INSERT INTO caretaker_day_charges(clinic_id,caretaker_id,charge_date,charge_line_id) VALUES($1,$2,$3,$4)',[ctx.clinicId,d.caretaker,d.date,charge]);
+  await ctx.tx.query(`UPDATE inpatient_attention SET resolved_at=now() WHERE admission_id=$1 AND kind=$2 AND charge_date=$3
+    AND coalesce(caretaker_id,admission_id)=coalesce($4::uuid,admission_id) AND resolved_at IS NULL`,[d.admission,d.kind,d.date,d.caretaker??null]);
+  return true;
+}
+/** Unresolved "needs attention" days, for the ward screen and the discharge invoice. */
+export async function attention(ctx:ClinicContext,admissionId?:string) {
+  return (await ctx.tx.query(`SELECT f.id,f.admission_id,f.kind,f.charge_date::text date,s.name_uz_cyrl service,p.full_name patient
+    FROM inpatient_attention f JOIN services s ON s.id=f.service_id JOIN admissions a ON a.id=f.admission_id
+    JOIN visits v ON v.id=a.visit_id JOIN patients p ON p.id=v.patient_id
+    WHERE f.clinic_id=$1 AND f.resolved_at IS NULL AND ($2::uuid IS NULL OR f.admission_id=$2) ORDER BY f.charge_date,f.id LIMIT 200`,[ctx.clinicId,admissionId??null])).rows;
 }
 
 /** Charges settled calendar dates only. Today's bed occupancy remains provisional until discharge.
@@ -206,8 +245,7 @@ async function accrue(ctx:ClinicContext,id:string,through:string,discharge=false
       quantity=Math.max(quantity,minimum-prior);
     }
     if(quantity>0&&!(await ctx.tx.query('SELECT 1 FROM bed_day_charges WHERE admission_id=$1 AND charge_date=$2',[id,day.date])).rowCount) {
-      const charge=await line(ctx,a.visit_id,bed.bed_service_id,quantity,at,'bed_day');
-      await ctx.tx.query('INSERT INTO bed_day_charges(clinic_id,admission_id,charge_date,charge_line_id) VALUES($1,$2,$3,$4)',[ctx.clinicId,id,day.date,charge]);added++;
+      if(await stayDay(ctx,{admission:id,visit:a.visit_id,kind:'bed',date:day.date,service:bed.bed_service_id,quantity,at}))added++;
     }
     const caretakers=(await ctx.tx.query(`SELECT * FROM caretakers WHERE clinic_id=$1 AND admission_id=$2 AND daily_service_id IS NOT NULL
       AND from_date<=$3 AND (to_date IS NULL OR to_date>=$3)`,[ctx.clinicId,id,day.date])).rows;
@@ -216,8 +254,7 @@ async function accrue(ctx:ClinicContext,id:string,through:string,discharge=false
       const ctBillable=ctFirst&&ctLast?(rule.countAdmissionDay||rule.countDischargeDay):ctFirst?rule.countAdmissionDay:ctLast?rule.countDischargeDay:true;
       if(!ctBillable)continue;
       if((await ctx.tx.query('SELECT 1 FROM caretaker_day_charges WHERE caretaker_id=$1 AND charge_date=$2',[ct.id,day.date])).rowCount)continue;
-      const charge=await line(ctx,a.visit_id,ct.daily_service_id,1,at,'caretaker');
-      await ctx.tx.query('INSERT INTO caretaker_day_charges(clinic_id,caretaker_id,charge_date,charge_line_id) VALUES($1,$2,$3,$4)',[ctx.clinicId,ct.id,day.date,charge]);added++;
+      if(await stayDay(ctx,{admission:id,visit:a.visit_id,kind:'caretaker',caretaker:ct.id,date:day.date,service:ct.daily_service_id,quantity:1,at}))added++;
     }
   }
   return added;
@@ -236,6 +273,18 @@ export async function onBusinessDayOpen(ctx:ClinicContext) {
   const c=await clock(ctx);
   const yesterday=(await ctx.tx.query('SELECT ($1::date-1)::text date',[c.today])).rows[0].date;
   return dailyCharges(ctx,{key:randomUUID(),through:yesterday});
+}
+/**
+ * Task 023: called by day close before its snapshot, so the stored close report includes the closing date's ward
+ * revenue. Accrues bed and caretaker days through the closing date for every admitted stay. Idempotent per date:
+ * the next day's open run (through yesterday) finds these days already charged.
+ */
+export async function accrueForClose(ctx:ClinicContext,date:string) {
+  await ctx.tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,11011))',[ctx.clinicId]);
+  let added=0;const ids=(await ctx.tx.query("SELECT id FROM admissions WHERE clinic_id=$1 AND status='admitted' ORDER BY id",[ctx.clinicId])).rows;
+  for(const a of ids)added+=await accrue(ctx,a.id,date);
+  if(added)await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.daily_charges',ctx.clinicId,{through:date,added,atClose:true});
+  return added;
 }
 export async function changeRule(ctx:ClinicContext,raw:unknown) {
   const i=parse(ChangeRuleInput,raw);await guard(ctx,['ceo','administrator']);
@@ -287,7 +336,7 @@ export async function discharge(ctx:ClinicContext,id:string,raw:unknown) {
   return retry(ctx,i.key,{action:'discharge',id,...i},async()=>{
     const a=await stay(ctx,id);await openBusinessDay(ctx);const c=await clock(ctx);
     await accrue(ctx,id,c.today,true);
-    const snapshot=await invoice(ctx,id);
+    const snapshot={...await invoice(ctx,id),needsAttention:(await attention(ctx,id)).map(f=>({kind:f.kind,date:f.date,service:f.service}))};
     await ctx.tx.query('INSERT INTO inpatient_discharge_invoices(clinic_id,admission_id,snapshot,issued_by) VALUES($1,$2,$3,$4)',[ctx.clinicId,id,json(snapshot),ctx.actorId]);
     await ctx.tx.query('UPDATE bed_assignments SET to_at=$3 WHERE clinic_id=$1 AND admission_id=$2 AND to_at IS NULL',[ctx.clinicId,id,c.instant]);
     await ctx.tx.query("UPDATE admissions SET status='discharged',discharged_at=$3 WHERE clinic_id=$1 AND id=$2",[ctx.clinicId,id,c.instant]);

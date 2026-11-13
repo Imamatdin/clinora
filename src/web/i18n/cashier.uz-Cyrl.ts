@@ -53,4 +53,10 @@ export const cashier = {
   "cashier.refundConfirm": "{amount} қайтаришни тасдиқлайсизми?",
   "cashier.closeConfirm": "Саналган нақд пул: {amount}. Сменани ёпамизми?",
   "cashier.outConfirm": "Кассадан {amount} чиқаришни тасдиқлайсизми?",
+  "cashier.cancelLine": "Бекор қилиш",
+  "cashier.cancelled": "Бекор қилинган",
+  "cashier.outApprover": "Чиқимни тасдиқловчи",
+  "cashier.outPin": "Тасдиқловчи PIN-коди",
+  "cashier.cashOutList": "Кассадан чиқимлар",
+  "cashier.approvedBy": "Тасдиқлаган: {name}",
 } as const;

@@ -18,7 +18,8 @@ export interface DoctorLineShare {
   readonly clinicFundedShare: Uzs;
 }
 
-/** Use invoice-calculated lines. Only this doctor's active lines in eligible categories count.
+/** Use invoice-calculated lines. Only this doctor's completed (performed) lines in eligible categories count:
+ * an ordered line earns nothing until it is performed, a cancelled line never does (task 023).
  * Clinic-funded entitlement is separate from receipts, never fictitious revenue.
  * Billed basis: the doctor is entitled to the full billed-basis amount whether or not the
  * patient has paid; the clinic advances any uncollected part as clinicFundedShare.
@@ -43,7 +44,7 @@ export function calculateDoctorShares(
     if (discount > value || payable !== value - discount || received > payable) {
       throw new RangeError('Inconsistent invoice line');
     }
-    if (line.status === 'cancelled' || line.doctorId !== doctorId || !rule.categories.includes(line.category)) return [];
+    if (line.status !== 'completed' || line.doctorId !== doctorId || !rule.categories.includes(line.category)) return [];
     const grossShare = value * BigInt(rule.doctorShareBp) / 10000n;
     const billed = rule.discountBearer === 'clinic' ? grossShare
       : rule.discountBearer === 'doctor' ? (grossShare > discount ? grossShare - discount : 0n)

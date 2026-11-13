@@ -19,3 +19,4 @@ import './registration.js';
 import './catalog.js';
 import './doctor.js';
 import './lab.js';
+import './charges.js';

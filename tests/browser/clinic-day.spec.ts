@@ -17,7 +17,7 @@ import { assistant } from '../../src/web/i18n/assistant.uz-Cyrl.js';
  * the doctor sees their own earnings. All people and data are synthetic.
  */
 const EVIDENCE = 'work/browser-evidence/clinic-day';
-const PIN = '4826';
+const PIN = '482613'; // Task 022: approver PINs have 6 digits.
 const digits = (text: string) => text.replace(/\D/g, '');
 
 test.use({ actionTimeout: 15000 });
@@ -32,7 +32,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
       const s = await seedDemoStaff(tx, c, ceo, hash, 'day');
       await seedDemoCatalog(tx, c, ceo, s.doctorIds);
       // The administrator approves discounts and refunds with a PIN (set by the person on a clinic computer).
-      await tx.query('INSERT INTO account_pins(account_id,pin_hash) VALUES($1,$2)', [s.ids.administrator, await passwordHash(PIN)]);
+      await tx.query('INSERT INTO account_pins(account_id,pin_hash,pin_digits) VALUES($1,$2,6)', [s.ids.administrator, await passwordHash(PIN)]);
       return s;
     });
     const serviceId = async (code: string) => (await f.pool.query('SELECT id FROM services WHERE clinic_id=$1 AND code_1c=$2', [c, code])).rows[0].id as string;

@@ -10,7 +10,8 @@ import { DomainError } from "../identity/access.js";
 import { requireRole, type ClinicContext } from "../../server/roles.js";
 import { withAudit } from "../../server/repo/audit.js";
 import { nextReceiptNo } from "../../server/repo/counters.js";
-import { digest, passwordMatches } from "../../server/security.js";
+import { digest } from "../../server/security.js";
+import { verifyApproverPin } from "../identity/approval-pin.js";
 
 const id = z.string().uuid(),
   money = z.string().regex(/^(0|[1-9]\d{0,17})$/);
@@ -286,6 +287,14 @@ export async function bill(
   ).rows;
   return { invoice, lines, discounts, payments, patient, receipts };
 }
+async function approvalTargetExists(c: ClinicContext, visitId: string, operation: string, data: Record<string, unknown>) {
+  const one = (sql: string, params: unknown[]) => c.tx.query(sql, params).then(r => !!r.rowCount);
+  if (!(await one("SELECT 1 FROM visits WHERE clinic_id=$1 AND id=$2", [c.clinicId, visitId]))) return false;
+  if (operation === "refund") return one("SELECT 1 FROM payments WHERE clinic_id=$1 AND visit_id=$2 AND id=$3", [c.clinicId, visitId, data.paymentId]);
+  if (operation === "void") return one("SELECT 1 FROM discounts WHERE clinic_id=$1 AND visit_id=$2 AND id=$3", [c.clinicId, visitId, data.discountId]);
+  if (data.lineId) return one("SELECT 1 FROM charge_lines WHERE clinic_id=$1 AND visit_id=$2 AND id=$3", [c.clinicId, visitId, data.lineId]);
+  return true;
+}
 function payload(operation: string, visitId: string, input: unknown) {
   return digest(JSON.stringify({ operation, visitId, input }));
 }
@@ -306,32 +315,14 @@ export async function approve(
         : Void;
   const parsed = schema.safeParse(input.payload);
   if (!parsed.success) return fail("INVALID_INPUT");
-  const p = (
-    await c.tx.query(
-      `SELECT p.* FROM account_pins p JOIN accounts a ON a.id=p.account_id WHERE p.account_id=$1 AND a.status='active' AND NOT a.must_change_password FOR UPDATE OF p`,
-      [input.approverId],
-    )
-  ).rows[0];
-  if (!p)
-    return { status: 403, body: { error: { code: "FORBIDDEN" } } };
-  // Device comes from the authenticated session, never the request body or IP.
-  const deviceKey=c.approvalDeviceKey??`account:${c.actorId}`;
-  await c.tx.query(`INSERT INTO cashier_approval_attempts(clinic_id,approver_id,device_key) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,[c.clinicId,input.approverId,deviceKey]);
-  const attempts=(await c.tx.query(`SELECT *,locked_until>now() locked FROM cashier_approval_attempts WHERE clinic_id=$1 AND approver_id=$2 AND device_key=$3 FOR UPDATE`,[c.clinicId,input.approverId,deviceKey])).rows[0];
-  if(attempts.locked)return {status:403,body:{error:{code:'FORBIDDEN'}}};
-  if (!(await passwordMatches(input.pin, p.pin_hash))) {
-    await c.tx.query(
-      `UPDATE cashier_approval_attempts SET failed_attempts=CASE WHEN locked_until<=now() THEN 1 ELSE least(failed_attempts+1,5) END,
-       locked_until=CASE WHEN locked_until<=now() THEN NULL WHEN failed_attempts+1>=5 THEN now()+interval '15 minutes' ELSE NULL END WHERE clinic_id=$1 AND approver_id=$2 AND device_key=$3`,
-      [c.clinicId,input.approverId,deviceKey],
-    );
+  // Task 022: a guess is counted only against a real target in this clinic (visit, and the payment,
+  // discount or line the operation names), so probing random ids cannot burn an approver's attempts.
+  if (!(await approvalTargetExists(c, input.visitId, input.operation, parsed.data as Record<string, unknown>))) return fail("NOT_FOUND");
+  // One counter per approver across every device and session, shared with ward overrides (identity/approval-pin.ts).
+  if (!(await verifyApproverPin(c, input.approverId, input.pin))) {
     await audited(c, "approval_failed", input.approverId);
     return { status: 403, body: { error: { code: "FORBIDDEN" } } };
   }
-  await c.tx.query(
-    "UPDATE cashier_approval_attempts SET failed_attempts=0,locked_until=NULL WHERE clinic_id=$1 AND approver_id=$2 AND device_key=$3",
-    [c.clinicId,input.approverId,deviceKey],
-  );
   const approvalId = randomUUID();
   await c.tx.query(
     "INSERT INTO cashier_approvals(id,clinic_id,requested_by,approved_by,payload_hash) VALUES($1,$2,$3,$4,$5)",

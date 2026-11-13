@@ -35,7 +35,7 @@ export async function doctorAccess(tx: Tx, actor: Actor, clinicId: string, patie
   if (patientId) {
     const inScope = m.patient_scope === 'clinic'
       ? (await tx.query('SELECT 1 FROM patients WHERE clinic_id=$1 AND id=$2', [clinicId, patientId])).rowCount
-      : (await tx.query('SELECT 1 FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3 FOR SHARE', [clinicId, patientId, actor.userId])).rowCount;
+      : (await tx.query('SELECT 1 WHERE patient_access_active($1,$2,$3)', [clinicId, patientId, actor.userId])).rowCount;
     if (!inScope) return fail('NOT_FOUND');
   }
   return {
@@ -50,12 +50,13 @@ async function jobStillAuthorized(tx: Tx, clinicId: string, doctorId: string, pa
   const row = (await tx.query(`SELECT 1 FROM memberships m JOIN accounts a ON a.id=m.user_id
     WHERE m.clinic_id=$1 AND m.user_id=$2 AND m.status='active' AND m.clinical_access AND a.status='active'
       AND EXISTS(SELECT 1 FROM membership_roles r WHERE r.clinic_id=m.clinic_id AND r.user_id=m.user_id AND r.role='doctor')
-      AND (m.patient_scope='clinic' OR EXISTS(SELECT 1 FROM patient_assignments p WHERE p.clinic_id=m.clinic_id AND p.user_id=m.user_id AND p.patient_id=$3))
+      AND (m.patient_scope='clinic' OR patient_access_active(m.clinic_id,$3,m.user_id))
     FOR SHARE OF m`, [clinicId, doctorId, patientId])).rows[0];
   return !!row;
 }
-async function requireEncounter(tx: Tx, clinicId: string, patientId: string, encounterId: string) {
-  const row = (await tx.query('SELECT id FROM encounters WHERE clinic_id=$1 AND patient_id=$2 AND id=$3 FOR KEY SHARE', [clinicId, patientId, encounterId])).rows[0];
+/** Task 022 (doctor workspace rule): only the encounter's own clinician reads its draft, writes or approves it. */
+async function requireEncounter(tx: Tx, clinicId: string, patientId: string, encounterId: string, clinicianId: string) {
+  const row = (await tx.query('SELECT id FROM encounters WHERE clinic_id=$1 AND patient_id=$2 AND id=$3 AND clinician_id=$4 FOR KEY SHARE', [clinicId, patientId, encounterId, clinicianId])).rows[0];
   if (!row) fail('NOT_FOUND');
 }
 
@@ -82,7 +83,7 @@ const bumpDraft = (tx: Tx, draftId: string) => tx.query('UPDATE assistant_drafts
 
 export async function draftView(tx: Tx, actor: Actor, clinicId: string, patientId: string, encounterId: string, providers: AssistantProviders) {
   await doctorAccess(tx, actor, clinicId, patientId);
-  await requireEncounter(tx, clinicId, patientId, encounterId);
+  await requireEncounter(tx, clinicId, patientId, encounterId, actor.userId);
   const draft = await lockDraft(tx, clinicId, patientId, encounterId);
   const fields = await currentFields(tx, draft.id);
   const held = (await tx.query(`SELECT DISTINCT ON (field_key) id,field_key,value,category,evidence,created_at FROM assistant_proposals
@@ -122,7 +123,7 @@ export const FieldActionInput = z.discriminatedUnion('action', [
 export async function fieldAction(tx: Tx, actor: Actor, clinicId: string, patientId: string, encounterId: string, keyRaw: string, input: z.infer<typeof FieldActionInput>) {
   await doctorAccess(tx, actor, clinicId, patientId);
   const key = FieldKeySchema.safeParse(keyRaw); if (!key.success) return fail('NOT_FOUND');
-  await requireEncounter(tx, clinicId, patientId, encounterId);
+  await requireEncounter(tx, clinicId, patientId, encounterId, actor.userId);
   const draft = await lockDraft(tx, clinicId, patientId, encounterId);
   if (draft.status !== 'open') return fail('INVALID_TRANSITION');
   const current = (await currentFields(tx, draft.id)).get(key.data);
@@ -159,7 +160,7 @@ const ASSISTANT_OWNED = (key: string) => key.startsWith('gp.');
 export async function approve(tx: Tx, actor: Actor, clinicId: string, patientId: string, encounterId: string, input: z.infer<typeof ApproveInput>) {
   if (!actor.sessionId || !actor.expiresAt) return fail('UNAUTHENTICATED'); // Approval needs the verified session as its Principal.
   const access = await doctorAccess(tx, actor, clinicId, patientId);
-  await requireEncounter(tx, clinicId, patientId, encounterId);
+  await requireEncounter(tx, clinicId, patientId, encounterId, actor.userId);
   const draft = await lockDraft(tx, clinicId, patientId, encounterId);
   if (draft.status === 'approved') {
     // A retried approval of the same draft revision returns the original result; anything else is stale.
@@ -218,7 +219,9 @@ export async function approve(tx: Tx, actor: Actor, clinicId: string, patientId:
 
 /** Loads the approved snapshot for the PDF. Always the stored approved version, never a draft. */
 export async function approvedDocument(tx: Tx, actor: Actor, clinicId: string, patientId: string, encounterId: string) {
-  await doctorAccess(tx, actor, clinicId, patientId);
+  // Task 022: the author keeps reading their approved note after routing access ends; others need current access.
+  const own = (await tx.query('SELECT 1 FROM encounters WHERE clinic_id=$1 AND patient_id=$2 AND id=$3 AND clinician_id=$4', [clinicId, patientId, encounterId, actor.userId])).rowCount;
+  await doctorAccess(tx, actor, clinicId, own ? null : patientId);
   const row = (await tx.query(`SELECT p.id approval_id,p.approved_at,a.display_name approver,v.data version,pt.display_name patient,pt.mrn,pt.date_of_birth,e.data encounter,c.name clinic
     FROM assistant_approvals p JOIN assistant_drafts d ON d.id=p.draft_id JOIN document_versions v ON v.id=p.version_id AND v.document_id=p.document_id
     JOIN accounts a ON a.id=p.approved_by JOIN patients pt ON pt.id=d.patient_id AND pt.clinic_id=d.clinic_id
@@ -239,7 +242,7 @@ async function rateLimit(tx: Tx, clinicId: string, doctorId: string) {
 }
 export async function createCapture(tx: Tx, actor: Actor, clinicId: string, patientId: string, encounterId: string, input: z.infer<typeof CaptureInput>, source: 'browser' | 'simulated') {
   await doctorAccess(tx, actor, clinicId, patientId);
-  await requireEncounter(tx, clinicId, patientId, encounterId);
+  await requireEncounter(tx, clinicId, patientId, encounterId, actor.userId);
   const existing = (await tx.query('SELECT * FROM assistant_captures WHERE clinic_id=$1 AND doctor_id=$2 AND client_key=$3', [clinicId, actor.userId, input.clientKey])).rows[0];
   if (existing) {
     if (existing.encounter_id !== encounterId || existing.source !== source) return fail('IDEMPOTENCY_CONFLICT');
@@ -307,7 +310,7 @@ export async function attachCapture(tx: Tx, actor: Actor, clinicId: string, capt
   const c = (await tx.query("SELECT * FROM assistant_captures WHERE id=$1 AND clinic_id=$2 AND doctor_id=$3 AND source='telegram' FOR UPDATE", [captureId, clinicId, actor.userId])).rows[0];
   if (!c) return fail('NOT_FOUND');
   await doctorAccess(tx, actor, clinicId, input.patientId);
-  await requireEncounter(tx, clinicId, input.patientId, input.encounterId);
+  await requireEncounter(tx, clinicId, input.patientId, input.encounterId, actor.userId);
   if (c.encounter_id) return c.encounter_id === input.encounterId && c.patient_id === input.patientId ? captureView(c) : fail('INVALID_TRANSITION');
   if (c.status !== 'pending_attach') return fail('INVALID_TRANSITION');
   const row = (await tx.query("UPDATE assistant_captures SET patient_id=$2, encounter_id=$3, status='queued', attached_at=now(), attached_by=$4 WHERE id=$1 RETURNING *",
@@ -454,6 +457,8 @@ export async function receiveTelegramVoice(tx: Tx, voice: VoiceMessage): Promise
      WHERE l.telegram_user_id=$1`, [voice.telegramUserId])).rows[0];
   if (!link) return 'notLinked';
   if (!await isActiveDoctor(tx, link.clinic_id, link.account_id)) return 'notDoctor';
+  // Task 022: Telegram voice capture is a clinic setting, off by default. In-app recording is unaffected. Nothing is stored.
+  if (!await telegramVoiceEnabled(tx, link.clinic_id)) return 'disabled';
   if (voice.durationS > LIMITS.voiceSeconds || (voice.fileSize ?? 0) > 20 * 1024 * 1024) return 'tooLong';
   const inserted = (await tx.query(`INSERT INTO assistant_captures(id,clinic_id,doctor_id,source,telegram_chat_id,telegram_message_id,telegram_file_id,duration_s,mime_type,status)
     VALUES($1,$2,$3,'telegram',$4,$5,$6,$7,'audio/ogg','pending_attach') ON CONFLICT (telegram_chat_id,telegram_message_id) DO NOTHING RETURNING id`,
@@ -461,6 +466,9 @@ export async function receiveTelegramVoice(tx: Tx, voice: VoiceMessage): Promise
   if (!inserted) return 'duplicate'; // Same message under a new update id.
   await recordAudit(tx, link.account_id, link.clinic_id, 'assistant.telegram_voice', inserted.id);
   return 'received';
+}
+export async function telegramVoiceEnabled(tx: Tx, clinicId: string): Promise<boolean> {
+  return !!(await tx.query('SELECT 1 FROM clinic_settings WHERE clinic_id=$1 AND telegram_voice', [clinicId])).rowCount;
 }
 /** Whether this account has task 004's Telegram link (the panel's hint only; the webhook rechecks everything). */
 export async function telegramLinked(tx: Tx, actor: Actor): Promise<boolean> {

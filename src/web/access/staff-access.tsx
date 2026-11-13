@@ -4,7 +4,7 @@ import { ApiFailure, type Request } from '../api.js';
 import { errorText, formatDate, t } from '../i18n/index.js';
 import { waitingOutbox } from '../registration/outbox.js';
 
-export type StaffAccessRow = { userId: string; telegramLinked: boolean; invitePending: boolean; pinSet: boolean; pinLocked: boolean; loginUnlockAt: string | null };
+export type StaffAccessRow = { userId: string; telegramLinked: boolean; invitePending: boolean; pinSet: boolean; pinLocked: boolean; approvalLocked?: boolean; loginUnlockAt: string | null };
 export type Invite = { link: string; expiresAt: string };
 
 /** QR code drawn as SVG rectangles: no data: URLs or inline HTML, so the CSP stays strict. */
@@ -50,13 +50,19 @@ export function AccessActions({ clinicId, userId, name, request, canManage }: { 
     <span className="chips">
       <span className={`chip ${row.telegramLinked ? 'ok' : ''}`}>{row.telegramLinked ? t('access.linked') : row.invitePending ? t('access.pending') : t('access.notLinked')}</span>
       <span className={`chip ${row.pinLocked ? 'blocked' : row.pinSet ? 'ok' : ''}`}>{row.pinLocked ? t('access.pinLocked') : row.pinSet ? t('access.pinSet') : t('access.noPin')}</span>
+      {row.approvalLocked && <span className="chip blocked">{t('access.approvalLocked')}</span>}
     </span>
     {row.loginUnlockAt && <p role="status">{t('access.loginLockedUntil', { time: new Date(row.loginUnlockAt).toLocaleTimeString('uz-Cyrl', { hour: '2-digit', minute: '2-digit', hour12: false }) })}</p>}
     {canManage && <div className="actions">
       {row.loginUnlockAt && <button disabled={busy} onClick={() => void run(async () => { await request(`${base}/${userId}/login-unlock`, {}); setNotice(t('access.loginUnlocked')); await load(); })}>{t('access.unlockLogin')}</button>}
-      <button disabled={busy} onClick={() => void run(async () => { setInvite(await request<Invite>(`${base}/${userId}/telegram-invite`, {})); await load(); })}>{t('access.invite')}</button>
+      <button disabled={busy} onClick={() => void run(async () => {
+        // Task 022: an administrator's invite for a doctor first goes to the CEO for confirmation.
+        const r = await request<Invite | { pendingConfirmation: true }>(`${base}/${userId}/telegram-invite`, {});
+        if ('pendingConfirmation' in r) setNotice(t('access.pendingCeo')); else setInvite(r);
+        await load(); })}>{t('access.invite')}</button>
       {row.telegramLinked && <button disabled={busy} onClick={() => { if (confirm(t('access.unlinkConfirm', { name }))) void run(async () => { await request(`${base}/${userId}/telegram-unlink`, {}); setNotice(t('access.unlinked')); await load(); }); }}>{t('access.unlink')}</button>}
       {row.pinLocked && <button disabled={busy} onClick={() => void run(async () => { await request(`${base}/${userId}/pin-unlock`, {}); setNotice(t('access.pinUnlocked')); await load(); })}>{t('access.unlockPin')}</button>}
+      {row.approvalLocked && <button disabled={busy} onClick={() => void run(async () => { await request(`${base}/${userId}/approval-unlock`, {}); setNotice(t('access.approvalUnlocked')); await load(); })}>{t('access.unlockApproval')}</button>}
     </div>}
     <div aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>
     {invite && <InvitePanel invite={invite} name={name} onDone={() => setInvite(null)} />}
@@ -143,4 +149,51 @@ export function MyAccess({ clinicId, name, request, onBack }: { clinicId: string
     </>}
     <button className="big" onClick={onBack}>{t('access.me.back')}</button>
   </main>;
+}
+
+export type AccountNotice = { id: string; kind: 'password_reset' | 'telegram_invite' | 'approval_locked' | 'credential_request'; actorName: string | null; at: string };
+const when = (iso: string) => new Intl.DateTimeFormat('uz-Cyrl', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
+
+/** Task 022: what happened to the person's own account ("Your password was reset by <name> at <time>"), until dismissed. */
+export function AccountNotices({ notices, pinChangeRequired, request, onOpenPin, onDone }: { notices: AccountNotice[]; pinChangeRequired: boolean; request: Request;
+  onOpenPin: () => void; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  if (!notices.length && !pinChangeRequired) return null;
+  const dismiss = async () => { setBusy(true); try { await request('/api/auth/notices/seen', { ids: notices.map(n => n.id) }); onDone(); } catch { /* stays visible; retried on next tap */ } finally { setBusy(false); } };
+  return <section className="account-notices" aria-live="polite">
+    {notices.map(n => <p key={n.id} role="alert" className="notice">{t(`access.notice.${n.kind}`, { name: n.actorName ?? t('access.notice.someone'), time: when(n.at) })}</p>)}
+    {notices.length > 0 && <button disabled={busy} onClick={() => void dismiss()}>{t('access.notice.dismiss')}</button>}
+    {pinChangeRequired && <p role="alert" className="notice">{t('access.pinChangeRequired')} <button onClick={onOpenPin}>{t('access.pinChangeOpen')}</button></p>}
+  </section>;
+}
+
+type CredentialRequest = { id: string; kind: 'password' | 'telegram'; createdAt: string; target: string; requester: string };
+/** Task 022, CEO only: confirm an administrator's credential reset for a doctor, and the clinic's access settings. */
+export function CeoAccessPanel({ clinicId, request }: { clinicId: string; request: Request }) {
+  const [rows, setRows] = useState<CredentialRequest[] | null>(null), [settings, setSettings] = useState<{ assignmentDays: number; telegramVoice: boolean } | null>(null);
+  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
+  const base = `/api/clinics/${clinicId}`;
+  const load = async () => { const [r, s] = await Promise.all([request<CredentialRequest[]>(`${base}/staff/credential-requests`), request<{ assignmentDays: number; telegramVoice: boolean }>(`${base}/settings/access`)]); setRows(r); setSettings(s); };
+  const run = async (work: () => Promise<void>) => {
+    setBusy(true); setError(''); setNotice('');
+    try { await work(); } catch (e) { setError(errorText(e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE')); } finally { setBusy(false); }
+  };
+  useEffect(() => { void run(load); }, [clinicId]);
+  function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault(); const f = new FormData(e.currentTarget);
+    void run(async () => { setSettings(await request(`${base}/settings/access`, { assignmentDays: Number(f.get('days')), telegramVoice: f.get('voice') === 'on' })); setNotice(t('access.settings.saved')); });
+  }
+  return <section className="panel ceo-access">
+    <h2>{t('access.requests.title')}</h2>
+    <div aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>
+    {!rows ? <p role="status">{t('access.loading')}</p> : !rows.length ? <p className="empty">{t('access.requests.empty')}</p>
+      : <ul className="list">{rows.map(r => <li key={r.id}><span>{t(r.kind === 'password' ? 'access.requests.password' : 'access.requests.telegram', { requester: r.requester, target: r.target })} · {when(r.createdAt)}</span>
+        <button className="primary" disabled={busy} onClick={() => void run(async () => { await request(`${base}/staff/credential-requests/${r.id}/confirm`, {}); setNotice(t('access.requests.confirmed')); await load(); })}>{t('access.requests.confirm')}</button></li>)}</ul>}
+    {settings && <form onSubmit={save} key={`${settings.assignmentDays}:${settings.telegramVoice}`}>
+      <h2>{t('access.settings.title')}</h2>
+      <label>{t('access.settings.days')}<input name="days" type="number" inputMode="numeric" min={0} max={3650} required defaultValue={settings.assignmentDays} /></label>
+      <label className="check"><input name="voice" type="checkbox" defaultChecked={settings.telegramVoice} /> {t('access.settings.voice')}</label>
+      <button className="primary" disabled={busy}>{t('access.settings.save')}</button>
+    </form>}
+  </section>;
 }

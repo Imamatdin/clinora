@@ -25,14 +25,18 @@ test('notice templates accept only small integers, never patient fields', () => 
 
 test('every rendered notice is fixed text plus one button into the app, in all three languages', () => {
   for (const id of Object.keys(NOTICE_TEMPLATES) as NoticeTemplate[]) for (const locale of BOT_LOCALES) {
-    const params = (id==='day.closed'?{collected:'15000000',refunds:'50000',cashOuts:'20000'}:'count' in (NOTICE_TEMPLATES[id].params as unknown as { shape: object }).shape ? { count: 7 } : {}) as never;
+    const params = ('count' in (NOTICE_TEMPLATES[id].params as unknown as { shape: object }).shape ? { count: 7 } : {}) as never;
     const message = renderNotice(id, params, locale, APP);
     assert.deepEqual(Object.keys(message).sort(), ['reply_markup', 'text']);
     assert.ok(message.text.length > 10 && !/\{\w+\}/.test(message.text), `${id}/${locale} filled`);
     const serialized = JSON.stringify(message);
     for (const value of SAMPLE_PATIENT) assert.ok(!serialized.includes(value));
     assert.deepEqual(message.reply_markup.inline_keyboard.flat().map(b => b.web_app.url), [APP]);
+    // Task 022: the day-close notice says only "Day closed"; totals live inside the app.
+    if (id === 'day.closed') assert.ok(!/\d/.test(message.text), `${locale} day.closed carries no amounts`);
   }
+  // Task 022: money can no longer be passed into the day-close notice at all.
+  assert.throws(() => renderNotice('day.closed', { collected: '15000000' } as never, 'uz-Cyrl', APP));
 });
 
 test('notifyStaff refuses forbidden parameters before any lookup or send', async () => {

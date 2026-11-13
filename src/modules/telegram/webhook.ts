@@ -35,9 +35,9 @@ export type Update = z.infer<typeof Update>;
 /** A voice note from a private chat, as Telegram reports it. The handler decides who it belongs to. */
 export type VoiceMessage = { telegramUserId: number; chatId: number; messageId: number; fileId: string; durationS: number; fileSize: number | null };
 /** `notLinked` is the standard notice for unlinked, blocked or removed staff; `duplicate` sends nothing. */
-export type VoiceOutcome = 'received' | 'duplicate' | 'notLinked' | 'notDoctor' | 'tooLong';
+export type VoiceOutcome = 'received' | 'duplicate' | 'notLinked' | 'notDoctor' | 'tooLong' | 'disabled';
 export type VoiceHandler = (tx: Tx, voice: VoiceMessage) => Promise<VoiceOutcome>;
-const VOICE_TEXT = { received: 'voiceReceived', notLinked: 'notLinked', notDoctor: 'voiceNotDoctor', tooLong: 'voiceTooLong' } as const;
+const VOICE_TEXT = { received: 'voiceReceived', notLinked: 'notLinked', notDoctor: 'voiceNotDoctor', tooLong: 'voiceTooLong', disabled: 'voiceDisabled' } as const;
 
 type Outbound = { method: 'sendMessage' | 'answerCallbackQuery'; payload: Record<string, unknown> };
 

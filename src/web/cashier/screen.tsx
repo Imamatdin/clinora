@@ -35,8 +35,10 @@ export function Cashier({ clinic, request }: ModuleProps) {
     [payment, setPayment] = useState(""),
     [expense, setExpense] = useState(""),
     [counted, setCounted] = useState("0"),
+    [outPin, setOutPin] = useState(""),
     [printable, setPrintable] = useState<Row | null>(null);
   const paymentKey = useRef<{ signature: string; key: string } | null>(null);
+  const manager = clinic.roles.some((r: string) => r === "ceo" || r === "administrator");
   const locked = useRef(false);
   async function load() {
     const d = await request<Row>(base);
@@ -218,15 +220,30 @@ export function Cashier({ clinic, request }: ModuleProps) {
                       (l.doctor || l.department || t("cashier.visit")) ===
                       group,
                   )
-                  .map((l: Row) => (
-                    <p key={l.id}>
-                      {l.name} × {l.quantity} ·{" "}
-                      {money(
-                        bill.invoice.lines.find((n: Row) => n.id === l.id)
-                          .payable,
-                      )}
-                    </p>
-                  ))}
+                  .map((l: Row) => {
+                    const total = bill.invoice.lines.find((n: Row) => n.id === l.id);
+                    return (
+                      <p key={l.id}>
+                        {l.name} × {l.quantity} · {money(total.payable)}
+                        {l.status === "cancelled" && <> · {t("cashier.cancelled")}</>}
+                        {/* Task 023: an unpaid ordered line that will not be performed leaves the bill. The reason is asked for and recorded. */}
+                        {l.status === "ordered" && total.allocatedPaid === "0" && (
+                          <button
+                            onClick={() => {
+                              const why = window.prompt(`${l.name}: ${t("cashier.reason")}`)?.trim();
+                              if (why)
+                                void run(async () => {
+                                  await request(`/api/clinics/${clinic.id}/charges/${l.id}/cancel`, { idempotencyKey: crypto.randomUUID(), reason: why });
+                                  await refresh();
+                                });
+                            }}
+                          >
+                            {t("cashier.cancelLine")}
+                          </button>
+                        )}
+                      </p>
+                    );
+                  })}
               </section>
             ))}
             <dl>
@@ -427,6 +444,14 @@ export function Cashier({ clinic, request }: ModuleProps) {
           )}
           {field("cashier.note", reason, setReason)}
           {field("cashier.amount", amount, setAmount, true)}
+          {/* Task 023: a cashier's cash-out above the clinic threshold needs a CEO/administrator PIN (default: always). */}
+          {!manager && select("cashier.outApprover", approver, setApprover, data.approvers, (r) => r.display_name)}
+          {!manager && (
+            <label>
+              {t("cashier.outPin")}
+              <input type="password" inputMode="numeric" autoComplete="off" value={outPin} onChange={(e) => setOutPin(e.target.value)} />
+            </label>
+          )}
           <button
             onClick={() => {
               if (
@@ -435,10 +460,21 @@ export function Cashier({ clinic, request }: ModuleProps) {
                 )
               )
                 void run(async () => {
+                  const payload = { expenseId: expense, amount, note: reason };
+                  // One key per press: a retry of this press records one cash-out.
+                  const key = keyFor({ out: shift, ...payload });
+                  let approvalId: string | undefined;
+                  if (!manager && outPin) {
+                    approvalId = (await request<{ approvalId: string }>(base + "/approvals", {
+                      approverId: approver, pin: outPin, shiftId: shift, operation: "cash_out", payload,
+                    })).approvalId;
+                    setOutPin("");
+                  }
                   const r = await request<Row>(
                     `${base}/shifts/${shift}/cash-out`,
-                    { expenseId: expense, amount, note: reason },
+                    { ...payload, key, ...(approvalId ? { approvalId } : {}) },
                   );
+                  paymentKey.current = null;
                   setPrintable(r);
                 });
             }}

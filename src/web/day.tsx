@@ -11,7 +11,7 @@ export function DayPill({ day }: { day: CurrentDayView | null }) {
 }
 
 /** Open or close the business day. Shown only to CEO and administrator; the server enforces it regardless. */
-export function DayPanel({ day, busy, onOpen, onClose,compact=false }: { day: CurrentDayView | null; busy: boolean; onOpen: () => void; onClose: (id: string, date: string) => void;compact?:boolean }) {
+export function DayPanel({ day, busy, onOpen, onClose, onReopen, compact=false }: { day: CurrentDayView | null; busy: boolean; onOpen: () => void; onClose: (id: string, date: string) => void; onReopen?: ((id: string) => void) | undefined; compact?:boolean }) {
   if (!day) return null;
   const open = day.openDay, stale = open && open.businessDate !== day.today;
   const panel=<section className="panel day-panel" aria-labelledby="day-heading">
@@ -25,6 +25,8 @@ export function DayPanel({ day, busy, onOpen, onClose,compact=false }: { day: Cu
     </> : day.day?.status === 'closed' ? <>
       <p className="fine">{t('day.closedBy', { name: day.day.closedBy ?? '', time: day.day.closedAt ? formatTime(day.day.closedAt, day.timezone) : '' })}</p>
       <p>{t('day.todayClosed')}</p>
+      {/* Task 023: CEO only (the server enforces it); today's day only. */}
+      {onReopen && day.day.businessDate === day.today && <button disabled={busy} onClick={() => onReopen(day.day!.id)}>{t('day.reopenButton')}</button>}
     </> : <button className="primary big" disabled={busy} onClick={onOpen}>{t('day.openButton')}</button>}
   </section>;
   return compact?<details className="ceo-day-control"><summary>{t('day.label')} <DayPill day={day}/></summary>{panel}</details>:panel;

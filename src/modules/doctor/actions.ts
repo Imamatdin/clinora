@@ -231,7 +231,7 @@ export async function visitView(ctx: ClinicContext, encounterId: string) {
     WHERE t.clinic_id=$1 AND t.visit_id=$2 ORDER BY t.created_at DESC LIMIT 1`, [c.clinicId, e.visit_id, c.actorId])).rows[0] ?? null : null;
   const visit = e.visit_id ? (await c.tx.query('SELECT status FROM visits WHERE clinic_id=$1 AND id=$2', [c.clinicId, e.visit_id])).rows[0] : null;
   // Only lines this doctor ordered or performs; other doctors' services and prices stay with the cashier.
-  const charges = e.visit_id ? (await c.tx.query(`SELECT l.id, s.name_uz_cyrl service, s.kind, l.status, l.quantity, l.unit_price_uzs::text unit_price_uzs, l.created_at,
+  const charges = e.visit_id ? (await c.tx.query(`SELECT l.id, s.name_uz_cyrl service, s.kind, l.status, l.quantity, l.unit_price_uzs::text unit_price_uzs, l.created_at, l.created_by=$3 mine,
       (SELECT max(version) FROM lab_results r WHERE r.clinic_id=l.clinic_id AND r.charge_line_id=l.id) result_version
     FROM charge_lines l JOIN services s ON s.clinic_id=l.clinic_id AND s.id=l.service_id
     WHERE l.clinic_id=$1 AND l.visit_id=$2 AND (l.created_by=$3 OR l.performer_user_id=$3 OR l.queue_ticket_id=$4)
@@ -246,7 +246,7 @@ export async function visitView(ctx: ClinicContext, encounterId: string) {
     otherFields: (current?.fields ?? []).filter(f => !OWNED.has(f.key)).map(f => ({ key: f.key, value: f.value })),
     approval: approvalView(approval, e.current_version_id),
     charges: charges.map(l => ({ id: l.id as string, service: l.service as string, kind: l.kind as string, status: l.status as string, quantity: l.quantity as number,
-      unitPriceUzs: l.unit_price_uzs as string, resultVersion: (l.result_version ?? null) as number | null }))
+      unitPriceUzs: l.unit_price_uzs as string, resultVersion: (l.result_version ?? null) as number | null, mine: l.mine as boolean }))
   };
 }
 

@@ -84,7 +84,7 @@ export const coreRu: Record<keyof typeof core, string> = {
   'day.staleOpen': 'Предыдущий рабочий день ({date}) ещё не закрыт.',
   'day.openButton': 'Открыть рабочий день',
   'day.closeButton': 'Закрыть рабочий день',
-  'day.closeConfirm': 'Закрыть рабочий день {date}? Закрытый день нельзя открыть снова.',
+  'day.closeConfirm': 'Закрыть рабочий день {date}? Открыть закрытый день снова может только руководитель, сегодня и с указанием причины.',
   'day.openedBy': 'Открыл(а): {name} · {time}',
   'day.closedBy': 'Закрыл(а): {name} · {time}',
   'day.openedNotice': 'Рабочий день открыт.',
@@ -172,4 +172,8 @@ export const coreRu: Record<keyof typeof core, string> = {
   'notebook.keepLead': 'Если вы уйдёте из этой записи, несохранённый текст будет удалён.',
   'notebook.keepEditing': 'Продолжить редактирование',
   'notebook.discardContinue': 'Отбросить изменения и продолжить',
+  "day.reopenButton": "Открыть день снова",
+  "day.reopenReason": "Почему день открывается снова? (причина записывается в журнал)",
+  "day.reopenedNotice": "День открыт снова. Прежний отчёт о закрытии сохранён.",
+  "day.noShowConfirm": "В {count} визитах не выполнено ни одной услуги: {names}. Отметить как неявку и отменить их заказы?",
 };

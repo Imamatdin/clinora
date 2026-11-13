@@ -21,5 +21,7 @@ export const inpatientRu:Record<InpatientKey,string>={
   'inpatient.language':'Язык', 'inpatient.ruleNotice':'Новое правило вступит в силу завтра', 'inpatient.printHelp':'PDF открыт. Выберите печать в просмотрщике PDF.',
   'inpatient.linesAsOf':'Услуги по состоянию на', 'inpatient.paymentsAsOf':'Оплаты по состоянию на',
   'inpatient.override':'Нет на складе: разрешение руководителя', 'inpatient.overrideHelp':'Только на компьютере клиники. Главврач или администратор сам вводит свой PIN здесь.',
-  'inpatient.overrideReason':'Причина нехватки', 'inpatient.approver':'Кто разрешает', 'inpatient.approverPin':'PIN разрешающего'
+  'inpatient.overrideReason':'Причина нехватки', 'inpatient.approver':'Кто разрешает', 'inpatient.approverPin':'PIN разрешающего',
+  "inpatient.attention": "Требует внимания: дни без цены",
+  "inpatient.attentionLine": "{patient} · {date} · {service} (цена не задана, не начислено)",
 };

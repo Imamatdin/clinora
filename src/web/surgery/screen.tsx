@@ -17,7 +17,7 @@ function Surgery({clinic,request,setDirty,myId}:ModuleProps) {
   async function submit(e:FormEvent<HTMLFormElement>) {
     e.preventDefault();const form=e.currentTarget,f=new FormData(form),visitId=String(f.get('visit')),admissionId=options?.visits.find(v=>v.id===visitId)?.admission_id;
     setBusy(true);setError('');setNotice('');
-    try {await request(base,{idempotencyKey:key.current,visitId,admissionId:admissionId??undefined,serviceId:f.get('service'),surgeonId:f.get('surgeon'),performedAt:new Date(String(f.get('time'))).toISOString(),documentId:String(f.get('note'))||undefined});key.current=crypto.randomUUID();form.reset();setVisit(options?.visits[0]?.id??'');setDirty(false);setNotice(t('pharmacy.saved'));}
+    try {await request(base,{idempotencyKey:key.current,visitId,admissionId:admissionId??undefined,serviceId:f.get('service'),surgeonId:f.get('surgeon'),performedAt:new Date(String(f.get('time'))).toISOString(),documentId:String(f.get('note'))||undefined,backdateReason:String(f.get('reason')??'').trim()||undefined});key.current=crypto.randomUUID();form.reset();setVisit(options?.visits[0]?.id??'');setDirty(false);setNotice(t('pharmacy.saved'));}
     catch(e){setError(errorText(e instanceof ApiFailure?e.code:'SERVICE_UNAVAILABLE'));}finally{setBusy(false);}
   }
   return <section><h2>{t('surgery.title')}</h2>
@@ -26,6 +26,7 @@ function Surgery({clinic,request,setDirty,myId}:ModuleProps) {
       {(['visit','surgeon','service'] as const).map((name)=><label key={name}>{t(name==='visit'?'pharmacy.visit':`surgery.${name}`)}<select style={{minHeight:48}} aria-label={t(name==='visit'?'pharmacy.visit':`surgery.${name}`)} name={name} required defaultValue={name==='surgeon'&&options.surgeons.some(v=>v.id===myId)?myId:undefined} onChange={name==='visit'?e=>setVisit(e.target.value):undefined}>{options[name==='visit'?'visits':name==='surgeon'?'surgeons':'services'].map(v=><option key={v.id} value={v.id}>{v.name}</option>)}</select></label>)}
       <label>{t('surgery.time')}<input style={{minHeight:48}} name="time" type="datetime-local" required max={localNow()} defaultValue={localNow()} /></label>
       <label>{t('surgery.note')}<select style={{minHeight:48}} aria-label={t('surgery.note')} name="note" key={visit}><option value="">—</option>{options.notes.filter(n=>n.visit_id===visit).map(n=><option key={n.id} value={n.id}>{new Date(n.created_at).toLocaleString(locale)}</option>)}</select></label>
+      <label>{t('surgery.backdateReason')}<input style={{minHeight:48}} name="reason" maxLength={500} /></label>
       <button style={{minHeight:48}} disabled={busy}>{t('surgery.save')}</button>
     </fieldset></form>}
   </section>;

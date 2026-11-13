@@ -91,5 +91,7 @@ export const doctorUzLatn: Record<keyof typeof doctor, string> = {
   'doctor.complete': 'Qabulni yakunlash',
   'doctor.completeConfirm': 'Qabulni yakunlaysizmi? Koʻrik xizmati bajarilgan deb belgilanadi.',
   'doctor.completed': 'Qabul yakunlandi.',
-  'doctor.otherFields': 'Ovozli yordamchi orqali tasdiqlangan maydonlar'
+  'doctor.otherFields': 'Ovozli yordamchi orqali tasdiqlangan maydonlar',
+  "doctor.cancelOrder": "Buyurtmani bekor qilish",
+  "doctor.cancelReason": "Bekor qilish sababi",
 };

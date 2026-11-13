@@ -27,6 +27,8 @@ for(const width of [360,1280]) test(`pharmacy receipt, dispense and surgery reac
     await expect(screen.getByText(T('pharmacy.onHand')+': 2 дона',{exact:true})).toBeVisible();
     await page.getByRole('button',{name:T('surgery.title'),exact:true}).click();
     await page.getByLabel(T('surgery.time'),{exact:true}).fill(new Date(Date.now()-60000).toISOString().slice(0,16));
+    // The fixture's business day is a fixed past date, so the CEO records a reason (task 023).
+    await page.getByLabel(T('surgery.backdateReason'),{exact:true}).fill('Синтетик кечиккан қайд');
     await page.getByRole('button',{name:T('surgery.save'),exact:true}).click();
     await expect(page.getByRole('status').filter({hasText:T('pharmacy.saved')})).toBeVisible();
     const bill=(await f.pool.query('SELECT sum(quantity*unit_price_uzs)::text total,count(*)::int n FROM charge_lines WHERE visit_id=$1',[visit])).rows[0];

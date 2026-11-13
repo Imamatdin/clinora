@@ -16,6 +16,8 @@ export const labRu: Record<keyof typeof lab, string> = {
   'lab.status.completed': 'Подтверждено',
   'lab.patientNo': 'Пациент № {number}',
   'lab.orderedBy': 'Назначил врач: {name}',
+  'lab.orderedAtRegistration': 'Назначено при регистрации: {name}, {role}',
+  'lab.orderedByName': 'Назначил: {name}',
   'lab.resultSaved': 'Результат {version} сохранён',
   'lab.open': 'Открыть',
   'lab.back': 'Вернуться к списку',

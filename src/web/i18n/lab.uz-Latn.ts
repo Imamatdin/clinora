@@ -16,6 +16,8 @@ export const labUzLatn: Record<keyof typeof lab, string> = {
   'lab.status.completed': 'Tasdiqlangan',
   'lab.patientNo': 'Bemor № {number}',
   'lab.orderedBy': 'Buyurgan shifokor: {name}',
+  'lab.orderedAtRegistration': 'Roʻyxatga olishda buyurilgan: {name}, {role}',
+  'lab.orderedByName': 'Buyurdi: {name}',
   'lab.resultSaved': '{version}-natija saqlangan',
   'lab.open': 'Ochish',
   'lab.back': 'Roʻyxatga qaytish',

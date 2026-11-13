@@ -6,6 +6,7 @@ import { assistant } from '../../src/web/i18n/assistant.uz-Cyrl.js';
 import { assistantUzLatn } from '../../src/web/i18n/assistant.uz-Latn.js';
 import { assistantRu } from '../../src/web/i18n/assistant.ru.js';
 import type { AKey } from '../../src/web/assistant/i18n.js';
+import { tab } from './ui.js';
 
 /** Panel strings by short key, from the registered feature dictionaries. */
 const strip = (d: Record<string, string>) => Object.fromEntries(Object.entries(d).map(([k, v]) => [k.slice('assistant.'.length), v])) as Record<AKey, string>;
@@ -30,7 +31,7 @@ async function openVisit(page: Page, f: Awaited<ReturnType<typeof processFixture
   await page.getByLabel(T('auth.identifier'), { exact: true }).fill('owner@example.test');
   await page.getByLabel(T('auth.password'), { exact: true }).fill(f.password);
   await page.getByRole('button', { name: T('auth.signIn'), exact: true }).click();
-  await page.getByRole('navigation', { name: T('app.navigation') }).getByRole('button', { name: T('role.doctor'), exact: true }).click();
+  await tab(page, T('role.doctor'));
   await page.getByRole('button', { name: T('doctor.callNext'), exact: true }).click();
   await page.getByRole('button', { name: T('doctor.start'), exact: true }).click();
   await expect(page.getByRole('heading', { name: A.title })).toBeVisible();

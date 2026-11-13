@@ -8,6 +8,8 @@ import * as cash from '../../src/modules/cashier/actions.js';
 import { setRule } from '../../src/modules/payroll/actions.js';
 import { ceo } from '../../src/web/i18n/ceo.uz-Cyrl.js';
 const C=(key:keyof typeof ceo)=>ceo[key];
+/** Task 025: on a phone a module tab that does not fit the row is behind "More". */
+const openTab=async(page:import('@playwright/test').Page,name:string)=>{const b=page.getByRole('button',{name,exact:true});if(!await b.isVisible())await page.locator('.role-modules .tabs-more>button').click();await b.click();};
 
 for(const width of [1440,390])test(`C8: real dashboard, drilldown, PDF download and payroll at ${width}px`,async({page})=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
@@ -33,9 +35,12 @@ for(const width of [1440,390])test(`C8: real dashboard, drilldown, PDF download 
     await page.getByText(C('ceo.more'),{exact:true}).click();const download=page.waitForEvent('download',{timeout:10000});await page.getByRole('button',{name:C('ceo.pdf'),exact:true}).click();const pdf=await download.catch(e=>{throw new Error(`${e.message}; browser errors: ${errors.join('; ')}`);});expect(pdf.suggestedFilename()).toBe('clinora-report.pdf');await pdf.saveAs(`work/browser-evidence/ceo-report-${width}.pdf`);
     // Task 017: one header language switch for every screen.
     const languages=page.getByRole('banner').locator('.lang-switch'); // its label changes with the language
-    await languages.getByRole('button',{name:'Oʻzb',exact:true}).click();await expect(page.getByRole('heading',{name:'Klinika koʻrsatkichlari'})).toBeVisible();
-    await languages.getByRole('button',{name:'Ўзб',exact:true}).click();
-    await page.getByRole('button',{name:T('module.payroll'),exact:true}).click();await expect(page.getByRole('heading',{name:C('ceo.payrollTitle'),exact:true})).toBeVisible();
+    const menu=async()=>{if(width<900)await page.locator('.header-menu-toggle').click();}; // task 025: phone header menu
+    // Task 025: a tab that does not fit the row is behind "More".
+    const tab=async(name:string)=>{const b=page.getByRole('button',{name,exact:true});if(!await b.isVisible())await page.locator('.role-modules .tabs-more>button').click();await b.click();};
+    await menu();await languages.getByRole('button',{name:'Oʻzb',exact:true}).click();await expect(page.getByRole('heading',{name:'Klinika koʻrsatkichlari'})).toBeVisible();
+    await languages.getByRole('button',{name:'Ўзб',exact:true}).click();await menu();
+    await tab(T('module.payroll'));await expect(page.getByRole('heading',{name:C('ceo.payrollTitle'),exact:true})).toBeVisible();
     await page.getByRole('button',{name:C('ceo.show'),exact:true}).click();await expect(page.locator('.ceo-pay-doctor')).toContainText('500');
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
     await page.screenshot({path:`work/browser-evidence/ceo-payroll-${width}.png`,fullPage:true});
@@ -43,7 +48,7 @@ for(const width of [1440,390])test(`C8: real dashboard, drilldown, PDF download 
     await expect(page.getByRole('status').filter({hasText:C('ceo.ruleSaved')})).toBeVisible();await page.getByRole('button',{name:C('ceo.show'),exact:true}).click();await expect(page.locator('.ceo-pay-doctor')).toContainText('500');
     // Closing the day creates a persisted report; the report opens after reload.
     page.on('dialog',d=>d.accept());await page.locator('.ceo-day-control>summary').click();await page.getByRole('button',{name:T('day.closeButton'),exact:true}).click();await expect(page.getByRole('status').filter({hasText:T('day.closedNotice')})).toBeVisible();
-    await page.getByRole('button',{name:T('module.reports'),exact:true}).click();await expect(page.locator('.ceo-live')).toHaveText(C('ceo.snapshot'));
+    await tab(T('module.reports'));await expect(page.locator('.ceo-live')).toHaveText(C('ceo.snapshot'));
     await page.getByRole('button',{name:C('ceo.thermal'),exact:true}).click();
     await page.goto(`${f.origin}/?report=${g.day}`);await expect(page.locator('.ceo-live')).toHaveText(C('ceo.snapshot'));
     await page.screenshot({path:`work/browser-evidence/ceo-closed-day-${width}.png`,fullPage:true});
@@ -66,7 +71,7 @@ test('021: missing-rule payroll names the doctor and refuses confirmation clearl
     await f.pool.query(`UPDATE charge_lines SET performer_user_id=$2,status='completed',completed_by=$2,completed_at=now() WHERE id=$1`,[g.line,f.owner.userId]); // Task 023: only performed lines earn.
     await page.setViewportSize({width:390,height:1000});await page.goto(f.origin);
     await page.getByLabel(T('auth.identifier'),{exact:true}).fill('owner@example.test');await page.getByLabel(T('auth.password'),{exact:true}).fill(f.password);await page.getByRole('button',{name:T('auth.signIn'),exact:true}).click();
-    await page.getByRole('button',{name:T('module.payroll'),exact:true}).click();await expect(page.getByRole('heading',{name:C('ceo.payrollTitle'),exact:true})).toBeVisible();
+    await openTab(page,T('module.payroll'));await expect(page.getByRole('heading',{name:C('ceo.payrollTitle'),exact:true})).toBeVisible();
     await page.getByRole('button',{name:C('ceo.show'),exact:true}).click();await expect(page.locator('.ceo-pay-doctor summary')).toContainText(C('ceo.ruleMissing'));
     await page.getByRole('button',{name:C('ceo.finalize'),exact:true}).click();await page.getByRole('button',{name:C('ceo.confirm'),exact:true}).click();
     await expect(page.getByRole('alert')).toContainText(C('ceo.ruleMissing'));await expect(page.getByRole('alert')).toContainText('Synthetic Owner');

@@ -14,6 +14,8 @@ export const lab = {
   'lab.status.completed': 'Тасдиқланган',
   'lab.patientNo': 'Бемор № {number}',
   'lab.orderedBy': 'Буюрган шифокор: {name}',
+  'lab.orderedAtRegistration': 'Рўйхатга олишда буюрилган: {name}, {role}',
+  'lab.orderedByName': 'Буюрди: {name}',
   'lab.resultSaved': '{version}-натижа сақланган',
   'lab.open': 'Очиш',
   'lab.back': 'Рўйхатга қайтиш',

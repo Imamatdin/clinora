@@ -17,6 +17,7 @@ import { InstallHint, registerServiceWorker } from './access/install.js';
 import { lockOutbox } from './registration/outbox.js';
 import { OfflineWaiting } from './registration/waiting.js';
 import { HelpPage, helpRole } from './help/page.js';
+import { HeaderMenu, Tabs } from './shell.js';
 import './style.css';
 import './ceo/style.css';
 
@@ -35,7 +36,7 @@ function RoleModules({ role, busy, guard, props }: { role: Role; busy: boolean; 
   if (!modules.length) return null;
   const active = modules.find(m => m.id === current) ?? modules[0]!;
   return <section className="role-modules">
-    {modules.length > 1 && <nav className="sections" aria-label={t('app.navigation')}>{modules.map(m => <button key={m.id} className={m === active ? 'current' : ''} aria-current={m === active ? 'page' : undefined} disabled={busy} onClick={() => guard(() => { props.setDirty(false); setCurrent(m.id); })}>{t(m.label)}</button>)}</nav>}
+    {modules.length > 1 && <Tabs label={t('app.navigation')} tabs={modules.map(m => ({ id: m.id, label: t(m.label) }))} current={active.id} disabled={busy} onSelect={id => guard(() => { props.setDirty(false); setCurrent(id); })} />}
     <active.Screen {...props} />
   </section>;
 }
@@ -166,14 +167,17 @@ function App() {
   return <div className="app">
     <header className="topbar">
       <div className="brand">{t('app.brand')}<span>{t('app.brandTag')}</span></div>
-      {clinic && <strong className="clinic-name">{clinic.name}</strong>}
       {clinic && clinic.roles.length > 0 && !me?.mustChangePassword && <DayPill day={day} />}
-      <LanguageSwitch />
-      {me && <div className="account"><span className="person">{me.name}</span>
-        {onDevice ? <button className="primary" disabled={busy} onClick={() => guard(() => void lock())}>{t('access.device.switchUser')}</button>
-          : <>{!me.mustChangePassword && clinic && <button className="quiet" disabled={busy} onClick={() => guard(() => { setDirty(false); setShowMe(true); })}>{t('access.me.button')}</button>}
-            {!inTelegram && <button className="quiet" disabled={busy} onClick={signOut}>{t('app.signOut')}</button>}</>}</div>}
-      {onDevice && <span className="fine device-note">{t('access.device.sessionNote', { minutes: me?.session.idleMinutes ?? 10 })}</span>}
+      {/* Task 025: on phones the rest of the header lives behind one menu button; from 900 px it is laid out as before. */}
+      <HeaderMenu>
+        {clinic && <strong className="clinic-name">{clinic.name}</strong>}
+        <LanguageSwitch />
+        {me && <div className="account"><span className="person">{me.name}</span>
+          {onDevice ? <button className="primary" disabled={busy} onClick={() => guard(() => void lock())}>{t('access.device.switchUser')}</button>
+            : <>{!me.mustChangePassword && clinic && <button className="quiet" disabled={busy} onClick={() => guard(() => { setDirty(false); setShowMe(true); })}>{t('access.me.button')}</button>}
+              {!inTelegram && <button className="quiet" disabled={busy} onClick={signOut}>{t('app.signOut')}</button>}</>}</div>}
+        {onDevice && <span className="fine device-note">{t('access.device.sessionNote', { minutes: me?.session.idleMinutes ?? 10 })}</span>}
+      </HeaderMenu>
     </header>
     {!me && telegramActive ? <main className="auth tg-gate">
       {tgState === 'signing' || tgState === '' ? <p role="status">{t('access.tg.signingIn')}</p> : tgState === 'blocked' ? <><h1>{t('access.tg.blockedTitle')}</h1><p>{t('access.tg.blockedLead')}</p></>
@@ -199,7 +203,7 @@ function App() {
       </form>{error && <p role="alert" className="error">{error}</p>}</main> :
     <>
       {me.clinics.length > 1 && <div className="clinicbar"><label>{t('app.clinic')}<select aria-label={t('app.clinic')} value={clinicId} disabled={busy} onChange={e => { const id = e.target.value; guard(() => { setDirty(false); setClinicId(id); setSection(''); }); }}>{me.clinics.map(c => <option value={c.id} key={c.id}>{c.name}</option>)}</select></label></div>}
-      {sections.length > 1 && <nav className="sections" aria-label={t('app.navigation')}>{sections.map(s => <button key={s} className={s === active ? 'current' : ''} aria-current={s === active ? 'page' : undefined} disabled={busy} onClick={() => guard(() => { setDirty(false); setSection(s); })}>{sectionLabel(s)}</button>)}</nav>}
+      {sections.length > 1 && active && <Tabs label={t('app.navigation')} tabs={sections.map(s => ({ id: s, label: sectionLabel(s) }))} current={active} disabled={busy} onSelect={id => guard(() => { setDirty(false); setSection(id as Section); })} />}
       {banners}
       <AccountNotices notices={me.notices ?? []} pinChangeRequired={!!me.pinChangeRequired && !onDevice && !!clinic} request={request}
         onOpenPin={() => guard(() => { setDirty(false); setShowMe(true); })} onDone={() => void refreshMe()} />

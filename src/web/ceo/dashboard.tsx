@@ -2,7 +2,7 @@ import { useEffect,useRef,useState } from 'react';
 import type { Report,Detail,Group } from '../../modules/reports/actions.js';
 import type { Download } from '../../modules/reports/exports.js';
 import type { ModuleProps,WebModule } from '../modules.js';
-import { Dates,money,metric,saveBlob,saveFile,t,Confirm,useReportLocale } from './shared.js';
+import { Dates,money,metric,saveBlob,saveFile,t,Confirm,useReportLocale,type Key } from './shared.js';
 
 function Ledger({title,lines,onBack}:{title:string;lines:Detail[];onBack:()=>void}) {
   const heading=useRef<HTMLHeadingElement>(null);useEffect(()=>heading.current?.focus(),[]);
@@ -10,8 +10,42 @@ function Ledger({title,lines,onBack}:{title:string;lines:Detail[];onBack:()=>voi
     {!lines.length?<p className="ceo-empty">{t('ceo.empty')}</p>:<ol>{lines.map((l,i)=><li key={`${l.id}:${i}`}>{l.rest?<div><strong>{t('ceo.others')}</strong><small>{l.rest} {t('ceo.lines')}</small></div>:<div><strong>{l.label}</strong><small>{l.date} · {l.id}</small></div>}<b>{money(l.amount)}</b></li>)}</ol>}
   </section>;
 }
-function Breakdown({title,rows,onSelect}:{title:string;rows:Group[];onSelect:(title:string,lines:Detail[])=>void}) {
-  return <section className="ceo-breakdown"><h3>{title}</h3>{!rows.length?<p className="ceo-empty">{t('ceo.empty')}</p>:rows.map(row=><div className="ceo-performance" key={row.id}><button onClick={()=>onSelect(row.name,row.lines)}><span>{row.name}</span><b>{money(row.amount)}</b><span aria-hidden="true">↗</span></button>{row.patientLines&&<div className="ceo-performance-facts">{[[t('ceo.patients'),row.patientLines],[t('ceo.value'),row.valueLines!],[t('ceo.discounts'),row.discountLines!],[t('ceo.outstanding'),row.outstandingLines!]].map(([label,lines])=><button key={String(label)} onClick={()=>onSelect(`${row.name} · ${label}`,lines as Detail[])}><span>{String(label)}</span><b>{money((lines as Detail[]).reduce((n,l)=>n+BigInt(l.amount),0n))}</b></button>)}</div>}</div>)}</section>;
+type Kind='doctors'|'departments'|'sources';
+const SOURCES=['walk_in','referral','advertisement','social','returning','other'];
+/** Display name of a breakdown row: the "—" group and source codes are translated, never shown raw (task 025). */
+export function rowName(kind:Kind,row:Pick<Group,'id'|'name'>) {
+  if(kind==='sources')return row.id==='—'?t('ceo.source.none'):t(`ceo.source.${SOURCES.includes(row.id)?row.id:'other'}` as Key);
+  if(row.id==='—')return t(kind==='doctors'?'ceo.noDoctor':'ceo.noDepartment');
+  return row.name;
+}
+const TOP=3;
+const byAmount=(a:Group,b:Group)=>{const x=BigInt(a.amount),y=BigInt(b.amount);return x===y?0:x>y?-1:1;};
+/**
+ * One row per doctor, department or source, largest amount first. The top three show by default and
+ * "All N" opens the rest; doctors can be narrowed by department. A doctor or department row expands in
+ * place to its patients, service value, discounts and debt; the arrow opens the row's ledger (task 025).
+ */
+function Breakdown({kind,title,rows,onSelect}:{kind:Kind;title:string;rows:Group[];onSelect:(title:string,lines:Detail[])=>void}) {
+  const [all,setAll]=useState(false),[department,setDepartment]=useState(''),[expanded,setExpanded]=useState<string[]>([]);
+  const departments=kind==='doctors'?[...new Map(rows.filter(r=>r.departmentId).map(r=>[r.departmentId!,r.department!])).entries()].sort((a,b)=>a[1].localeCompare(b[1])):[];
+  const filtered=[...rows].filter(r=>!department||r.departmentId===department).sort(byAmount),shown=all?filtered:filtered.slice(0,TOP);
+  const allLabel=t(kind==='doctors'?'ceo.allDoctors':kind==='departments'?'ceo.allDepartments':'ceo.allSources').replace('{count}',String(filtered.length));
+  const id=`ceo-${kind}`;
+  return <section className="ceo-breakdown" aria-labelledby={`${id}-title`}><h3 id={`${id}-title`}>{title}</h3>
+    {departments.length>0&&<div className="ceo-chips" role="group" aria-label={t('ceo.departmentFilter')}>
+      {[['',t('ceo.all')] as const,...departments.map(([key,name])=>[key,`#${name}`] as const)].map(([key,label])=><button key={key||'all'} type="button" aria-pressed={department===key} onClick={()=>{setDepartment(key);setAll(false);}}>{label}</button>)}
+    </div>}
+    {!filtered.length?<p className="ceo-empty">{t('ceo.empty')}</p>:<ul className="ceo-rows">{shown.map(row=>{
+      const name=rowName(kind,row),open=expanded.includes(row.id),facts=`${id}-${row.id}`;
+      if(!row.patientLines)return <li key={row.id} className="ceo-row"><button className="ceo-row-main" onClick={()=>onSelect(name,row.lines)}><span>{name}</span><b>{money(row.amount)}</b><span aria-hidden="true">↗</span></button></li>;
+      return <li key={row.id} className="ceo-row" data-open={open}>
+        <div className="ceo-row-head"><button className="ceo-row-main" aria-expanded={open} aria-controls={facts} onClick={()=>setExpanded(e=>open?e.filter(x=>x!==row.id):[...e,row.id])}>
+          <span>{name}</span><b>{money(row.amount)}</b><span className="ceo-chevron" aria-hidden="true">▾</span></button>
+          <button className="ceo-row-open" onClick={()=>onSelect(name,row.lines)}><span aria-hidden="true">↗</span><span className="sr-only">{t('ceo.openRecords')}: {name}</span></button></div>
+        {open&&<div className="ceo-performance-facts" id={facts}>{[[t('ceo.patients'),row.patientLines],[t('ceo.value'),row.valueLines!],[t('ceo.discounts'),row.discountLines!],[t('ceo.outstanding'),row.outstandingLines!]].map(([label,lines])=><button key={String(label)} onClick={()=>onSelect(`${name} · ${label}`,lines as Detail[])}><span>{String(label)}</span><b>{money((lines as Detail[]).reduce((n,l)=>n+BigInt(l.amount),0n))}</b></button>)}</div>}
+      </li>;})}</ul>}
+    {filtered.length>TOP&&<button type="button" className="ceo-all" aria-expanded={all} onClick={()=>setAll(a=>!a)}>{all?t('ceo.showTop'):allLabel}</button>}
+  </section>;
 }
 export function ReportView({report}:{report:Report}) {
   const [selection,setSelection]=useState<{title:string;lines:Detail[]}|null>(null);
@@ -27,7 +61,7 @@ export function ReportView({report}:{report:Report}) {
     <div className="ceo-kpis">{['collected','patients','outstanding','discounts'].map((k,i)=><button key={k} className={`ceo-kpi ceo-kpi-${i}`} onClick={()=>open(metric(k),report.details[k]!)}><span>{metric(k)}</span><strong>{money(report.totals[k]!)}</strong><small>{k==='patients'?t('ceo.people'):t('ceo.uzs')} <span aria-hidden="true">↗</span></small></button>)}</div>
     <div className="ceo-middle"><section className="ceo-breakdown ceo-methods"><h3>{t('ceo.methods')}</h3>{['cash','card','transfer'].map(k=><button key={k} onClick={()=>open(metric(k),report.details[k]!)}><span>{metric(k)}</span><b>{money(report.totals[k]!)}</b><meter aria-label={metric(k)} min={0} max={100} value={BigInt(report.totals.collected!)>0n?Number(BigInt(report.totals[k]!)*100n/BigInt(report.totals.collected!)):0} /></button>)}</section>
       <div className="ceo-secondary">{['net','value','refunds','cashOuts','new','returning','outpatient','inpatient','lab','ward'].map(k=><button key={k} onClick={()=>open(metric(k),report.details[k]!)}><span>{metric(k)}</span><b>{money(report.totals[k]!)}</b></button>)}</div></div>
-    <div className="ceo-groups"><Breakdown title={t('ceo.doctors')} rows={report.doctors} onSelect={open}/><Breakdown title={t('ceo.departments')} rows={report.departments} onSelect={open}/><Breakdown title={t('ceo.sources')} rows={report.sources} onSelect={open}/></div>
+    <div className="ceo-groups"><Breakdown kind="doctors" title={t('ceo.doctors')} rows={report.doctors} onSelect={open}/><Breakdown kind="departments" title={t('ceo.departments')} rows={report.departments} onSelect={open}/><Breakdown kind="sources" title={t('ceo.sources')} rows={report.sources} onSelect={open}/></div>
     <p className="ceo-footnote">{t('ceo.scope')}</p><p className="ceo-footnote">{t('ceo.updated')} · {new Date(report.generatedAt).toLocaleString('ru-RU',{timeZone:'Asia/Tashkent'})}</p>
   </div>;
 }

@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiFailure, type Request } from '../api.js';
-import { errorText, useLocale } from '../i18n/index.js';
+import { errorText, t as coreT, useLocale, type UiKey } from '../i18n/index.js';
 import type { ModuleProps, WebModule } from '../modules.js';
 import { translator, type LabKey } from './i18n.js';
 
-type Order = { id: string; status: string; service: string; patientName: string; patientNo: number | null; orderedBy: string; orderedAt: string; resultVersion: number | null;
+type Order = { id: string; status: string; service: string; patientName: string; patientNo: number | null; orderedBy: string; orderedByRole: string | null; orderedAt: string; resultVersion: number | null;
   visitDate: string; late: boolean; pending: boolean };
 type Value = { name: string; value: string; unit: string; reference: string };
 type Detail = Order & { birthDate: string | null; visitOpen: boolean;
   versions: { version: number; enteredAt: string; enteredBy: string; values: Value[]; comment: string | null; afterConfirmation: boolean }[] };
 type T = (key: LabKey, vars?: Record<string, string | number>) => string;
+/** Task 025: who ordered the test and in what role. A non-doctor order was placed at registration, not by a doctor. */
+export function orderedLabel(t: T, o: Pick<Order, 'orderedBy' | 'orderedByRole'>) {
+  if (o.orderedByRole === 'doctor') return t('lab.orderedBy', { name: o.orderedBy });
+  if (!o.orderedByRole) return t('lab.orderedByName', { name: o.orderedBy });
+  return t('lab.orderedAtRegistration', { name: o.orderedBy, role: coreT(`role.${o.orderedByRole}` as UiKey) });
+}
 const FILTERS = ['ordered', 'completed', 'all'] as const;
 const COLUMNS = ['name', 'value', 'unit', 'reference'] as const;
 const COLUMN_KEY = { name: 'lab.param', value: 'lab.value', unit: 'lab.unit', reference: 'lab.reference' } as const;
@@ -47,7 +53,7 @@ function LabHome({ clinic, request, setDirty }: ModuleProps) {
         <div><strong>{o.service}</strong> <span className={o.status === 'completed' ? 'tag ok' : 'tag'}>{t(`lab.status.${o.status}` as LabKey)}</span>
           {o.late && <span className="tag">{t('lab.late', { date: o.visitDate.split('-').reverse().join('.') })}</span>}{o.pending && <span className="tag">{t('lab.pendingTag')}</span>}</div>
         <div>{o.patientName}{o.patientNo ? ' · ' + t('lab.patientNo', { number: o.patientNo }) : ''}</div>
-        <div className="fine">{t('lab.orderedBy', { name: o.orderedBy })} · {time(o.orderedAt)}{o.resultVersion ? ' · ' + t('lab.resultSaved', { version: o.resultVersion }) : ''}</div>
+        <div className="fine">{orderedLabel(t, o)} · {time(o.orderedAt)}{o.resultVersion ? ' · ' + t('lab.resultSaved', { version: o.resultVersion }) : ''}</div>
         <button className="primary" onClick={() => setOpenId(o.id)}>{t('lab.open')}</button>
       </li>)}</ul>}
     </>}
@@ -91,7 +97,7 @@ function LabOrder({ t, base, id, request, setDirty }: { t: T; base: string; id: 
     <article className="dr-card">
       <h3>{order.service} <span className={order.status === 'completed' ? 'tag ok' : 'tag'}>{t(`lab.status.${order.status}` as LabKey)}</span></h3>
       <p>{order.patientName}{order.patientNo ? ' · ' + t('lab.patientNo', { number: order.patientNo }) : ''}</p>
-      <p className="fine">{t('lab.birthDate', { date: order.birthDate ? order.birthDate.split('-').reverse().join('.') : t('lab.unknown') })} · {t('lab.orderedBy', { name: order.orderedBy })}</p>
+      <p className="fine">{t('lab.birthDate', { date: order.birthDate ? order.birthDate.split('-').reverse().join('.') : t('lab.unknown') })} · {orderedLabel(t, order)}</p>
     </article>
     <form className="dr-card" onSubmit={save}>
       <h3>{t('lab.results')}</h3>

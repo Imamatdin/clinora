@@ -9,6 +9,8 @@ export const coreUzLatn: Record<keyof typeof core, string> = {
   "app.footer": "Sinov versiyasi · Faqat soxta (sintetik) bemorlardan foydalaning · Saqlangan qaydlar tasdiqlanmagan va klinik tekshirilmagan",
   "app.wait": "Kuting…",
   "app.signOut": "Chiqish",
+  "app.menu": "Menyu",
+  "app.more": "Yana",
   "app.clinic": "Klinika",
   "app.noClinic": "Faol klinika aʼzoligi yoʻq",
   "app.verification": "Kasbiy hujjatlar: {status}. Klinikaga kirish alohida beriladi.",

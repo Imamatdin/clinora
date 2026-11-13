@@ -3,6 +3,7 @@ import { mkdir,writeFile } from 'node:fs/promises';
 import { processFixture,T } from './process-fixture.js';
 import { inpatientGraph } from '../helpers/inpatient.js';
 import { inpatient as words } from '../../src/web/i18n/inpatient.uz-Cyrl.js';
+import { tab } from './ui.js';
 const I=(key:keyof typeof words)=>words[key];
 
 for(const width of [1280,360])test(`inpatient admission, three days, transfer, discharge and server PDF at ${width}px`,async({page})=>{
@@ -12,7 +13,7 @@ for(const width of [1280,360])test(`inpatient admission, three days, transfer, d
     await page.getByLabel(T('auth.identifier'),{exact:true}).fill('owner@example.test');
     await page.getByLabel(T('auth.password'),{exact:true}).fill(f.password);
     await page.getByRole('button',{name:T('auth.signIn'),exact:true}).click();
-    await page.getByRole('button',{name:T('module.admissions'),exact:true}).click();
+    await tab(page,T('module.admissions'));
     await expect(page.getByRole('heading',{name:I('inpatient.title'),exact:true})).toBeVisible();
     await page.getByText(I('inpatient.admit'),{exact:true}).first().click();
     const form=page.locator('form').filter({has:page.getByRole('button',{name:I('inpatient.admit'),exact:true})});

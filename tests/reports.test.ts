@@ -74,3 +74,25 @@ test('023: payroll and the per-doctor report name only performers holding the do
   const report=computeReport(d,{from:'2026-11-10',to:'2026-11-10'});
   assert.ok(!report.doctors.some(g=>g.id==='technician'));
 });
+test('025: doctor rows carry the home department from the doctor profile, else from their services',()=>{
+  const d=data();d.charges[0]!.department_id='dep-t';d.charges[0]!.department='Терапия';
+  assert.deepEqual([computeReport(d,{from:'2026-11-10',to:'2026-11-10'}).doctors[0]!.departmentId,computeReport(d,{from:'2026-11-10',to:'2026-11-10'}).doctors[0]!.department],['dep-t','Терапия']);
+  d.doctorDepartments={doctor:{id:'dep-s',name:'Жарроҳлик'}};
+  const row=computeReport(d,{from:'2026-11-10',to:'2026-11-10'}).doctors[0]!;
+  assert.equal(row.departmentId,'dep-s');assert.equal(row.department,'Жарроҳлик');
+  // The "no doctor" group is not given a department.
+  d.charges[0]!.performer_user_id=null;
+  assert.equal(computeReport(d,{from:'2026-11-10',to:'2026-11-10'}).doctors[0]!.departmentId,undefined);
+});
+test('025: patient source codes and the "—" groups are translated in all three languages',async()=>{
+  const { rowName } = await import('../src/web/ceo/dashboard.js');
+  const { setLocale } = await import('../src/web/i18n/locale.js');
+  for(const [locale,dict] of [['uz-Cyrl',ceo],['uz-Latn',ceoUzLatn],['ru',ceoRu]] as const){
+    try{setLocale(locale);}catch{/* no browser storage in node */}
+    for(const code of ['referral','social','returning','walk_in','advertisement'])assert.equal(rowName('sources',{id:code,name:code}),dict[`ceo.source.${code}` as keyof typeof dict]);
+    assert.equal(rowName('sources',{id:'tiktok',name:'tiktok'}),dict['ceo.source.other']);
+    assert.equal(rowName('sources',{id:'—',name:'—'}),dict['ceo.source.none']);
+    assert.equal(rowName('doctors',{id:'—',name:'—'}),dict['ceo.noDoctor']);
+    assert.equal(rowName('departments',{id:'—',name:'—'}),dict['ceo.noDepartment']);
+  }
+});

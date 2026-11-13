@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { processFixture, T } from './process-fixture.js';
 import { passwordHash } from '../../src/server/security.js';
+import { headerButton } from './ui.js';
 
 /*
  * Task 010 acceptance: at phone width the doctor calls the next patient, writes and approves a note with a
@@ -39,7 +40,7 @@ for (const width of [360, 1280]) test(`doctor and lab complete one visit at ${wi
       await page.getByLabel(T('auth.password'), { exact: true }).fill(f.password);
       await page.getByRole('button', { name: T('auth.signIn'), exact: true }).click();
     };
-    const signOut = async () => { await page.getByRole('button', { name: T('app.signOut'), exact: true }).click(); await expect(page.getByLabel(T('auth.identifier'), { exact: true })).toBeVisible(); };
+    const signOut = async () => { await headerButton(page, T('app.signOut')); await expect(page.getByLabel(T('auth.identifier'), { exact: true })).toBeVisible(); };
     const noSideScroll = async (p: Page) => expect(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
     const dr = page.locator('section.dr');
 

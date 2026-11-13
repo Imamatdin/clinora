@@ -2,6 +2,7 @@ import { test,expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { processFixture,T } from './process-fixture.js';
+import { tab } from './ui.js';
 
 for(const width of [360,1280]) test(`pharmacy receipt, dispense and surgery reach shared bill at ${width}px`,async({page})=>{
   const f=await processFixture();
@@ -17,7 +18,7 @@ for(const width of [360,1280]) test(`pharmacy receipt, dispense and surgery reac
     await page.getByLabel(T('auth.identifier'),{exact:true}).fill('owner@example.test');await page.getByLabel(T('auth.password'),{exact:true}).fill(f.password);
     await page.getByRole('button',{name:T('auth.signIn'),exact:true}).click();
     // Several modules can share a role's home now (cashier merged first); open pharmacy explicitly.
-    await page.getByRole('button',{name:T('pharmacy.title'),exact:true}).click();
+    await tab(page,T('pharmacy.title'));
     const screen=page.locator('section').filter({has:page.getByRole('heading',{name:T('pharmacy.title'),exact:true})}).last();
     await expect(screen.getByLabel(T('pharmacy.item'),{exact:true})).toBeVisible();
     await screen.locator('input[name="qty"]').fill('3');await screen.getByLabel(T('pharmacy.cost'),{exact:true}).fill('10000');await screen.getByLabel(T('pharmacy.supplier'),{exact:true}).fill('Synthetic supplier');
@@ -25,7 +26,7 @@ for(const width of [360,1280]) test(`pharmacy receipt, dispense and surgery reac
     await screen.getByLabel(T('pharmacy.title'),{exact:true}).selectOption('dispense');await screen.locator('input[name="qty"]').fill('1');
     await screen.getByRole('button',{name:T('pharmacy.save'),exact:true}).click();
     await expect(screen.getByText(T('pharmacy.onHand')+': 2 дона',{exact:true})).toBeVisible();
-    await page.getByRole('button',{name:T('surgery.title'),exact:true}).click();
+    await tab(page,T('surgery.title'));
     await page.getByLabel(T('surgery.time'),{exact:true}).fill(new Date(Date.now()-60000).toISOString().slice(0,16));
     // The fixture's business day is a fixed past date, so the CEO records a reason (task 023).
     await page.getByLabel(T('surgery.backdateReason'),{exact:true}).fill('Синтетик кечиккан қайд');

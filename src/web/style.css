@@ -108,3 +108,40 @@ input[type=checkbox],input[type=radio]{width:24px;height:24px;flex:none}
 .lang-switch button.current{background:#16685f;border-color:#16685f;color:#fff}
 .help-link{font-weight:600;color:#145b54;min-height:48px;display:inline-flex;align-items:center}
 @media(max-width:640px){.lang-switch{order:4}.account{flex-wrap:wrap}}
+
+/* Task 025: phone layout. Below 900 px the header is one row (logo, business-day badge, menu button) and the
+   name, language, PIN and Telegram, and sign out sit in the menu. From 900 px the header is laid out as before. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.header-menu-toggle{display:none}
+@media(min-width:900px){
+.header-menu,.header-menu-panel{display:contents}
+.topbar .clinic-name{order:1}.topbar>.pill{order:2}.topbar .lang-switch{order:3}.topbar .account{order:4}.topbar .device-note{order:5}
+}
+@media(max-width:899.98px){
+.topbar{flex-wrap:nowrap;gap:8px;padding:8px 12px;position:relative}
+.topbar .brand{flex:none;font-size:1.35rem}.topbar .brand span{display:none}
+.topbar>.pill{order:0;flex:0 1 auto;min-width:0;text-align:center;line-height:1.25;white-space:normal}
+.header-menu{margin-left:auto;flex:none}
+.header-menu-toggle{display:inline-flex;align-items:center;gap:6px;padding:8px 12px}
+.header-menu-panel{display:none}
+.header-menu[data-open=true] .header-menu-panel{display:grid;gap:14px;position:absolute;left:12px;right:12px;top:calc(100% + 4px);z-index:40;background:#fff;border:1px solid #d7e2df;border-radius:10px;box-shadow:0 10px 30px #12302b26;padding:16px}
+.header-menu-panel .clinic-name{order:0;flex-basis:auto}
+.header-menu-panel .lang-switch{order:0}.header-menu-panel .lang-switch button{flex:1}
+.header-menu-panel .account{margin:0;display:grid;gap:8px;font-size:1rem}
+.header-menu-panel .account button{width:100%;border:1px solid #bdcecc}
+.header-menu-panel .device-note{text-align:left}
+}
+html.tg .header-menu-panel{background:var(--tg-bg,#fff);color:var(--tg-text,#213c44)}
+
+/* Task 025: tab rows never scroll sideways; what does not fit goes into "More" (src/web/shell.tsx). */
+.sections{position:relative;overflow:visible;flex-wrap:nowrap}
+.tabs-measure{position:absolute;top:0;left:0;width:0;height:0;overflow:hidden;visibility:hidden;pointer-events:none;gap:inherit}
+.tabs-measure>div{display:flex;gap:inherit;width:max-content}
+.tabs-more{position:relative;flex:none}
+.tabs-more>button{white-space:nowrap}
+.tabs-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:35;display:grid;gap:6px;min-width:220px;max-width:calc(100vw - 32px);background:#fff;border:1px solid #d7e2df;border-radius:10px;box-shadow:0 10px 30px #12302b26;padding:8px}
+.tabs-menu button{text-align:left;white-space:normal}
+html.tg .tabs-menu{background:var(--tg-bg,#fff)}
+/* When even the current tab and "More" are wider than the row, the visible labels wrap instead of overflowing. */
+.sections>button{flex:0 1 auto;min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.2}
+@media(min-width:900px){.sections{flex-wrap:wrap}.sections>button{white-space:nowrap}}

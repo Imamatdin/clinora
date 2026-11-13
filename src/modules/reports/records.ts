@@ -8,7 +8,7 @@ export const Range = z.object({ from: date, to: date }).strict().refine(v => v.f
   (Date.parse(v.to) - Date.parse(v.from)) / 86400000 <= 366);
 export type Period = z.infer<typeof Range>;
 export type Row = Record<string, any>;
-export type Records = { clinic: Row; version?:string; doctorIds?:string[]; doctorDiscounts?:Row[]; activities?:Row[]; open?:OpenBalances; visits: Row[]; charges: Row[]; discounts: Row[]; payments: Row[]; allocations: Row[]; adjustments: Row[]; cashOuts: Row[]; rules: Row[]; shifts: Row[] };
+export type Records = { clinic: Row; version?:string; doctorIds?:string[]; doctorDepartments?:Record<string,{id:string;name:string}>; doctorDiscounts?:Row[]; activities?:Row[]; open?:OpenBalances; visits: Row[]; charges: Row[]; discounts: Row[]; payments: Row[]; allocations: Row[]; adjustments: Row[]; cashOuts: Row[]; rules: Row[]; shifts: Row[] };
 type VisitLedger={charges:Row[];discounts:Row[];payments:Row[];allocations:Row[];adjustments:Row[]};
 const scopedDiscounts=new WeakMap<Records,Map<string,Map<string,string>>>();
 const cached=new WeakMap<Records,{visits:Map<string,Row>;charges:Map<string,Row>;ledger:Map<string,VisitLedger>}>();
@@ -54,7 +54,9 @@ export async function records(c: ClinicContext, p: Period, options: {outstanding
   // the day lock) rejects a snapshot that mixes states.
   const head = (await q(`SELECT (SELECT to_jsonb(x) FROM clinics x WHERE id=$1) clinic,
     coalesce((SELECT version::text FROM report_versions WHERE clinic_id=$1),'0') version,
-    coalesce((SELECT jsonb_agg(DISTINCT r.user_id) FROM membership_roles r WHERE r.clinic_id=$1 AND r.role='doctor'),'[]') "doctorIds"`, [c.clinicId]))[0]!;
+    coalesce((SELECT jsonb_agg(DISTINCT r.user_id) FROM membership_roles r WHERE r.clinic_id=$1 AND r.role='doctor'),'[]') "doctorIds",
+    coalesce((SELECT jsonb_object_agg(dp.user_id, jsonb_build_object('id',d.id,'name',d.name_uz_cyrl)) FROM doctor_profiles dp
+      JOIN departments d ON d.clinic_id=dp.clinic_id AND d.id=dp.department_id WHERE dp.clinic_id=$1),'{}') "doctorDepartments"`, [c.clinicId]))[0]!;
   let cohort = await q(`WITH ${BOUNDS}, ${EVENTS} SELECT e.id,e.date::text date FROM events e`, [c.clinicId,p.from,p.to]) as {id:string;date:string}[];
   let ids = [...new Set(cohort.map(r=>r.id))];
   if (doctor) {
@@ -103,7 +105,7 @@ export async function records(c: ClinicContext, p: Period, options: {outstanding
         a.display_name cashier,d.business_date::text date
       FROM cash_shifts s JOIN accounts a ON a.id=s.cashier_user_id JOIN business_days d ON d.id=s.business_day_id AND d.clinic_id=s.clinic_id,bounds t
       WHERE s.clinic_id=$1 AND $5::uuid IS NULL AND d.business_date BETWEEN t.lo AND t.hi) x),'[]') shifts`, args))[0]!;
-  const data = { clinic: head.clinic, version: head.version, doctorIds: head.doctorIds, visits, charges, payments, allocations, ...rest } as Records;
+  const data = { clinic: head.clinic, version: head.version, doctorIds: head.doctorIds, doctorDepartments: head.doctorDepartments, visits, charges, payments, allocations, ...rest } as Records;
   if (doctor) data.activities = cohort.map(e=>({visit_id:e.id,date:e.date}));
   if (options.outstanding && !doctor) data.open = await openBalances(c, p);
   return data;

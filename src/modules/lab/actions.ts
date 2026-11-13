@@ -25,7 +25,11 @@ export const ConfirmInput = z.object({ idempotencyKey: Key }).strict();
 
 const LINE_SELECT = `SELECT l.id, l.status, l.created_at, l.completed_at, l.visit_id, s.name_uz_cyrl service, s.unit,
     coalesce(p.full_name, p.display_name) patient_name, p.patient_no, coalesce(p.birth_date, p.date_of_birth)::text birth_date, p.gender,
-    a.display_name ordered_by, v.status visit_status, vd.business_date::text visit_date, vd.status visit_day_status,
+    a.display_name ordered_by,
+    -- Task 025: the orderer's role for the card label; doctor first, then the role list order (roles.ts).
+    (SELECT r.role FROM membership_roles r WHERE r.clinic_id=l.clinic_id AND r.user_id=l.created_by
+      ORDER BY array_position(ARRAY['doctor','registrar','administrator','ceo','cashier','inpatient','laboratory','pharmacy'], r.role) LIMIT 1) ordered_by_role,
+    v.status visit_status, vd.business_date::text visit_date, vd.status visit_day_status,
     (SELECT pc.posted_at IS NULL FROM lab_pending_confirmations pc WHERE pc.clinic_id=l.clinic_id AND pc.charge_line_id=l.id) pending,
     (SELECT max(version) FROM lab_results r WHERE r.clinic_id=l.clinic_id AND r.charge_line_id=l.id) result_version
   FROM charge_lines l
@@ -35,7 +39,7 @@ const LINE_SELECT = `SELECT l.id, l.status, l.created_at, l.completed_at, l.visi
   JOIN patients p ON p.clinic_id=v.clinic_id AND p.id=v.patient_id
   JOIN accounts a ON a.id=l.created_by`;
 const lineView = (r: Record<string, any>) => ({ id: r.id as string, status: r.status as string, service: r.service as string,
-  patientName: r.patient_name as string, patientNo: r.patient_no as number | null, orderedBy: r.ordered_by as string,
+  patientName: r.patient_name as string, patientNo: r.patient_no as number | null, orderedBy: r.ordered_by as string, orderedByRole: (r.ordered_by_role ?? null) as string | null,
   orderedAt: r.created_at, completedAt: r.completed_at, resultVersion: (r.result_version ?? null) as number | null,
   // Task 017: an order from a closed business day (results arrive the next day) and a confirmation waiting for a day to open.
   visitDate: r.visit_date as string, late: r.visit_day_status === 'closed', pending: r.pending === true });

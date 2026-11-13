@@ -6,7 +6,8 @@ import { records, invoiceAt, serviceDate, inRange, localDate, sum, indexRecords,
 export type Detail = { id: string; date: string; label: string; amount: string; rest?: number; patientId?:string; doctorId?: string; doctor?: string; departmentId?: string; department?: string; kind?: string; source?: string };
 export type Report = { from: string; to: string; clinic: string; generatedAt: string; snapshot?: boolean; totals: Record<string,string>;
   needsReview?: {id:string;label:string}[]; details: Record<string,Detail[]>; doctors: Group[]; departments: Group[]; sources: Group[];cashShifts?:{id:string;cashier:string;date:string;opening:string;expected:string;counted:string|null;difference:string|null}[] };
-export type Group = { id: string; name: string; amount: string; lines: Detail[]; patientLines?:Detail[];valueLines?:Detail[];discountLines?:Detail[];outstandingLines?:Detail[] };
+/** Doctor rows also carry the doctor's home department (doctor profile; else where most of their service value is), for the dashboard's department filter (task 025). */
+export type Group = { id: string; name: string; amount: string; lines: Detail[]; departmentId?: string; department?: string; patientLines?:Detail[];valueLines?:Detail[];discountLines?:Detail[];outstandingLines?:Detail[] };
 const group = (lines: Detail[], key: 'doctor'|'department'|'source'): Group[] => {
   const map = new Map<string,Group & {total:bigint}>();
   for (const l of lines) {
@@ -83,6 +84,12 @@ export function computeReport(data: Records, p: Period): Report {
     revenue.push({id:a.id,date,label:l.service,amount:a.delta_uzs,...doctorOf(l),departmentId:l.department_id,department:l.department,kind:l.kind});
   }
   details.lab = revenue.filter(l=>l.kind==='lab'); details.ward = revenue.filter(l=>['bed','caretaker'].includes(l.kind!));
+  const homeDepartment=(doctorId:string,lines:Detail[]):{departmentId?:string;department?:string}=>{
+    const profile=data.doctorDepartments?.[doctorId];
+    if(profile)return {departmentId:profile.id,department:profile.name};
+    const top=group(lines.filter(l=>l.departmentId),'department')[0];
+    return top?{departmentId:top.id,department:top.name}:{};
+  };
   const performance=(key:'doctor'|'department')=>{
     const revenueGroups=new Map(group(revenue,key).map(g=>[g.id,g])),values=new Map(group(details.value!,key).map(g=>[g.id,g]));
     const discounts=new Map(group(details.discounts!,key).map(g=>[g.id,g]));
@@ -91,7 +98,8 @@ export function computeReport(data: Records, p: Period): Report {
       const r=revenueGroups.get(id)??{id,name:(values.get(id)??outstanding.get(id))!.name,amount:'0',lines:[]};
       const patients=new Map<string,Detail>();
       for(const l of values.get(id)?.lines??[])if(index.charges.get(l.id)?.status!=='cancelled' && l.patientId){const v=index.visits.get(index.charges.get(l.id)!.visit_id)!;patients.set(l.patientId,{...l,id:v.id,label:`${v.patient_no} · ${v.full_name}`,amount:'1'});}
-      return {...r,patientLines:[...patients.values()],valueLines:values.get(id)?.lines??[],discountLines:discounts.get(id)?.lines??[],outstandingLines:outstanding.get(id)?.lines??[]};
+      const row={...r,patientLines:[...patients.values()],valueLines:values.get(id)?.lines??[],discountLines:discounts.get(id)?.lines??[],outstandingLines:outstanding.get(id)?.lines??[]};
+      return key==='doctor'&&id!=='—'?{...row,...homeDepartment(id,row.valueLines)}:row;
     });
   };
   return { ...p,clinic:data.clinic.name,generatedAt:new Date().toISOString(),details,needsReview,

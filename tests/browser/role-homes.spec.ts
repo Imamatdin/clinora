@@ -51,17 +51,25 @@ test('role homes: landing module, own navigation and ease-of-use rules in three 
         await page.getByRole('button', { name: T0['auth.signIn'], exact: true }).click();
         for (const locale of LOCALES) {
           const D = DICTIONARIES[locale], T = (k: UiKey) => D[k];
+          // Task 025: below 900 px the language switch is in the header menu.
+          if (width < 900) await page.locator('.header-menu-toggle').click();
           await page.getByRole('banner').locator('.lang-switch').getByRole('button', { name: LOCALE_LABELS[locale], exact: true }).click();
           await expect(page.getByRole('banner').getByRole('group', { name: T('app.language') })).toBeVisible();
+          if (width < 900) await page.locator('.header-menu-toggle').click();
           await expect(page.getByRole('heading', { level: 1, name: T(`home.${role}.title` as UiKey) })).toBeVisible();
           await expect(page.locator('html')).toHaveAttribute('lang', locale);
           // Navigation lists exactly this role's modules, the landing module first and current.
           const mine = modulesFor(role, MODULES);
           expect(mine[0]!.id, `${role} lands on its main job`).toBe(LANDING[role]);
           if (mine.length > 1) {
-            const tabs = page.locator('.role-modules > nav.sections button');
-            await expect(tabs).toHaveText(mine.map(m => T(m.label)));
+            // Tabs that do not fit sit in the "More" menu (task 025); together they are exactly this role's modules.
+            const nav = page.locator('.role-modules > nav.sections'), tabs = nav.locator(':scope > button');
             await expect(tabs.first()).toHaveAttribute('aria-current', 'page');
+            const more = nav.locator('.tabs-more > button');
+            if (await more.count()) await more.click();
+            const all = [...await tabs.allTextContents(), ...await nav.locator('.tabs-menu button').allTextContents()];
+            expect(all.sort()).toEqual(mine.map(m => T(m.label)).sort());
+            if (await more.count()) await more.click();
           }
           await page.waitForTimeout(300); // let the landing screen finish loading before measuring
           // Ease-of-use checks on every visible button and the page width.
@@ -80,6 +88,7 @@ test('role homes: landing module, own navigation and ease-of-use rules in three 
           problems.push(...found.map(p => `${role} ${locale} ${width}px: ${p}`));
           await page.screenshot({ path: `${OUT}/${role}-${locale}-${width}.png`, fullPage: true });
         }
+        if (width < 900) await page.locator('.header-menu-toggle').click();
         await page.getByRole('button', { name: DICTIONARIES.ru['app.signOut'], exact: true }).click();
         await expect(page.getByLabel(DICTIONARIES.ru['auth.identifier'], { exact: true })).toBeVisible();
       }

@@ -144,3 +144,4 @@ html.tg .header-menu-panel{background:var(--tg-bg,#fff);color:var(--tg-text,#213
 html.tg .tabs-menu{background:var(--tg-bg,#fff)}
 /* When even the current tab and "More" are wider than the row, the visible labels wrap instead of overflowing. */
 .sections>button{flex:0 1 auto;min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.2}
+@media(min-width:900px){.sections{flex-wrap:wrap}.sections>button{white-space:nowrap}}

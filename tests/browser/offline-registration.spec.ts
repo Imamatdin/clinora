@@ -4,6 +4,7 @@ import { processFixture, T } from './process-fixture.js';
 import { seedRegistration, openDay, closeDay } from '../integration/registration-fixture.js';
 import { passwordHash, digest, token } from '../../src/server/security.js';
 import { createSession } from '../../src/server/access.js';
+import { headerButton, tab } from './ui.js';
 
 type F = Awaited<ReturnType<typeof processFixture>>;
 async function enrolled(page: Page, f: F, userId: string) {
@@ -144,7 +145,7 @@ test('queued data survives reload and user switch, syncs when its owner returns;
     await expect(page.getByRole('heading', { name: T('registration.offline.attention'), exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByText(pending(1), { exact: true })).toBeVisible();
-    await page.getByRole('banner').getByRole('button', { name: T('access.device.switchUser'), exact: true }).click();
+    await headerButton(page, T('access.device.switchUser'));
     await expect(page.getByRole('heading', { name: T('access.device.title'), exact: true })).toBeVisible();
     // Local locking is immediate; the logout transaction may still be finishing on the server.
     await expect.poll(async () => (await f.pool.query('SELECT count(*)::int n FROM sessions WHERE user_id=$1', [g.registrar])).rows[0].n).toBe(0);
@@ -155,7 +156,7 @@ test('queued data survives reload and user switch, syncs when its owner returns;
     await page.getByRole('button', { name: 'Синтетик Невролог', exact: true }).click();
     await page.getByLabel(T('access.device.pin'), { exact: true }).fill('1397');
     await page.getByRole('button', { name: T('access.device.unlock'), exact: true }).click();
-    await page.getByRole('navigation', { name: T('app.navigation') }).getByRole('button', { name: T('role.registrar'), exact: true }).click();
+    await tab(page, T('role.registrar'));
     await expect(page.locator('.registration')).toHaveAttribute('aria-busy', 'false');
     await expect(page.getByText(pending(0), { exact: true })).toBeVisible();
     await expect(page.locator('.registration')).not.toContainText('Синтетик Приватний');
@@ -163,7 +164,7 @@ test('queued data survives reload and user switch, syncs when its owner returns;
     expect((await queued(page))).toHaveLength(1);
     const nextDay = await openDay(f.pool, f.owner.clinicId, f.owner.userId, 1);
     // The creator signs in again on this computer and resolves and syncs their own entry.
-    await page.getByRole('banner').getByRole('button', { name: T('access.device.switchUser'), exact: true }).click();
+    await headerButton(page, T('access.device.switchUser'));
     await page.getByRole('button', { name: 'Синтетик Регистратор', exact: true }).click();
     await page.getByLabel(T('access.device.pin'), { exact: true }).fill('2580');
     await page.getByRole('button', { name: T('access.device.unlock'), exact: true }).click();
@@ -202,7 +203,7 @@ test('a registrar who loses the role keeps queued entries locked; an administrat
     expect((await queued(page))).toHaveLength(1);
     expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(0);
     await page.reload();
-    await page.getByRole('banner').getByRole('button', { name: T('access.device.switchUser'), exact: true }).click();
+    await headerButton(page, T('access.device.switchUser'));
     await page.getByRole('button', { name: 'Синтетик Невролог', exact: true }).click();
     await page.getByLabel(T('access.device.pin'), { exact: true }).fill('1397');
     await page.getByRole('button', { name: T('access.device.unlock'), exact: true }).click();

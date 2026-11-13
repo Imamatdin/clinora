@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { passwordHash } from '../../src/server/security.js';
 import { processFixture, T } from './process-fixture.js';
+import { headerButton, openHeaderMenu, tab } from './ui.js';
 
 async function signIn(page: Page, identifier: string, password: string) {
   await page.getByLabel(T('auth.identifier'), { exact: true }).fill(identifier);
@@ -24,7 +25,7 @@ for (const width of [1280, 360]) test(`administrator opens the day and creates a
     await page.goto(f.origin);
     await signIn(page, 'admin.browser', adminPassword);
     await expect(page.getByRole('heading', { name: T('home.administrator.title'), level: 1 })).toBeVisible();
-    await expect(page.getByText('Synthetic North Clinic', { exact: true })).toBeVisible();
+    await openHeaderMenu(page); await expect(page.getByText('Synthetic North Clinic', { exact: true })).toBeVisible(); await page.keyboard.press('Escape');
     const header = page.getByRole('banner');
     await expect(header.getByText(T('day.none'), { exact: true })).toBeVisible();
 
@@ -34,7 +35,7 @@ for (const width of [1280, 360]) test(`administrator opens the day and creates a
     await expect(page.getByRole('button', { name: T('day.closeButton'), exact: true })).toBeVisible();
     const dayText = await header.locator('[data-state="open"]').innerText();
 
-    await page.getByRole('navigation', { name: T('app.navigation') }).getByRole('button', { name: T('nav.staff'), exact: true }).click();
+    await tab(page, T('nav.staff'));
     await page.getByRole('button', { name: T('staff.add'), exact: true }).click();
     await page.getByLabel(T('staff.fullName'), { exact: true }).fill('Синтетик Кассир');
     await page.getByLabel(T('staff.login'), { exact: true }).fill('cashier.browser');
@@ -53,7 +54,7 @@ for (const width of [1280, 360]) test(`administrator opens the day and creates a
     await page.getByRole('button', { name: T('staff.tempDone'), exact: true }).click();
     await expect(secret).toHaveCount(0);
 
-    await page.getByRole('button', { name: T('app.signOut'), exact: true }).click();
+    await headerButton(page, T('app.signOut'));
     await signIn(page, 'cashier.browser', temporary);
     await expect(page.getByRole('heading', { name: T('password.title') })).toBeVisible();
     const next = 'Cashier-' + randomUUID();
@@ -65,7 +66,7 @@ for (const width of [1280, 360]) test(`administrator opens the day and creates a
     await expect(page.getByRole('heading', { name: T('home.cashier.title'), level: 1 })).toBeVisible();
     await expect(page.getByRole('heading', { name: T('cashier.title'), exact: true, level: 2 })).toBeVisible();
     await expect(header.locator('[data-state="open"]')).toHaveText(dayText);
-    await expect(header.getByText('Синтетик Кассир', { exact: true })).toBeVisible();
+    await openHeaderMenu(page); await expect(header.getByText('Синтетик Кассир', { exact: true })).toBeVisible(); await page.keyboard.press('Escape');
     // Module tabs can grow independently; a cashier still has no staff or day controls.
     await expect(page.getByRole('button', { name: T('nav.staff'), exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: T('day.closeButton') })).toHaveCount(0);

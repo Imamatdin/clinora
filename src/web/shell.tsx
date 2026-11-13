@@ -17,7 +17,7 @@ export function useDismiss(open: boolean, close: () => void, root: RefObject<HTM
 export type Tab = { id: string; label: string };
 /**
  * One row of navigation tabs. Tabs that do not fit the row's width go into a "More" menu; the current tab is
- * always in the row. A hidden copy of the row measures each tab, so the split follows the language and width.
+ * always in the row (phones; from 900 px the row wraps). A hidden copy of the row measures each tab, so the split follows the language and width.
  */
 export function Tabs({ tabs, current, onSelect, disabled, label }: { tabs: Tab[]; current: string; onSelect: (id: string) => void; disabled?: boolean; label: string }) {
   const nav = useRef<HTMLElement>(null), measure = useRef<HTMLDivElement>(null), toggle = useRef<HTMLButtonElement>(null), more = useRef<HTMLDivElement>(null);
@@ -32,7 +32,8 @@ export function Tabs({ tabs, current, onSelect, disabled, label }: { tabs: Tab[]
       const items = Array.from(copy.children) as HTMLElement[], widths = items.slice(0, -1).map(el => el.getBoundingClientRect().width);
       const moreWidth = items[items.length - 1]!.getBoundingClientRect().width;
       const total = widths.reduce((n, w) => n + w + gap, -gap);
-      if (total <= room + 0.5) { setFit(tabs.length); return; }
+      // From 900 px the row wraps instead (style.css); the "More" menu is for phones only.
+      if (total <= room + 0.5 || matchMedia('(min-width: 900px)').matches) { setFit(tabs.length); return; }
       // The current tab and the "More" button are reserved first; other tabs follow in order while they fit.
       const currentIndex = Math.max(0, tabs.findIndex(x => x.id === current));
       let used = moreWidth + widths[currentIndex]! + gap, n = 0;

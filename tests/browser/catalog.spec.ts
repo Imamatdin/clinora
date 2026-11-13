@@ -5,6 +5,7 @@ import { processFixture, T } from './process-fixture.js';
 import { passwordHash } from '../../src/server/security.js';
 import { catalogUzCyrl } from '../../src/web/i18n/catalog.uz-Cyrl.js';
 import { sampleSections, synthDt, PATIENT_MARKER } from '../../src/modules/import1c/synthetic.js';
+import { tab } from './ui.js';
 
 const C = (key: keyof typeof catalogUzCyrl, vars: Record<string, string | number> = {}) => catalogUzCyrl[key].replace(/\{(\w+)\}/g, (_, n: string) => String(vars[n]));
 
@@ -26,8 +27,7 @@ test('administrator imports a synthetic 1C dump in the browser, previews, commit
     await page.getByLabel(T('auth.identifier'), { exact: true }).fill('admin.b005@example.test');
     await page.getByLabel(T('auth.password'), { exact: true }).fill(f.password);
     await page.getByRole('button', { name: T('auth.signIn'), exact: true }).click();
-    const nav = page.getByRole('button', { name: T('module.catalog'), exact: true });
-    await nav.click(); // administrators see several modules (cashier, pharmacy, catalog)
+    await tab(page, T('module.catalog')); // administrators see several modules (cashier, pharmacy, catalog)
     await expect(page.getByRole('heading', { name: C('catalog.title'), exact: true })).toBeVisible();
 
     await page.getByRole('tab', { name: C('catalog.tab.import'), exact: true }).click();

@@ -6,6 +6,7 @@ import { transaction } from '../../src/server/database.js';
 import { seedDemoStaff } from '../../src/server/demo-staff.js';
 import { seedDemoCatalog } from '../../src/server/demo-catalog.js';
 import { assistant } from '../../src/web/i18n/assistant.uz-Cyrl.js';
+import { expectHeaderButton, headerButton, tab } from './ui.js';
 
 /*
  * Task 017 acceptance: one synthetic clinic day, every role through the real browser and the compiled server.
@@ -42,7 +43,6 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await mkdir('work/browser-evidence/help', { recursive: true });
     const helpShot = async (role: string) => { if (width === 360) await page.screenshot({ path: `work/browser-evidence/help/${role}.png` }); };
     const noSideScroll = async () => expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
-    const nav = page.getByRole('navigation', { name: T('app.navigation') });
     page.on('dialog', d => void d.accept());
     await page.setViewportSize({ width, height: 900 });
     const signIn = async (login: string) => {
@@ -50,9 +50,9 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
       await page.getByLabel(T('auth.identifier'), { exact: true }).fill(login);
       await page.getByLabel(T('auth.password'), { exact: true }).fill(f.password);
       await page.getByRole('button', { name: T('auth.signIn'), exact: true }).click();
-      await expect(page.getByRole('button', { name: T('app.signOut'), exact: true })).toBeVisible();
+      await expectHeaderButton(page, T('app.signOut'));
     };
-    const signOut = async () => { await page.getByRole('button', { name: T('app.signOut'), exact: true }).click(); await expect(page.getByLabel(T('auth.identifier'), { exact: true })).toBeVisible(); };
+    const signOut = async () => { await headerButton(page, T('app.signOut')); await expect(page.getByLabel(T('auth.identifier'), { exact: true })).toBeVisible(); };
 
     // 1. Administrator opens the day.
     await signIn('day.admin');
@@ -181,7 +181,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
 
     // 7. The surgeon records the operation on the admitted patient's bill.
     await signIn('day.doctor5');
-    await nav.getByRole('button', { name: T('surgery.title'), exact: true }).click();
+    await tab(page, T('surgery.title'));
     await page.getByLabel(T('pharmacy.visit'), { exact: true }).selectOption(admitted.id);
     await page.getByLabel(T('surgery.service'), { exact: true }).selectOption(await serviceId('S01'));
     // The surgeon and the time default to the signed-in doctor and now (task 017).
@@ -190,7 +190,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await expect(page.getByRole('status').filter({ hasText: T('pharmacy.saved') })).toBeVisible();
     await noSideScroll(); await shot('07-surgery-recorded');
     // Ward round: the attending surgeon opens the admitted patient's note from the doctor home (no queue ticket).
-    await nav.getByRole('button', { name: T('module.myQueue'), exact: true }).click();
+    await tab(page, T('module.myQueue'));
     await page.locator('.dr-list li', { hasText: 'Синтетик Стационар Бемор' }).getByRole('button', { name: T('doctor.openNote'), exact: true }).click();
     await expect(page.locator('section.dr').getByRole('heading', { name: T('doctor.note'), exact: true })).toBeVisible();
     await expect(page.locator('.dr-patient').getByText('Синтетик Стационар Бемор', { exact: true })).toBeVisible();
@@ -307,7 +307,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
 
     // 14. The therapist sees their own earnings (30% of the completed consultation, billed basis).
     await signIn('day.doctor');
-    await nav.getByRole('button', { name: T('module.payroll'), exact: true }).click();
+    await tab(page, T('module.payroll'));
     await page.getByRole('button', { name: T('ceo.show'), exact: true }).click();
     await expect(page.locator('.ceo-pay-doctor')).toHaveCount(1);
     await expect(page.locator('.ceo-pay-doctor summary')).toContainText(/30\s000/);

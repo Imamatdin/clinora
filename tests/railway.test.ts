@@ -32,6 +32,7 @@ test('railway: role split is enforced, the database must be clinora_staging', ()
   assert.ok(checkPredeployEnv({ APP_ENV: 'staging', DATABASE_URL: 'not a url', APP_DATABASE_URL: appUrl }).some(p => p.includes('not a valid URL')));
   assert.deepEqual(checkPredeployEnv({ APP_ENV: 'staging', DATABASE_URL: owner, APP_DATABASE_URL: appUrl }), []);
   assert.equal(new URL(maintenanceUrl(owner)).pathname, '/postgres');
+  assert.ok(checkPredeployEnv({ APP_ENV: 'staging', DATABASE_URL: owner, APP_DATABASE_URL: 'postgresql://clinora_app:${{secret(32)}}@postgres.railway.internal:5432/clinora_staging' }).some(p => p.includes('unresolved')));
 });
 
 test('railway: demo action runs a reset only on the named Tashkent day', () => {
@@ -46,5 +47,5 @@ test('railway: demo action runs a reset only on the named Tashkent day', () => {
 });
 
 test('railway start strips the owner credential and demo password', () => {
-  for (const name of ['DATABASE_URL', 'APP_DATABASE_URL', 'DEMO_PASSWORD']) assert.ok((STRIP_BEFORE_START as readonly string[]).includes(name));
+  for (const name of ['DATABASE_URL', 'APP_DATABASE_URL', 'DEMO_PASSWORD', 'CLINORA_APP_PASSWORD']) assert.ok((STRIP_BEFORE_START as readonly string[]).includes(name));
 });

@@ -37,6 +37,7 @@ export function parseDbUrl(name: string, value: string | undefined): DbUrl {
   const database = decodeURIComponent(url.pathname.replace(/^\//, ''));
   const parsed = { user: decodeURIComponent(url.username), password: decodeURIComponent(url.password), host: url.hostname, port: url.port || '5432', database };
   if (!parsed.user || !parsed.password || !parsed.host) throw new Error(`${name} needs a user, a password and a host`);
+  if (Object.values(parsed).some(v => v.includes('${{'))) throw new Error(`${name} contains an unresolved Railway reference`);
   if (parsed.database !== DEMO_DATABASE) throw new Error(`${name} must name the database ${DEMO_DATABASE}`);
   return parsed;
 }
@@ -107,4 +108,4 @@ export function maintenanceUrl(ownerUrl: string): string {
 }
 
 /** Variables the web process must not keep once it is running as clinora_app. */
-export const STRIP_BEFORE_START = ['DATABASE_URL', 'APP_DATABASE_URL', 'DEMO_PASSWORD', 'DEMO_ACTION', 'PGPASSWORD', 'POSTGRES_PASSWORD'] as const;
+export const STRIP_BEFORE_START = ['DATABASE_URL', 'APP_DATABASE_URL', 'DEMO_PASSWORD', 'DEMO_ACTION', 'CLINORA_APP_PASSWORD', 'PGPASSWORD', 'POSTGRES_PASSWORD'] as const;

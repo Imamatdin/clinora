@@ -6,6 +6,7 @@ import { passwordHash } from '../../src/server/security.js';
 import { transaction } from '../../src/server/database.js';
 import { seedDemoStaff, type DemoStaff } from '../../src/server/demo-staff.js';
 import { seedDemoCatalog } from '../../src/server/demo-catalog.js';
+import { seedDemoDay } from '../../src/server/demo-day.js';
 
 /*
  * Task 017 cross-module fixes, against PostgreSQL through HTTP (synthetic clinic from the shared demo seed):
@@ -115,4 +116,22 @@ test('a visit marked for admission can be admitted; an outpatient visit cannot',
   // The ward view lists only inpatient visits waiting for a bed.
   const view = await json(await w.request(url('inpatient')));
   assert.equal(view.visits.some((v: { id: string }) => v.id === outpatient), false);
+});
+
+test('db:demo clinic day: real actions leave live queues, admissions and payments on the CEO dashboard', async () => {
+  const c = f.other.clinicId, hash = await passwordHash(f.password);
+  const result = await transaction(f.pool, async tx => {
+    const s = await seedDemoStaff(tx, c, f.other.userId, hash, 'demo17');
+    await seedDemoCatalog(tx, c, f.other.userId, s.doctorIds);
+    return seedDemoDay(tx, c, { ...s.ids, doctorIds: s.doctorIds });
+  });
+  assert.deepEqual(result, { patients: 12, visits: 12, admissions: 2, consultationsDone: 6, payments: 6 });
+  const ceo = await signIn('other@example.test');
+  const today = (await json(await ceo.request(`/api/clinics/${c}/business-days/current`))).openDay.businessDate;
+  const report = await json(await ceo.post(`/api/clinics/${c}/reports/dashboard`, { from: today, to: today }));
+  assert.equal(report.totals.patients, '12');
+  assert.equal(report.totals.inpatient, '2');
+  assert.ok(BigInt(report.totals.collected) > 0n && BigInt(report.totals.outstanding) > 0n, JSON.stringify(report.totals));
+  // Six consultations wait in the doctors' queues for the demonstration.
+  assert.equal((await f.pool.query("SELECT count(*)::int n FROM queue_tickets t JOIN queue_points q ON q.id=t.queue_point_id WHERE t.clinic_id=$1 AND q.kind='doctor' AND t.status='waiting'", [c])).rows[0].n, 6);
 });

@@ -11,6 +11,7 @@ import { Login, ROLES } from '../modules/identity/roles.js';
 import { demoGuard } from './demo-guard.js';
 import { seedDemoCatalog } from './demo-catalog.js';
 import { DEMO_STAFF, seedDemoStaff } from './demo-staff.js';
+import { seedDemoDay } from './demo-day.js';
 import { seedAssistantDemo } from '../modules/assistant/demo.js';
 
 demoGuard(process.env);
@@ -18,7 +19,7 @@ Password.parse(process.env.DEMO_PASSWORD);
 const prefix = process.env.DEMO_LOGIN_PREFIX ?? 'demo';
 if (['ceo', ...DEMO_STAFF.map(s => s[0])].join() !== ROLES.join()) throw new Error('Demo must cover every role');
 const pool = makePool(process.env.DATABASE_URL!);
-let catalog: unknown;
+let catalog: unknown, day: unknown;
 try {
   await migrate(pool);
   const hash = await passwordHash(process.env.DEMO_PASSWORD!);
@@ -43,8 +44,10 @@ try {
     }
     await tx.query("INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,$3,'synthetic.patient',$4)", [randomUUID(), doctor, clinicId, patient]);
     await seedAssistantDemo(tx, clinicId, doctor); // Task 003C: synthetic GP patient with history and a visit dated today.
+    day = await seedDemoDay(tx, clinicId, { ...staff, doctorIds }); // Task 017: a believable clinic day for the dashboards.
     return (await tx.query('SELECT login FROM accounts WHERE managed_by_clinic_id=$1 ORDER BY login', [clinicId])).rows.map(r => r.login as string);
   });
   console.log(`Synthetic clinic provisioned with one login per role: ${logins.join(', ')}. Password not printed.`);
   console.log(`Synthetic catalog: ${JSON.stringify(catalog)}.`);
+  console.log(`Synthetic clinic day (open): ${JSON.stringify(day)}.`);
 } finally { await pool.end(); }

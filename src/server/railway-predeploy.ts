@@ -8,6 +8,7 @@ import pg from 'pg';
 import { makePool, migrate, MigrationError } from './database.js';
 import { demoGuard } from './demo-guard.js';
 import { seedDemoClinic } from './demo-clinic.js';
+import { Password } from '../contracts/notebook.js';
 import { checkPredeployEnv, checkDatabaseUrls, maintenanceUrl, parseDemoAction, tashkentMidnight, DEMO_DATABASE } from './railway.js';
 
 const log = (severity: 'INFO' | 'WARNING' | 'ERROR', message: string, fields: object = {}) =>
@@ -21,11 +22,14 @@ let action: ReturnType<typeof parseDemoAction>;
 try { action = parseDemoAction(env.DEMO_ACTION, new Date()); } catch (e) { fail('Railway pre-deploy: bad DEMO_ACTION', { problem: (e as Error).message }); }
 if (action!.kind === 'seed' || action!.kind === 'reset') {
   try { demoGuard(env); } catch (e) { fail('Railway pre-deploy: demo seeding refused', { problem: (e as Error).message }); }
+  if (!Password.safeParse(env.DEMO_PASSWORD).success) fail('Railway pre-deploy: demo seeding refused', { problem: 'DEMO_PASSWORD must be 12-128 characters' });
 }
 const { app } = checkDatabaseUrls(env);
 
+// Error codes and class names only: messages can carry SQL text or input values.
 const code = (error: unknown) => error instanceof MigrationError ? error.code
-  : error && typeof error === 'object' && 'code' in error ? String((error as { code: unknown }).code) : 'unknown';
+  : error && typeof error === 'object' && 'code' in error ? String((error as { code: unknown }).code)
+  : error instanceof Error ? `unknown:${error.name}` : 'unknown';
 
 // 2. The database. Railway's Postgres starts with only `railway` and `postgres`; the demo guard seeds only clinora_staging.
 {

@@ -158,7 +158,7 @@ test("cashier approval PIN failure persists, approval binds payload, revoked app
       [f.owner.clinicId, f.other.userId],
     );
     await transaction(f.pool, async (tx) =>
-      setOwnPin(tx, f.other.userId, "4826"),
+      setOwnPin(tx, f.other.userId, "482613"),
     );
     await f.pool.query(
       "DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2",
@@ -172,7 +172,7 @@ test("cashier approval PIN failure persists, approval binds payload, revoked app
       payload = { kind: "fixed", amount: "10", reason: "Synthetic" };
     const approval = {
       approverId: f.other.userId,
-      pin: "4826",
+      pin: "482613",
       visitId: g.visit,
       operation: "discount",
       payload,
@@ -185,7 +185,7 @@ test("cashier approval PIN failure persists, approval binds payload, revoked app
     assert.equal(
       (
         await f.pool.query(
-          "SELECT failed_attempts FROM cashier_approval_attempts WHERE approver_id=$1",
+          "SELECT failed_attempts FROM approval_pin_attempts WHERE account_id=$1",
           [f.other.userId],
         )
       ).rows[0].failed_attempts,

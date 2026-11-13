@@ -3,7 +3,7 @@ import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import type pg from 'pg';
 import { DocumentVersion, Encounter, Id, Revision, type Membership, type Principal } from '../contracts/index.js';
-import { AcceptInviteInput, DraftInput, EncounterInput, InviteInput, LoginInput, PatientInput, SignupInput, type PatientView, type VisitView } from '../contracts/notebook.js';
+import { AcceptInviteInput, DraftInput, EncounterInput, InviteInput, LoginInput, PatientInput, type PatientView, type VisitView } from '../contracts/notebook.js';
 import { DomainError, requireClinicalAccess } from '../modules/identity/access.js';
 import { transaction, type Tx } from './database.js';
 import { digest, dummyHash, passwordHash, passwordMatches, same, token } from './security.js';
@@ -17,6 +17,7 @@ import { DEVICE_IDLE_MINUTES } from '../modules/devices/actions.js';
 import { accountLimitKey, passwordLogin } from '../modules/login/actions.js';
 import { clientIp } from './client-ip.js';
 import { carriedFields, currentVersion, latestApproval, nextDraftKind } from '../modules/documents/approvals.js';
+import { approverPinChangeRequired } from '../modules/identity/approval-pin.js';
 
 /** Note fields the notebook editor writes; other fields of the current version are carried into each new version. */
 const NOTEBOOK_FIELDS: ReadonlySet<string> = new Set(['reported', 'observed', 'assessment', 'plan']);
@@ -67,7 +68,7 @@ async function accessFor(tx: Tx, actor: Actor, clinic: string): Promise<Access> 
   const member: Membership = { id: row.id, userId: actor.userId, clinicId: clinic,
     role: row.clinical_access ? 'clinician' : 'administrator', status: 'active', revision: row.revision,
     grant: { by: row.granted_by, at: iso(row.granted_at) }, patientScope: row.patient_scope === 'clinic' ? { kind: 'clinic' } : {
-      kind: 'assigned', patientIds: (await tx.query('SELECT patient_id FROM patient_assignments WHERE clinic_id=$1 AND user_id=$2 FOR SHARE', [clinic, actor.userId])).rows.map(r => r.patient_id)
+      kind: 'assigned', patientIds: (await tx.query('SELECT patient_id FROM patient_assignments WHERE clinic_id=$1 AND user_id=$2 AND patient_access_active(clinic_id,patient_id,user_id) FOR SHARE', [clinic, actor.userId])).rows.map(r => r.patient_id)
     } };
   return { actor, member, owner: row.is_owner };
 }
@@ -85,9 +86,11 @@ function patientView(row: pg.QueryResultRow): PatientView {
   return { id: row.id, clinicId: row.clinic_id, displayName: row.display_name, mrn: row.mrn, dateOfBirth: row.date_of_birth,
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at), revision: row.revision, provenance: row.provenance };
 }
-async function visits(tx: Tx, clinic: string, patient: string): Promise<VisitView[]> {
+async function visits(tx: Tx, clinic: string, patient: string, viewer: string): Promise<VisitView[]> {
   // Approval from either the doctor workspace (note_approvals) or the assistant (assistant_approvals), latest first.
-  const rows = (await tx.query(`SELECT e.data,a.display_name,d.id document_id,d.current_revision,d.current_version_id,v.data version,
+  // Task 022: another clinician's encounter shows only its latest approved version, never a draft.
+  const rows = (await tx.query(`SELECT e.data,a.display_name,d.id document_id,d.current_revision,d.current_version_id,
+      CASE WHEN e.clinician_id=$3 THEN v.data ELSE (SELECT av.data FROM document_versions av WHERE av.document_id=d.id AND av.id=ap.version_id) END version,
       ap.id approval_id, ap.version_id approval_version_id, ap.revision approval_revision, ap.approved_at
     FROM encounters e
     JOIN accounts a ON a.id=e.clinician_id JOIN documents d ON d.encounter_id=e.id LEFT JOIN document_versions v ON v.id=d.current_version_id
@@ -95,7 +98,7 @@ async function visits(tx: Tx, clinic: string, patient: string): Promise<VisitVie
         SELECT id, version_id, revision, approved_at FROM note_approvals WHERE document_id=d.id
         UNION ALL SELECT id, version_id, revision, approved_at FROM assistant_approvals WHERE document_id=d.id) x
       ORDER BY revision DESC LIMIT 1) ap ON true
-    WHERE e.clinic_id=$1 AND e.patient_id=$2 ORDER BY e.created_at,e.id`, [clinic, patient])).rows;
+    WHERE e.clinic_id=$1 AND e.patient_id=$2 ORDER BY e.created_at,e.id`, [clinic, patient, viewer])).rows;
   const result: VisitView[] = rows.map(r => ({ encounter: r.data, clinicianName: r.display_name, documentId: r.document_id, revision: r.current_revision, version: r.version,
     approval: r.approval_id ? { id: r.approval_id, versionId: r.approval_version_id, revision: r.approval_revision, approvedAt: iso(r.approved_at), current: r.approval_version_id === r.current_version_id } : null }));
   // Known dates descending, date-only explicitly preserved; undated visits last, newest entry first.
@@ -151,13 +154,9 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
   if (mutation && req.headers.origin !== config.origin) return fail('FORBIDDEN');
   const publicAccess = await publicAccessRoute(req, config, path, method, jsonBody);
   if (publicAccess) return publicAccess;
-  if (path === '/api/auth/register' && method === 'POST') {
-    const input = parse(SignupInput, await jsonBody(req));
-    await throttle(config.pool, input.email.toLowerCase(), clientIp(req, config.trustProxyHops));
-    const hash = await passwordHash(input.password);
-    await config.pool.query('INSERT INTO accounts(id,email,display_name,password_hash) VALUES($1,$2,$3,$4) ON CONFLICT(email) DO NOTHING', [randomUUID(), input.email.toLowerCase(), input.displayName, hash]);
-    return { status: 202, body: { message: 'If this address is available, an unprivileged account has been created. Sign in to continue.' } };
-  }
+  // Task 022: public self-registration is closed. Accounts exist only as administrator-created staff
+  // (server/routes/core.ts) or through an invitation to an existing account.
+  if (path === '/api/auth/register') return fail('NOT_FOUND');
   if (path === '/api/auth/login' && method === 'POST') {
     const input = parse(LoginInput, await jsonBody(req));
     const who = identifierKind('identifier' in input ? input.identifier : input.email);
@@ -185,8 +184,12 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
           coalesce((SELECT array_agg(r.role ORDER BY r.role) FROM membership_roles r WHERE r.clinic_id=m.clinic_id AND r.user_id=m.user_id),'{}') roles
         FROM memberships m JOIN clinics c ON c.id=m.clinic_id WHERE m.user_id=$1 AND m.status='active' AND ($2::uuid IS NULL OR m.clinic_id=$2) ORDER BY c.name`,
         [actor.userId, actor.deviceClinicId])).rows;
+      // Task 022: notices about the person's own account (who reset the password, issued an invite, PIN lock) until dismissed.
+      const notices = (await tx.query(`SELECT id, kind, actor_name "actorName", created_at "at" FROM account_notices WHERE account_id=$1 AND seen_at IS NULL
+        AND ($2::uuid IS NULL OR clinic_id=$2) ORDER BY created_at DESC LIMIT 20`, [actor.userId, actor.deviceClinicId])).rows;
       return { body: { id: actor.userId, name: actor.name, email: actor.email, login: actor.login, phone: actor.phone, csrf: actor.csrf,
-        mustChangePassword: actor.mustChangePassword, professionalVerification: actor.verification, clinics: memberships,
+        mustChangePassword: actor.mustChangePassword, pinChangeRequired: await approverPinChangeRequired(tx, actor.userId), notices,
+        professionalVerification: actor.verification, clinics: memberships,
         session: { via: actor.via, deviceId: actor.deviceId, deviceLabel: actor.deviceLabel, idleMinutes: actor.via === 'device' ? DEVICE_IDLE_MINUTES : null } } };
     }
     if (path === '/api/auth/logout' && method === 'POST') {
@@ -244,8 +247,7 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
     if (parts.length === 4 && method === 'GET') {
       if (access.member.role !== 'clinician') return fail('FORBIDDEN');
       const q = url.searchParams.get('q') ?? ''; if (q.length>200) return fail('INVALID_INPUT');
-      const rows = (await tx.query(`SELECT p.* FROM patients p WHERE p.clinic_id=$1 AND ($2 OR EXISTS(
-        SELECT 1 FROM patient_assignments a WHERE a.clinic_id=p.clinic_id AND a.patient_id=p.id AND a.user_id=$3))
+      const rows = (await tx.query(`SELECT p.* FROM patients p WHERE p.clinic_id=$1 AND ($2 OR patient_access_active(p.clinic_id,p.id,$3))
         AND (position(lower($4) in lower(p.display_name))>0 OR position(lower($4) in lower(coalesce(p.mrn,'')))>0)
         ORDER BY p.created_at DESC,p.id LIMIT 100`, [clinic, access.member.patientScope.kind === 'clinic', actor.userId, q])).rows;
       return { body: rows.map(patientView) };
@@ -266,7 +268,7 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
         // waits for the same replay key. Read and pin that specific current grant.
         let replayAccess = access;
         if (access.member.patientScope.kind === 'assigned') {
-          const rows = (await tx.query('SELECT patient_id FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3 FOR SHARE',
+          const rows = (await tx.query('SELECT patient_id FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3 AND patient_access_active(clinic_id,patient_id,user_id) FOR SHARE',
             [clinic, stored.id, actor.userId])).rows;
           replayAccess = { ...access, member: { ...access.member, patientScope: { kind: 'assigned', patientIds: rows.map(r => r.patient_id) } } };
         }
@@ -276,7 +278,7 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
     }
     const patientId = parts[4]; if (!Id.safeParse(patientId).success) return fail('NOT_FOUND');
     const patient = await allowedPatient(tx, access, patientId!);
-    if (parts.length === 5 && method === 'GET') return { body: { patient, visits: await visits(tx, clinic, patientId!) } };
+    if (parts.length === 5 && method === 'GET') return { body: { patient, visits: await visits(tx, clinic, patientId!, actor.userId) } };
     if (parts[5] !== 'encounters') return fail('NOT_FOUND');
     if (parts.length === 6 && method === 'POST') {
       const input = parse(EncounterInput, await jsonBody(req));
@@ -299,7 +301,9 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
     if (parts.length === 8 && parts[7] === 'draft' && method === 'POST') {
       const input = parse(DraftInput, await jsonBody(req));
       const body = await idempotent(tx, access, `draft.save:${encounterId}`, req.headers['idempotency-key'], input, async () => {
-        const doc = (await tx.query('SELECT * FROM documents WHERE clinic_id=$1 AND patient_id=$2 AND encounter_id=$3 FOR UPDATE', [clinic, patientId, encounterId])).rows[0];
+        // Task 022: only the encounter's own clinician writes its note (the doctor workspace rule).
+        const doc = (await tx.query(`SELECT d.* FROM documents d JOIN encounters e ON e.clinic_id=d.clinic_id AND e.id=d.encounter_id AND e.clinician_id=$4
+          WHERE d.clinic_id=$1 AND d.patient_id=$2 AND d.encounter_id=$3 FOR UPDATE OF d`, [clinic, patientId, encounterId, actor.userId])).rows[0];
         if (!doc) return fail('NOT_FOUND');
         if (doc.current_revision !== input.expectedRevision) return fail('STALE_VERSION');
         // Task 010: an approved note is never silently replaced. After an approval the new version is an

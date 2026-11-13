@@ -90,6 +90,7 @@ test('Mini App: linked staff sign in with Telegram theme and back button; unlink
   try {
     const admin = await member(f, 'access.tg.admin', 'Телеграм Администратор', ['administrator']);
     await f.pool.query('INSERT INTO telegram_links(account_id,telegram_user_id,clinic_id) VALUES($1,$2,$3)', [admin.id, 424242, f.owner.clinicId]);
+    await member(f, 'new.nurse', 'Янги Ҳамшира', ['inpatient']);
     await member(f, 'new.doctor', 'Янги Шифокор', ['doctor']);
     const launch = (tg: number) => '/#' + new URLSearchParams({
       tgWebAppData: signInitData({ auth_date: String(Math.floor(Date.now() / 1000)), query_id: 'AAH' + randomUUID().slice(0, 8), user: JSON.stringify({ id: tg, first_name: 'Синтетик', language_code: 'uz' }) }, TEST_BOT.botToken),
@@ -113,8 +114,14 @@ test('Mini App: linked staff sign in with Telegram theme and back button; unlink
     // Back button: shown on a secondary screen, and pressing it returns to the main screen.
     await page.getByRole('navigation', { name: T('app.navigation') }).getByRole('button', { name: T('nav.staff'), exact: true }).click();
     await expect(page.getByRole('heading', { name: T('staff.title'), level: 1 })).toBeVisible();
-    // The administrator invites a colleague to Telegram: single-use link and QR code.
-    const row = page.getByRole('listitem').filter({ hasText: 'Янги Шифокор' });
+    // Task 022: an administrator's Telegram invite for a doctor first goes to the CEO for confirmation.
+    const doctorRow = page.getByRole('listitem').filter({ hasText: 'Янги Шифокор' });
+    await doctorRow.getByRole('button', { name: T('staff.manage'), exact: true }).click();
+    await doctorRow.getByRole('button', { name: T('access.invite'), exact: true }).click();
+    await expect(doctorRow.getByRole('status').filter({ hasText: T('access.pendingCeo') })).toBeVisible();
+    await expect(page.getByTestId('invite-link')).toHaveCount(0);
+    // The administrator invites a (non-doctor) colleague to Telegram: single-use link and QR code.
+    const row = page.getByRole('listitem').filter({ hasText: 'Янги Ҳамшира' });
     await row.getByRole('button', { name: T('staff.manage'), exact: true }).click();
     await row.getByRole('button', { name: T('access.invite'), exact: true }).click();
     await expect(page.getByTestId('invite-link')).toHaveText(/^https:\/\/t\.me\/clinora_test_bot\?start=[A-Za-z0-9_-]{43}$/);

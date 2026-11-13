@@ -56,7 +56,8 @@ async function doctor(ctx: ClinicContext): Promise<{ c: ClinicContext; scope: Sc
 async function patientInScope(c: ClinicContext, scope: Scope, patientId: string) {
   const ok = scope === 'clinic'
     ? (await c.tx.query('SELECT 1 FROM patients WHERE clinic_id=$1 AND id=$2', [c.clinicId, patientId])).rowCount
-    : (await c.tx.query('SELECT 1 FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3 FOR SHARE', [c.clinicId, patientId, c.actorId])).rowCount;
+    // Task 022: routing access lasts while the visit is open, the clinic's window after it closes, or the stay.
+    : (await c.tx.query('SELECT 1 WHERE patient_access_active($1,$2,$3)', [c.clinicId, patientId, c.actorId])).rowCount;
   if (!ok) fail('NOT_FOUND');
 }
 
@@ -145,7 +146,7 @@ export async function myInpatients(ctx: ClinicContext) {
         WHERE ba.admission_id=a.id AND ba.to_at IS NULL LIMIT 1) bed
     FROM admissions a JOIN visits v ON v.clinic_id=a.clinic_id AND v.id=a.visit_id JOIN patients p ON p.clinic_id=v.clinic_id AND p.id=v.patient_id
     WHERE a.clinic_id=$1 AND a.attending_user_id=$2 AND a.status='admitted'
-      AND ($3 = 'clinic' OR EXISTS (SELECT 1 FROM patient_assignments x WHERE x.clinic_id=a.clinic_id AND x.patient_id=v.patient_id AND x.user_id=$2))
+      AND ($3 = 'clinic' OR patient_access_active(a.clinic_id, v.patient_id, $2))
     ORDER BY a.admitted_at`, [c.clinicId, c.actorId, scope])).rows;
   return rows.map(r => ({ admissionId: r.id as string, patientId: r.patient_id as string, name: r.name as string, patientNo: r.patient_no as number | null,
     bed: (r.bed ?? null) as string | null, admittedAt: r.admitted_at }));
@@ -203,14 +204,18 @@ export async function patientCard(ctx: ClinicContext, patientId: string) {
 
 // ---------- Visit note ----------
 
-/** The doctor's own encounter. Locks the document row when `lock` is set. Patient must still be in scope. */
-async function myEncounter(c: ClinicContext, scope: Scope, encounterId: string, lock = false) {
+/**
+ * The doctor's own encounter. Locks the document row when `lock` is set. Patient must still be in scope, except
+ * that with `ownApproved` the author keeps reading an approved note after routing access ends (task 022);
+ * `approvedOnly` is then set and the caller must show only the approved version.
+ */
+async function myEncounter(c: ClinicContext, scope: Scope, encounterId: string, lock = false, ownApproved = false) {
   const row = (await c.tx.query(`SELECT e.id, e.patient_id, e.visit_id, e.data, e.created_at, d.id document_id, d.current_revision, d.current_version_id
     FROM encounters e JOIN documents d ON d.clinic_id=e.clinic_id AND d.encounter_id=e.id
     WHERE e.clinic_id=$1 AND e.id=$2 AND e.clinician_id=$3 ${lock ? 'FOR UPDATE OF d' : ''}`, [c.clinicId, encounterId, c.actorId])).rows[0];
   if (!row) return fail('NOT_FOUND');
-  await patientInScope(c, scope, row.patient_id);
-  return row;
+  try { await patientInScope(c, scope, row.patient_id); return { ...row, approvedOnly: false }; }
+  catch (e) { if (!ownApproved || !(await latestApproval(c.tx, row.document_id))) throw e; return { ...row, approvedOnly: true }; }
 }
 
 export function parsePrescription(fields: readonly ClinicalField[]): RxLine[] {
@@ -223,9 +228,11 @@ const approvalView = (a: ApprovalRef | null, currentId: string | null) => a ? { 
 
 export async function visitView(ctx: ClinicContext, encounterId: string) {
   const { c, scope } = await doctor(ctx);
-  const e = await myEncounter(c, scope, encounterId);
-  const current = await currentVersion(c.tx, { id: e.document_id, current_version_id: e.current_version_id });
+  const e = await myEncounter(c, scope, encounterId, false, true);
   const approval = await latestApproval(c.tx, e.document_id);
+  // Access ended: the author reads the approved version only, with no queue, orders or newer drafts.
+  if (e.approvedOnly) { e.current_version_id = approval!.versionId; e.visit_id = null; }
+  const current = await currentVersion(c.tx, { id: e.document_id, current_version_id: e.current_version_id });
   const ticket = e.visit_id ? (await c.tx.query(`SELECT t.id, t.number, t.status FROM queue_tickets t
     JOIN queue_points qp ON qp.clinic_id=t.clinic_id AND qp.id=t.queue_point_id AND qp.kind='doctor' AND qp.user_id=$3
     WHERE t.clinic_id=$1 AND t.visit_id=$2 ORDER BY t.created_at DESC LIMIT 1`, [c.clinicId, e.visit_id, c.actorId])).rows[0] ?? null : null;
@@ -239,7 +246,7 @@ export async function visitView(ctx: ClinicContext, encounterId: string) {
   return {
     encounter: { id: e.id as string, patientId: e.patient_id as string, visitId: e.visit_id as string | null, specialty: e.data.specialty as string,
       location: e.data.location.label as string, createdAt: e.created_at },
-    visitOpen: visit?.status === 'open', ticket,
+    visitOpen: visit?.status === 'open', ticket, readOnly: e.approvedOnly,
     documentId: e.document_id as string, revision: e.current_revision as number, versionId: e.current_version_id as string | null,
     kind: current?.kind ?? null, amendmentReason: current?.amendmentReason ?? null,
     note: noteOf(current), prescription: current ? parsePrescription(current.fields) : [],
@@ -355,7 +362,7 @@ export type PrescriptionDocument = {
 /** Everything printed on the prescription, read only from the latest approved version (never a newer draft). */
 export async function prescriptionDocument(ctx: ClinicContext, encounterId: string): Promise<PrescriptionDocument> {
   const { c, scope } = await doctor(ctx);
-  const e = await myEncounter(c, scope, encounterId);
+  const e = await myEncounter(c, scope, encounterId, false, true);
   const approval = await latestApproval(c.tx, e.document_id);
   if (!approval) return fail('INVALID_TRANSITION');
   const v = DocumentVersion.parse((await c.tx.query('SELECT data FROM document_versions WHERE document_id=$1 AND id=$2', [e.document_id, approval.versionId])).rows[0].data);

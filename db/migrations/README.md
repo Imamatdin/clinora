@@ -29,3 +29,10 @@ links are not carried over), then the 003C link, link-code and update tables are
 Task 017 adds `023_lab_late_confirmation.sql`: `charge_lines.completed_business_day_id` (the day a completion was
 posted to) and `lab_pending_confirmations` (late lab confirmations made while no business day was open; they post
 when the next day opens). Closed-day snapshots and line values are never rewritten.
+
+Task 022 adds `024_security_access.sql`: `approval_pin_attempts` (one approval-PIN counter per approver, locked until a
+manager clears it) and `account_pins.pin_digits`; `account_notices` (own-account notices for next sign-in and Telegram) and
+`credential_requests` (CEO confirmation of an administrator's credential reset for a doctor); `clinic_settings.assignment_days`
+and `telegram_voice`; `patient_assignments.visit_id/granted_at` with `patient_access_active()`, the single rule for routing
+access expiry; the two oldest guard triggers now raise `restrict_violation` so rule rejections map to 409. The task 020/021
+per-device counters (`ward_override_attempts`, `cashier_approval_attempts`) are no longer read.

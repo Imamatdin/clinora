@@ -21,7 +21,7 @@ registerRoutes('assistant', [
     await svc.doctorAccess(ctx.tx, me(ctx), ctx.clinicId, null);
     const p = assistantProviders();
     return { body: { formId: FORM_ID, labs: LABS, stt: { name: p.stt.name, simulated: p.stt.simulated },
-      extractor: { name: p.extractor.name, simulated: p.extractor.simulated }, telegram: { available: !!p.telegram, linked: await svc.telegramLinked(ctx.tx, me(ctx)) } } };
+      extractor: { name: p.extractor.name, simulated: p.extractor.simulated }, telegram: { available: !!p.telegram && await svc.telegramVoiceEnabled(ctx.tx, ctx.clinicId), linked: await svc.telegramLinked(ctx.tx, me(ctx)) } } };
   } },
   { method: 'GET', pattern: new RegExp(`^${ENC}$`), roles: DOCTOR,
     handle: async (ctx, [patient, encounter]) => ({ body: await svc.draftView(ctx.tx, me(ctx), ctx.clinicId, patient!, encounter!, assistantProviders()) }) },

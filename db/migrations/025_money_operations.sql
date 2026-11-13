@@ -59,17 +59,17 @@ CREATE TRIGGER business_day_close_versions_append_only BEFORE UPDATE OR DELETE O
 -- naming the day and must have archived the snapshot first.
 CREATE OR REPLACE FUNCTION business_day_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Business days are never deleted'; END IF;
+  IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Business days are never deleted' USING ERRCODE = 'restrict_violation'; END IF;
   IF NEW.id <> OLD.id OR NEW.clinic_id <> OLD.clinic_id OR NEW.business_date <> OLD.business_date
      OR NEW.opened_by <> OLD.opened_by OR NEW.opened_at <> OLD.opened_at THEN
-    RAISE EXCEPTION 'Business day identity is immutable';
+    RAISE EXCEPTION 'Business day identity is immutable' USING ERRCODE = 'restrict_violation';
   END IF;
   IF OLD.status = 'closed' THEN
     IF NEW.status = 'open' AND coalesce(current_setting('clinora.reopen_day', true), '') = OLD.id::text
        AND EXISTS (SELECT 1 FROM business_day_close_versions v WHERE v.business_day_id = OLD.id AND v.closed_at = OLD.closed_at) THEN
       RETURN NEW;
     END IF;
-    RAISE EXCEPTION 'A closed business day is immutable';
+    RAISE EXCEPTION 'A closed business day is immutable' USING ERRCODE = 'restrict_violation';
   END IF;
   RETURN NEW;
 END $$;

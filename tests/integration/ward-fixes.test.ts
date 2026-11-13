@@ -103,7 +103,7 @@ test('P2: bed-day and caretaker charges carry the real creation time; the billed
 test('P3: ward dispenses out-of-stock medicine with a CEO PIN approval on the same device; wrong PINs never touch the sign-in PIN', async t => {
   const { f, g } = await setup(t);
   const nurse = await staff(f, ['inpatient']);
-  await f.pool.query('INSERT INTO account_pins(account_id,pin_hash) VALUES($1,$2) ON CONFLICT(account_id) DO UPDATE SET pin_hash=EXCLUDED.pin_hash', [g.actor, await passwordHash('4826')]);
+  await f.pool.query('INSERT INTO account_pins(account_id,pin_hash,pin_digits) VALUES($1,$2,6) ON CONFLICT(account_id) DO UPDATE SET pin_hash=EXCLUDED.pin_hash,pin_digits=6', [g.actor, await passwordHash('482613')]);
   const pc = await onDevice(f, nurse);
   const post = async (path: string, body: unknown, status: number) => {
     const r = await pc.request(`/api/clinics/${g.clinic}/inpatient${path}`, body); const v = await r.json();
@@ -115,29 +115,29 @@ test('P3: ward dispenses out-of-stock medicine with a CEO PIN approval on the sa
   const short = { key: key(), serviceId: g.services.medicine, quantity: 12 };
   await post(`/${id}/services`, short, 409); // 10 on hand, no approval
   // A wrong PIN is refused, committed to its own counter, and leaves the approver's sign-in PIN alone.
-  await post(`/${id}/services`, { ...short, key: key(), override: { reason: 'Synthetic shortage', approverId: g.actor, pin: '0000' } }, 403);
-  assert.equal((await f.pool.query('SELECT failed_attempts FROM ward_override_attempts WHERE approver_id=$1 AND device_id=$2', [g.actor, pc.device])).rows[0].failed_attempts, 1);
+  await post(`/${id}/services`, { ...short, key: key(), override: { reason: 'Synthetic shortage', approverId: g.actor, pin: '000000' } }, 403);
+  assert.equal((await f.pool.query('SELECT failed_attempts FROM approval_pin_attempts WHERE account_id=$1', [g.actor])).rows[0].failed_attempts, 1);
   assert.equal((await f.pool.query('SELECT failed_attempts FROM account_pins WHERE account_id=$1', [g.actor])).rows[0].failed_attempts, 0);
   // A non-manager cannot be named as approver, even with their correct PIN.
   const other = await staff(f, ['inpatient'], '1357');
   await post(`/${id}/services`, { ...short, key: key(), override: { reason: 'Synthetic shortage', approverId: other, pin: '1357' } }, 403);
-  const approved = { ...short, key: key(), override: { reason: 'Synthetic shortage', approverId: g.actor, pin: '4826' } };
+  const approved = { ...short, key: key(), override: { reason: 'Synthetic shortage', approverId: g.actor, pin: '482613' } };
   const result = await post(`/${id}/services`, approved, 200);
   assert.deepEqual(await post(`/${id}/services`, approved, 200), result, 'retry returns the same charge');
   const movement = (await f.pool.query("SELECT qty,created_by,override_approved_by,override_reason FROM stock_movements WHERE service_id=$1 AND reason='dispense'", [g.services.medicine])).rows;
   assert.deepEqual(movement, [{ qty: -12, created_by: nurse, override_approved_by: g.actor, override_reason: 'Synthetic shortage' }]);
-  assert.equal((await f.pool.query('SELECT failed_attempts FROM ward_override_attempts WHERE approver_id=$1 AND device_id=$2', [g.actor, pc.device])).rows[0].failed_attempts, 0);
+  assert.equal((await f.pool.query('SELECT failed_attempts FROM approval_pin_attempts WHERE account_id=$1', [g.actor])).rows[0].failed_attempts, 0);
   // The PIN is never stored in the replay record.
-  assert.equal((await f.pool.query("SELECT count(*)::int n FROM inpatient_requests WHERE payload::text LIKE '%4826%'")).rows[0].n, 0);
-  // Five wrong PINs lock the approver on this device only.
-  for (let i = 0; i < 5; i++) await post(`/${id}/services`, { ...short, key: key(), override: { reason: 'Synthetic shortage', approverId: g.actor, pin: '0001' } }, 403);
-  await post(`/${id}/services`, { ...short, key: key(), override: { reason: 'Synthetic shortage', approverId: g.actor, pin: '4826' } }, 403);
+  assert.equal((await f.pool.query("SELECT count(*)::int n FROM inpatient_requests WHERE payload::text LIKE '%482613%'")).rows[0].n, 0);
+  // Task 022: five wrong PINs lock the approver on every device until a manager clears it.
+  for (let i = 0; i < 5; i++) await post(`/${id}/services`, { ...short, key: key(), override: { reason: 'Synthetic shortage', approverId: g.actor, pin: '000001' } }, 403);
+  await post(`/${id}/services`, { ...short, key: key(), override: { reason: 'Synthetic shortage', approverId: g.actor, pin: '482613' } }, 403);
   const elsewhere = await onDevice(f, nurse);
-  const r = await elsewhere.request(`/api/clinics/${g.clinic}/inpatient/${id}/services`, { ...short, key: key(), quantity: 1, override: { reason: 'Synthetic shortage', approverId: g.actor, pin: '4826' } });
-  assert.equal(r.status, 200, 'another device is not locked');
+  const r = await elsewhere.request(`/api/clinics/${g.clinic}/inpatient/${id}/services`, { ...short, key: key(), quantity: 1, override: { reason: 'Synthetic shortage', approverId: g.actor, pin: '482613' } });
+  assert.equal(r.status, 403, 'another device is locked too');
   // Without a shared-PC session there is no PIN approval.
   const phone = f.client(); await phone.login();
-  const p = await phone.request(`/api/clinics/${g.clinic}/inpatient/${id}/services`, { ...short, key: key(), override: { reason: 'Synthetic shortage', approverId: g.actor, pin: '4826' } });
+  const p = await phone.request(`/api/clinics/${g.clinic}/inpatient/${id}/services`, { ...short, key: key(), override: { reason: 'Synthetic shortage', approverId: g.actor, pin: '482613' } });
   assert.equal(p.status, 403);
 });
 

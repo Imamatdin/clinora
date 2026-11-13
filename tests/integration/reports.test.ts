@@ -6,7 +6,7 @@ import { httpFixture } from './fixture.js';
 import { dispatchReports } from '../../src/modules/reports/notify.js';
 import { seedCashier } from './cashier-fixture.js';
 
-test('C8: day close reconciles ledger, rejects open shifts, snapshots and sends only financial totals',async()=>{
+test('C8: day close reconciles ledger, rejects open shifts, snapshots and sends a day-closed notice without totals',async()=>{
   const f=await httpFixture();try{
     const g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId),client=f.client();await client.login();
     const base=`/api/clinics/${f.owner.clinicId}`;
@@ -33,7 +33,7 @@ test('C8: day close reconciles ledger, rejects open shifts, snapshots and sends 
     await call(`/business-days/${g.day}/close`,{},409);
     await dispatchReports(f.config,f.owner.clinicId);
     const messages=f.telegramApi.calls.filter(c=>c.method==='sendMessage');assert.equal(messages.length,1);
-    const text=JSON.stringify(messages[0]);assert.match(text,/500000/);assert.doesNotMatch(text,/Synthetic Aliyev|patient|diagnosis|phone/i);
+    const text=JSON.stringify(messages[0]);assert.doesNotMatch(text,/500000|340000/,'task 022: no totals in Telegram');assert.doesNotMatch(text,/Synthetic Aliyev|patient|diagnosis|phone/i);
     assert.match(text,new RegExp(g.day));
     await f.restart();await client.login();assert.deepEqual((await call(`/reports/days/${g.day}`)).totals,report.totals);
     await assert.rejects(f.pool.query('UPDATE business_days SET close_snapshot=$2 WHERE id=$1',[g.day,{}]),/immutable/);

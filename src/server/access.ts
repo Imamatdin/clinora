@@ -6,6 +6,8 @@ import { Id } from '../contracts/index.js';
 import { DomainError } from '../modules/identity/access.js';
 import { MANAGERS, ROLES } from '../modules/identity/roles.js';
 import { createInvite, manageableMember } from '../modules/telegram/links.js';
+import { credentialGate } from '../modules/staff/actions.js';
+import { queueAccountNotice } from '../modules/identity/approval-pin.js';
 import { verifyInitData, INIT_DATA_MAX_AGE_SECONDS } from '../modules/telegram/init-data.js';
 import { handleUpdate, webhookSecretMatches } from '../modules/telegram/webhook.js';
 import { receiveTelegramVoice } from '../modules/assistant/service.js';
@@ -130,6 +132,12 @@ export async function sessionAccessRoute(tx: Tx, req: IncomingMessage, config: A
     const input = parse(PinInput, await readBody(req));
     return { body: await setOwnPin(tx, actor.userId, input.pin) };
   }
+  if (path === '/api/auth/notices/seen' && method === 'POST') {
+    // Task 022: the person dismisses notices about their own account; nobody else's.
+    const input = parse(z.object({ ids: z.array(Id).min(1).max(50) }).strict(), await readBody(req));
+    await tx.query('UPDATE account_notices SET seen_at=now() WHERE account_id=$1 AND id=ANY($2::uuid[]) AND seen_at IS NULL', [actor.userId, input.ids]);
+    return { body: { ok: true } };
+  }
   // Telegram invites: for a staff member (manager) or for oneself (any member with a role, e.g. the owner).
   const invite = /^\/api\/clinics\/([^/]+)\/(?:staff\/([^/]+)|access\/me)\/telegram-invite$/.exec(path);
   if (invite && method === 'POST') {
@@ -138,8 +146,14 @@ export async function sessionAccessRoute(tx: Tx, req: IncomingMessage, config: A
     const ctx = await requireRole(tx, actor.userId, clinicId!, target === undefined ? ROLES : MANAGERS);
     parse(z.object({}).strict(), await readBody(req));
     if (!config.telegram) return fail('INTEGRATION_UNAVAILABLE');
-    if (target !== undefined) await manageableMember(ctx, target);
+    if (target !== undefined) {
+      await manageableMember(ctx, target);
+      // Task 022: an administrator's invite for a doctor needs a CEO's confirmation; the person is told either way.
+      const pending = await credentialGate(ctx, target, 'telegram');
+      if (pending) return { status: 202, body: pending };
+    }
     const created = await createInvite(ctx, target ?? actor.userId);
+    if (target !== undefined) await queueAccountNotice(tx, { accountId: target, clinicId: clinicId!, kind: 'telegram_invite', actorId: actor.userId });
     return { status: 201, body: { link: `https://t.me/${config.telegram.botUsername}?start=${created.token}`, expiresAt: created.expiresAt } };
   }
   const enroll = /^\/api\/clinics\/([^/]+)\/devices\/enroll$/.exec(path);

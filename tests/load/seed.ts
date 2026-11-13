@@ -107,6 +107,15 @@ INSERT INTO admissions(id,clinic_id,visit_id,department_id,attending_user_id,adm
   SELECT gen_random_uuid(),p.clinic,v.id,(SELECT id FROM seed_dept WHERE n=2),v.doctor,v.at,
     CASE WHEN v.discharge<=p.today THEN (v.discharge+time '11:00') AT TIME ZONE 'Asia/Tashkent' END,CASE WHEN v.discharge<=p.today THEN 'discharged' ELSE 'admitted' END
   FROM seed_visit v,seed_param p WHERE v.type='inpatient';
+-- Each current stay holds a bed from admission, as the admit action records; day close (task 023) accrues
+-- ward days per bed, so a stay without one cannot be charged.
+CREATE TEMP TABLE seed_room ON COMMIT DROP AS SELECT gen_random_uuid() id;
+INSERT INTO rooms(id,clinic_id,department_id,name) SELECT r.id,p.clinic,(SELECT id FROM seed_dept WHERE n=2),'Палата' FROM seed_room r,seed_param p;
+CREATE TEMP TABLE seed_bed ON COMMIT DROP AS
+  SELECT gen_random_uuid() id,a.id admission,a.admitted_at,row_number() OVER (ORDER BY a.id) n FROM admissions a,seed_param p WHERE a.clinic_id=p.clinic AND a.status='admitted';
+INSERT INTO beds(id,clinic_id,room_id,label,bed_service_id)
+  SELECT b.id,p.clinic,(SELECT id FROM seed_room),'Ўрин '||b.n,(SELECT id FROM seed_service WHERE kind='bed') FROM seed_bed b,seed_param p;
+INSERT INTO bed_assignments(id,clinic_id,admission_id,bed_id,from_at) SELECT gen_random_uuid(),p.clinic,b.admission,b.id,b.admitted_at FROM seed_bed b,seed_param p;
 
 -- Charge lines. Outpatient: consultation by the visit doctor, 0-2 lab/diagnostic lines ordered by that
 -- doctor. Inpatient: one procedure by the attending doctor and one bed line per stay day (counted

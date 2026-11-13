@@ -1,0 +1,14 @@
+# Task 023: audit fixes, money and daily operations
+
+Assigned to: Claude Code or Codex (builder). Review: the other model. Planner: 13 November 2026. Source: Fable whole-system audit of `main` at `06c963f`.
+Base: `main`. Branch: `task-023-money`. Parallel with 022 and 024. Migration: `025_*.sql`. Every fix gets a regression test that fails before it.
+
+1. **P1 One caretaker fee or unpriced bed can stop the next day from opening** (`inpatient/actions.ts:184-191, 231, 67`, `catalog/actions.ts:216`). Refuse to attach a caretaker service or transfer to a bed whose service has no price covering the dates it will bill. A service's first price may be backdated (no earlier price exists); later prices stay forward-only. Daily accrual skips and flags an admission it cannot price ("needs attention" for the ward and administrator) instead of failing the whole day open; discharge shows the same flag instead of failing.
+2. **P1 Payroll blocked once a lab test is confirmed** (`lab/actions.ts:62,119`, `payroll/actions.ts:25,46-49,105`). Lab confirmation records the technician in `completed_by`, never `performer_user_id`. A lab line's performer is the ordering doctor (or none if ordered at registration). Payroll lists only performers who hold the doctor role; whether doctors earn on lab lines is decided by each doctor's split rule categories. Fix the per-doctor report accordingly and migrate existing lab lines.
+3. **P2 Billed-basis pay on services never performed.** Doctor shares count only completed lines (billed basis = billed when performed). Add cancellation: registrar or cashier can cancel an unpaid ordered line with a reason; a doctor can cancel lines they ordered; a visit with no completed lines can be marked "no-show" at day close, cancelling its ordered lines. Cancelled lines leave the bill and the debt.
+4. **P2 Cash-outs have no idempotency, approval or cap** (`cashier/actions.ts:605-638`). Idempotency key per press; manager approval (the task-022 approval flow) for every cash-out above a clinic threshold (default 0, so all need approval); cash-outs listed on the shift close report with approver.
+5. **P2 An accidental day close cannot be undone.** The CEO can reopen the most recent closed day of today's date if no later day exists, with a reason; the earlier close snapshot is kept as a prior version and a new one is written at the next close.
+6. **P2 Ward revenue missing from the day-close snapshot.** Run bed-day and caretaker accrual for the closing date inside day close, before the snapshot, so the stored close report and the live dashboard agree.
+7. **P3** Surgery `performedAt` must fall within the current business day unless a CEO or administrator approves a reason; payroll periods must be contiguous with the previous final period; a cashier's day report shows only their own shifts' totals.
+
+Acceptance: regression tests for each item; the full-day browser test still passes; CI green. Handoff at most 40 lines.

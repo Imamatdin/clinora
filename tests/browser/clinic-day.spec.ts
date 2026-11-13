@@ -38,6 +38,9 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     const serviceId = async (code: string) => (await f.pool.query('SELECT id FROM services WHERE clinic_id=$1 AND code_1c=$2', [c, code])).rows[0].id as string;
     await mkdir(EVIDENCE, { recursive: true });
     const shot = (name: string) => page.screenshot({ path: `${EVIDENCE}/${name}-${width}.png`, fullPage: true });
+    // Cheat-sheet pictures (/help/<role>): the phone view of each role's main step, Uzbek Cyrillic.
+    await mkdir('work/browser-evidence/help', { recursive: true });
+    const helpShot = async (role: string) => { if (width === 360) await page.screenshot({ path: `work/browser-evidence/help/${role}.png` }); };
     const noSideScroll = async () => expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
     const nav = page.getByRole('navigation', { name: T('app.navigation') });
     page.on('dialog', d => void d.accept());
@@ -56,7 +59,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await expect(page.getByRole('heading', { name: T('home.administrator.title'), level: 1 })).toBeVisible();
     await page.getByRole('button', { name: T('day.openButton'), exact: true }).click();
     await expect(page.getByRole('banner').locator('[data-state="open"]')).toBeVisible();
-    await noSideScroll(); await shot('01-admin-opens-day');
+    await noSideScroll(); await shot('01-admin-opens-day'); await helpShot('administrator');
     await signOut();
 
     // 2. Registrar registers two new patients: an outpatient (therapist + laboratory) and one who will be admitted (surgeon).
@@ -76,6 +79,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
         if (service) await page.locator('.registration-services label', { hasText: service }).getByRole('checkbox').check();
       }
       if (admit) await page.getByLabel(T('registration.admit'), { exact: true }).check();
+      else await helpShot('registrar');
       const popup = page.waitForEvent('popup');
       await page.getByRole('button', { name: T('registration.print'), exact: true }).click();
       await (await popup).close();
@@ -104,6 +108,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await dr.getByLabel(T('doctor.rx.dose'), { exact: true }).fill('1 таблетка');
     await dr.getByLabel(T('doctor.rx.frequency'), { exact: true }).fill('кунига 2 марта');
     await dr.getByLabel(T('doctor.rx.duration'), { exact: true }).fill('3 кун');
+    await helpShot('doctor');
     await dr.getByRole('button', { name: T('doctor.save'), exact: true }).click();
     await expect(dr.getByRole('status').filter({ hasText: T('doctor.saved', { revision: 1 }) }).first()).toBeVisible();
     await dr.getByRole('button', { name: T('doctor.approve'), exact: true }).click();
@@ -118,12 +123,14 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
 
     // 4. Laboratory: both tests (registrar's blood count, doctor's glucose) get a result and are confirmed.
     await signIn('day.lab');
-    for (const [param, value, unit] of [['Гемоглобин', '131', 'г/л'], ['Глюкоза', '5.2', 'ммоль/л']]) {
+    // Newest first: the doctor's glucose order, then the registrar's blood count.
+    for (const [param, value, unit] of [['Глюкоза', '5.2', 'ммоль/л'], ['Гемоглобин', '131', 'г/л']]) {
       await expect(dr.getByRole('heading', { name: T('lab.title'), exact: true })).toBeVisible();
       await dr.getByRole('button', { name: T('lab.open'), exact: true }).first().click();
       await dr.getByLabel(T('lab.param'), { exact: true }).fill(param!);
       await dr.getByLabel(T('lab.value'), { exact: true }).fill(value!);
       await dr.getByLabel(T('lab.unit'), { exact: true }).fill(unit!);
+      if (param === 'Глюкоза') await helpShot('laboratory');
       await dr.getByRole('button', { name: T('lab.save'), exact: true }).click();
       await expect(dr.getByRole('status').filter({ hasText: T('lab.saved', { version: 1 }) })).toBeVisible();
       await dr.getByRole('button', { name: T('lab.confirm'), exact: true }).click();
@@ -142,7 +149,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await ph.locator('input[name="qty"]').fill('6');
     await ph.getByRole('button', { name: T('pharmacy.save'), exact: true }).click();
     await expect(ph.getByText(`${T('pharmacy.onHand')}: 494 таблетка`, { exact: true })).toBeVisible();
-    await noSideScroll(); await shot('05-pharmacy-dispensed');
+    await noSideScroll(); await shot('05-pharmacy-dispensed'); await helpShot('pharmacy');
     await signOut();
 
     // 6. Inpatient staff admit the second patient to a ward bed under the surgeon.
@@ -157,6 +164,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await admit.getByRole('button', { name: T('inpatient.admit'), exact: true }).click();
     const stay = page.locator('.stays button').filter({ hasText: 'Синтетик Стационар Бемор' });
     await expect(stay).toHaveCount(1);
+    await helpShot('inpatient');
     await signOut();
     // Two nights pass. Only this isolated synthetic schema is backdated; the app offers no clock override.
     const tx = await f.pool.connect();
@@ -208,6 +216,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await cash.getByLabel(T('cashier.opening'), { exact: true }).fill('50000');
     await cash.getByRole('button', { name: T('cashier.open'), exact: true }).click();
     await expect(cash.getByLabel(T('cashier.shift'), { exact: true })).toBeVisible();
+    await helpShot('cashier');
     const due = async () => BigInt(digits(await cash.getByTestId('cashier-due').innerText()));
     const openPatient = async (no: number, name: string) => {
       await cash.getByLabel(T('cashier.search'), { exact: true }).fill(String(no));
@@ -293,7 +302,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await expect(page.locator('.ceo-kpi-0 strong')).toHaveText(group(gross));
     await expect(page.locator('.ceo-secondary button').filter({ hasText: T('ceo.net') }).locator('b')).toHaveText(group(net));
     await expect(page.locator('.ceo-secondary button').filter({ hasText: T('ceo.refunds') }).locator('b')).toHaveText(group(refunds));
-    await noSideScroll(); await shot('13-ceo-dashboard');
+    await noSideScroll(); await shot('13-ceo-dashboard'); await helpShot('ceo');
     await signOut();
 
     // 14. The therapist sees their own earnings (30% of the completed consultation, billed basis).

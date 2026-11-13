@@ -16,6 +16,7 @@ import { Devices, MyAccess } from './access/staff-access.js';
 import { InstallHint, registerServiceWorker } from './access/install.js';
 import { lockOutbox } from './registration/outbox.js';
 import { OfflineWaiting } from './registration/waiting.js';
+import { HelpPage, helpRole } from './help/page.js';
 import './style.css';
 import './ceo/style.css';
 
@@ -216,7 +217,7 @@ function App() {
         {!onDevice && !inTelegram && <Devices clinicId={clinic.id} request={request} onEnrolled={() => { setMe(null); csrf.current = ''; setSection(''); setDay(null); setNotice(t('access.devices.enrolled')); void refreshDevice(); }} />}</main>}
       {!showMe && clinic && active && active !== 'staff' && <>
         <main className="page home" data-role={active}>
-          <h1>{t(`home.${active}.title` as UiKey)}</h1><p className="muted">{t(`home.${active}.lead` as UiKey)}</p>
+          <h1>{t(`home.${active}.title` as UiKey)}</h1><p className="muted">{t(`home.${active}.lead` as UiKey)} <a className="help-link" href={`/help/${active}`} target="_blank" rel="noopener">{t('app.help')}</a></p>
           {(active === 'ceo' || active === 'administrator') && <DayPanel day={day} busy={busy} compact={active==='ceo'}
             onOpen={() => void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/open`, {}); setNotice(t('day.openedNotice')); } finally { await refreshDay().catch(() => {}); } })}
             onClose={(id, date) => { if (confirm(t('day.closeConfirm', { date }))) void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/${id}/close`, {}); setNotice(t('day.closedNotice')); } finally { await refreshDay().catch(() => {}); } }); }} />}
@@ -237,4 +238,6 @@ function App() {
   </div>;
 }
 registerServiceWorker();
-createRoot(document.getElementById('root')!).render(<App />);
+// Task 017: /help/<role> is a printable cheat sheet, not the signed-in app.
+const onHelp = location.pathname.startsWith('/help/');
+createRoot(document.getElementById('root')!).render(onHelp ? <HelpPage role={helpRole(location.pathname)} /> : <App />);

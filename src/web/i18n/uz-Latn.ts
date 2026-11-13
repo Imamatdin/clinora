@@ -11,10 +11,11 @@ import { doctorUzLatn } from './doctor.uz-Latn.js';
 import { labUzLatn } from './lab.uz-Latn.js';
 import { ceoUzLatn } from './ceo.uz-Latn.js';
 import { catalogUzLatn } from './catalog.uz-Latn.js';
+import { helpUzLatn } from './help.uz-Latn.js';
 
 /** uz-Latn dictionary: the same feature parts as ./uz-Cyrl.ts (each part is typed against its Cyrillic keys). */
 export const UZ_LATN_PARTS = {
   core: coreUzLatn, pharmacy: pharmacyUzLatn, surgery: surgeryUzLatn, access: accessUzLatn, assistant: assistantUzLatn, cashier: cashierUzLatn,
-  inpatient: inpatientUzLatn, registration: registrationUzLatn, doctor: doctorUzLatn, lab: labUzLatn, ceo: ceoUzLatn, catalog: catalogUzLatn,
+  inpatient: inpatientUzLatn, registration: registrationUzLatn, doctor: doctorUzLatn, lab: labUzLatn, ceo: ceoUzLatn, catalog: catalogUzLatn, help: helpUzLatn,
 } as const;
 export const uzLatn = Object.assign({}, ...Object.values(UZ_LATN_PARTS)) as Record<UiKey, string>;

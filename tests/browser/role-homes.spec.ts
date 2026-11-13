@@ -84,6 +84,22 @@ test('role homes: landing module, own navigation and ease-of-use rules in three 
         await expect(page.getByLabel(DICTIONARIES.ru['auth.identifier'], { exact: true })).toBeVisible();
       }
     }
+    // Cheat sheets: one printable page per role, generated from the app, with the role's screenshot.
+    for (const role of Object.keys(LANDING) as Role[]) {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.goto(`${f.origin}/help/${role}`);
+      await page.getByRole('button', { name: 'Ўзб', exact: true }).click();
+      const D = DICTIONARIES['uz-Cyrl'];
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(D['help.title'].replace('{role}', D[`role.${role}` as UiKey]));
+      await expect(page.locator('.help-body ol li')).toHaveCount(5);
+      await expect(page.locator('.help-body')).not.toContainText('{');
+      expect(await page.locator('.help-body img').evaluate(img => (img as HTMLImageElement).complete && (img as HTMLImageElement).naturalWidth > 0)).toBe(true);
+      await page.emulateMedia({ media: 'print' });
+      await page.pdf({ path: `${OUT}/help-${role}.pdf`, format: 'A4' }).catch(() => undefined);
+      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(1123); // one A4 page at 96 dpi
+      await page.emulateMedia({ media: 'screen' });
+      await page.screenshot({ path: `${OUT}/help-${role}.png`, fullPage: true });
+    }
     expect([...new Set(problems)]).toEqual([]);
   } finally { await f.close(); }
 });

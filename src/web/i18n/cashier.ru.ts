@@ -55,4 +55,10 @@ export const cashierRu: Record<keyof typeof cashier, string> = {
   "cashier.refundConfirm": "Подтвердить возврат {amount}?",
   "cashier.closeConfirm": "Пересчитано наличных: {amount}. Закрыть смену?",
   "cashier.outConfirm": "Подтвердить расход из кассы {amount}?",
+  "cashier.cancelLine": "Отменить",
+  "cashier.cancelled": "Отменено",
+  "cashier.outApprover": "Кто подтверждает расход",
+  "cashier.outPin": "PIN подтверждающего",
+  "cashier.cashOutList": "Расходы из кассы",
+  "cashier.approvedBy": "Подтвердил: {name}",
 };

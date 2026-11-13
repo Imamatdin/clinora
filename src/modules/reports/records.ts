@@ -8,7 +8,7 @@ export const Range = z.object({ from: date, to: date }).strict().refine(v => v.f
   (Date.parse(v.to) - Date.parse(v.from)) / 86400000 <= 366);
 export type Period = z.infer<typeof Range>;
 export type Row = Record<string, any>;
-export type Records = { clinic: Row; version?:string; doctorDiscounts?:Row[]; activities?:Row[]; open?:OpenBalances; visits: Row[]; charges: Row[]; discounts: Row[]; payments: Row[]; allocations: Row[]; adjustments: Row[]; cashOuts: Row[]; rules: Row[]; shifts: Row[] };
+export type Records = { clinic: Row; version?:string; doctorIds?:string[]; doctorDiscounts?:Row[]; activities?:Row[]; open?:OpenBalances; visits: Row[]; charges: Row[]; discounts: Row[]; payments: Row[]; allocations: Row[]; adjustments: Row[]; cashOuts: Row[]; rules: Row[]; shifts: Row[] };
 type VisitLedger={charges:Row[];discounts:Row[];payments:Row[];allocations:Row[];adjustments:Row[]};
 const scopedDiscounts=new WeakMap<Records,Map<string,Map<string,string>>>();
 const cached=new WeakMap<Records,{visits:Map<string,Row>;charges:Map<string,Row>;ledger:Map<string,VisitLedger>}>();
@@ -53,7 +53,8 @@ export async function records(c: ClinicContext, p: Period, options: {outstanding
   // that a later statement sees has already moved it, and day close (which re-checks the version under
   // the day lock) rejects a snapshot that mixes states.
   const head = (await q(`SELECT (SELECT to_jsonb(x) FROM clinics x WHERE id=$1) clinic,
-    coalesce((SELECT version::text FROM report_versions WHERE clinic_id=$1),'0') version`, [c.clinicId]))[0]!;
+    coalesce((SELECT version::text FROM report_versions WHERE clinic_id=$1),'0') version,
+    coalesce((SELECT jsonb_agg(DISTINCT r.user_id) FROM membership_roles r WHERE r.clinic_id=$1 AND r.role='doctor'),'[]') "doctorIds"`, [c.clinicId]))[0]!;
   let cohort = await q(`WITH ${BOUNDS}, ${EVENTS} SELECT e.id,e.date::text date FROM events e`, [c.clinicId,p.from,p.to]) as {id:string;date:string}[];
   let ids = [...new Set(cohort.map(r=>r.id))];
   if (doctor) {
@@ -102,7 +103,7 @@ export async function records(c: ClinicContext, p: Period, options: {outstanding
         a.display_name cashier,d.business_date::text date
       FROM cash_shifts s JOIN accounts a ON a.id=s.cashier_user_id JOIN business_days d ON d.id=s.business_day_id AND d.clinic_id=s.clinic_id,bounds t
       WHERE s.clinic_id=$1 AND $5::uuid IS NULL AND d.business_date BETWEEN t.lo AND t.hi) x),'[]') shifts`, args))[0]!;
-  const data = { clinic: head.clinic, version: head.version, visits, charges, payments, allocations, ...rest } as Records;
+  const data = { clinic: head.clinic, version: head.version, doctorIds: head.doctorIds, visits, charges, payments, allocations, ...rest } as Records;
   if (doctor) data.activities = cohort.map(e=>({visit_id:e.id,date:e.date}));
   if (options.outstanding && !doctor) data.open = await openBalances(c, p);
   return data;
@@ -143,10 +144,13 @@ export async function openBalances(c: ClinicContext, p: Period): Promise<OpenBal
     lines AS (SELECT q.visit_id,q.charge_line_id,q.service_id,q.performer_user_id,q.payable,coalesce(y.amount,0) paid,q.review FROM parts q LEFT JOIN paid y ON y.charge_line_id=q.charge_line_id),
     -- calculateInvoice rejects these visits (INVALID_TRANSITION / TypeError): list them for review.
     review AS (SELECT DISTINCT visit_id FROM lines WHERE review OR paid<0 OR paid>payable),
+    -- Task 023: only performers holding the doctor role get their own group; anyone else falls under "—".
     owed AS (
-      SELECT l.visit_id,l.payable-l.paid amount,l.performer_user_id doctor_id,a.display_name doctor,s.department_id,dp.name_uz_cyrl department
+      SELECT l.visit_id,l.payable-l.paid amount,a.id doctor_id,a.display_name doctor,s.department_id,dp.name_uz_cyrl department
       FROM lines l JOIN services s ON s.clinic_id=$1 AND s.id=l.service_id
-      LEFT JOIN accounts a ON a.id=l.performer_user_id LEFT JOIN departments dp ON dp.clinic_id=$1 AND dp.id=s.department_id
+      LEFT JOIN accounts a ON a.id=l.performer_user_id
+        AND EXISTS(SELECT 1 FROM membership_roles r WHERE r.clinic_id=$1 AND r.user_id=l.performer_user_id AND r.role='doctor')
+      LEFT JOIN departments dp ON dp.clinic_id=$1 AND dp.id=s.department_id
       WHERE l.payable<>l.paid AND l.visit_id NOT IN (SELECT visit_id FROM review)
     ),
     grouped AS (
@@ -206,7 +210,9 @@ export function invoiceAt(data: Records, visit: Row, until: string): readonly Li
   }));
   const invoice = calculateInvoice(charges.sort((a,b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)).map(l => ({
     id: l.id, unitPrice: uzs(l.unit_price_uzs), quantity: l.quantity,
-    status: l.cancelled_at && dateOf(l.cancelled_at) > until ? 'ordered' : l.status,
+    // As of `until`: a later cancellation or completion has not happened yet (task 023: shares need a completed line).
+    status: l.cancelled_at && dateOf(l.cancelled_at) > until ? (l.completed_at && dateOf(l.completed_at) <= until ? 'completed' : 'ordered')
+      : l.status === 'completed' && l.completed_at && dateOf(l.completed_at) > until ? 'ordered' : l.status,
     category: l.kind, ...(l.performer_user_id ? { doctorId: l.performer_user_id } : {})
   })), discounts, []);
   const payments = new Map(ledger.payments.filter(p => p.date <= until).map(p => [p.id, p]));

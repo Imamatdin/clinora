@@ -12,7 +12,7 @@ import { AssistantPanel } from './assistant/panel.js';
 import { registerVisitPanel } from './doctor/panels.js';
 import { Staff } from './staff.js';
 import { LockScreen, useIdleLock, type DeviceInfo } from './access/device.js';
-import { Devices, MyAccess } from './access/staff-access.js';
+import { AccountNotices, Devices, MyAccess, type AccountNotice } from './access/staff-access.js';
 import { InstallHint, registerServiceWorker } from './access/install.js';
 import { lockOutbox } from './registration/outbox.js';
 import { OfflineWaiting } from './registration/waiting.js';
@@ -23,7 +23,7 @@ import './ceo/style.css';
 // Task 003C assistant inside the task 010 visit screen (one line per visit panel).
 registerVisitPanel({ id: 'assistant', Panel: ({ onChanged, ...p }) => <AssistantPanel {...p} onApproved={onChanged} /> });
 
-type Me = { id: string; name: string; csrf: string; mustChangePassword: boolean; clinics: ClinicMembershipView[]; professionalVerification: { status: string };
+type Me = { id: string; name: string; csrf: string; mustChangePassword: boolean; pinChangeRequired?: boolean; notices?: AccountNotice[]; clinics: ClinicMembershipView[]; professionalVerification: { status: string };
   session: { via: 'password' | 'telegram' | 'device'; deviceId: string | null; deviceLabel: string | null; idleMinutes: number | null } };
 type Section = Role | 'staff';
 const sectionLabel = (s: Section) => s === 'staff' ? t('nav.staff') : t(`role.${s}` as UiKey);
@@ -54,7 +54,7 @@ function Planned({ role }: { role: Role }) {
 function App() {
   useLocale(); // re-render every screen when the interface language changes
   const [reportDayId] = useState(() => new URLSearchParams(location.search).get('report'));
-  const [me, setMe] = useState<Me | null>(null), [loading, setLoading] = useState(true), [mode, setMode] = useState<'login' | 'register'>('login');
+  const [me, setMe] = useState<Me | null>(null), [loading, setLoading] = useState(true);
   const [clinicId, setClinicId] = useState(''), [section, setSection] = useState<Section | ''>('');
   const [day, setDay] = useState<CurrentDayView | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -149,10 +149,8 @@ function App() {
   async function signIn(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); const f = new FormData(e.currentTarget);
     await run(async () => {
-      if (mode === 'register') {
-        await request('/api/auth/register', { email: f.get('email'), displayName: f.get('name'), password: f.get('password') });
-        setMode('login'); setNotice(t('auth.registered'));
-      } else { await request('/api/auth/login', { identifier: f.get('identifier'), password: f.get('password') }); await refreshMe(); setPasswordOnDevice(false); }
+      // Task 022: no public self-registration; staff accounts are created by an administrator.
+      await request('/api/auth/login', { identifier: f.get('identifier'), password: f.get('password') }); await refreshMe(); setPasswordOnDevice(false);
     });
   }
   async function changePassword(e: FormEvent<HTMLFormElement>) {
@@ -183,17 +181,13 @@ function App() {
     </main> :
     !me && device?.enrolled && !passwordOnDevice ? <><OfflineWaiting me={null} /><LockScreen device={device} request={request} notice={notice} onPassword={() => { setPasswordOnDevice(true); setNotice(''); }}
       onUnlocked={async () => { setNotice(''); await refreshMe(); }} /></> :
-    !me ? <main className="auth"><p className="eyebrow">{t('auth.eyebrow')}</p><h1>{mode === 'login' ? t('auth.welcome') : t('auth.createTitle')}</h1><p className="muted">{t('auth.lead')}</p>
+    !me ? <main className="auth"><p className="eyebrow">{t('auth.eyebrow')}</p><h1>{t('auth.welcome')}</h1><p className="muted">{t('auth.lead')}</p>
       <form onSubmit={signIn}>
-        {mode === 'login'
-          ? <label>{t('auth.identifier')}<input name="identifier" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} /></label>
-          : <><label>{t('auth.email')}<input name="email" type="email" autoComplete="username" required maxLength={254} /></label><label>{t('auth.fullName')}<input name="name" required maxLength={160} autoComplete="name" /></label></>}
-        <label>{t('auth.password')}<input name="password" type="password" required minLength={mode === 'register' ? 12 : 1} maxLength={128} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /></label>
-        <button disabled={busy} className="primary big">{busy ? t('app.wait') : mode === 'login' ? t('auth.signIn') : t('auth.createUnprivileged')}</button>
+        <label>{t('auth.identifier')}<input name="identifier" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} /></label>
+        <label>{t('auth.password')}<input name="password" type="password" required minLength={1} maxLength={128} autoComplete="current-password" /></label>
+        <button disabled={busy} className="primary big">{busy ? t('app.wait') : t('auth.signIn')}</button>
       </form>
       <p className="fine">{t('auth.staffNote')}</p>
-      <button className="link" disabled={busy} onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}>{mode === 'login' ? t('auth.toRegister') : t('auth.toLogin')}</button>
-      {mode === 'register' && <p className="fine">{t('auth.registrationNote')}</p>}
       {device?.enrolled && <button className="link" onClick={() => { setPasswordOnDevice(false); setError(''); }}>{t('access.device.backToList')}</button>}
       {error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</main> :
     me.mustChangePassword ? <main className="auth"><h1>{t('password.title')}</h1><p className="muted">{t('password.lead')}</p>
@@ -207,6 +201,8 @@ function App() {
       {me.clinics.length > 1 && <div className="clinicbar"><label>{t('app.clinic')}<select aria-label={t('app.clinic')} value={clinicId} disabled={busy} onChange={e => { const id = e.target.value; guard(() => { setDirty(false); setClinicId(id); setSection(''); }); }}>{me.clinics.map(c => <option value={c.id} key={c.id}>{c.name}</option>)}</select></label></div>}
       {sections.length > 1 && <nav className="sections" aria-label={t('app.navigation')}>{sections.map(s => <button key={s} className={s === active ? 'current' : ''} aria-current={s === active ? 'page' : undefined} disabled={busy} onClick={() => guard(() => { setDirty(false); setSection(s); })}>{sectionLabel(s)}</button>)}</nav>}
       {banners}
+      <AccountNotices notices={me.notices ?? []} pinChangeRequired={!!me.pinChangeRequired && !onDevice && !!clinic} request={request}
+        onOpenPin={() => guard(() => { setDirty(false); setShowMe(true); })} onDone={() => void refreshMe()} />
       {!onDevice && <InstallHint />}
       {(!clinic || invite) && <section className="pending"><h1>{t('notebook.pendingTitle')}</h1><p>{t('notebook.pendingLead')}</p><p className="fine">{t('app.verification', { status: t(`verification.${me.professionalVerification.status}` as UiKey) })}</p>
         <form onSubmit={e => { e.preventDefault(); void run(async () => { await request('/api/invitations/accept', { token: invite }); setInvite(''); await refreshMe(); setNotice(t('notebook.inviteAccepted')); }); }}>
@@ -220,7 +216,13 @@ function App() {
           <h1>{t(`home.${active}.title` as UiKey)}</h1><p className="muted">{t(`home.${active}.lead` as UiKey)} <a className="help-link" href={`/help/${active}`} target="_blank" rel="noopener">{t('app.help')}</a></p>
           {(active === 'ceo' || active === 'administrator') && <DayPanel day={day} busy={busy} compact={active==='ceo'}
             onOpen={() => void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/open`, {}); setNotice(t('day.openedNotice')); } finally { await refreshDay().catch(() => {}); } })}
-            onClose={(id, date) => { if (confirm(t('day.closeConfirm', { date }))) void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/${id}/close`, {}); setNotice(t('day.closedNotice')); } finally { await refreshDay().catch(() => {}); } }); }} />}
+            onClose={(id, date) => { if (confirm(t('day.closeConfirm', { date }))) void run(async () => { try {
+              // Task 023: visits where nothing was performed can be marked as no-shows before the close.
+              const absent = await request<{ visitId: string; patient: string }[]>(`/api/clinics/${clinic.id}/business-days/${id}/no-show`);
+              if (absent.length && confirm(t('day.noShowConfirm', { count: String(absent.length), names: absent.slice(0, 10).map(v => v.patient).join(', ') })))
+                await request(`/api/clinics/${clinic.id}/business-days/${id}/no-show`, { idempotencyKey: crypto.randomUUID(), visitIds: absent.map(v => v.visitId) });
+              await request(`/api/clinics/${clinic.id}/business-days/${id}/close`, {}); setNotice(t('day.closedNotice')); } finally { await refreshDay().catch(() => {}); } }); }}
+            onReopen={roles.includes('ceo') ? (id) => { const reason = prompt(t('day.reopenReason'))?.trim(); if (reason) void run(async () => { try { await request(`/api/clinics/${clinic.id}/business-days/${id}/reopen`, { reason }); setNotice(t('day.reopenedNotice')); } finally { await refreshDay().catch(() => {}); } }); } : undefined} />}
           <RoleModules key={`${clinic.id}:${active}`} role={active} busy={busy} guard={guard} props={{ clinic, request, day, myId: me.id, offlineDeviceId: onDevice ? me.session.deviceId : null, setDirty, reportDayId }} />
           <Planned role={active} />
         </main>

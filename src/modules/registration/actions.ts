@@ -293,12 +293,14 @@ export async function createVisit(ctx: ClinicContext, raw: z.input<typeof VisitI
         const price = await priceAt(ctx.tx, ctx.clinicId, serviceId, at);
         if (!price) return fail('INVALID_TRANSITION'); // Never charge an unpriced service as zero.
         await ctx.tx.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,performer_user_id,queue_ticket_id,quantity,unit_price_uzs,status,source,created_by)
-          VALUES($1,$2,$3,$4,$5,$6,1,$7,'ordered','registration',$8)`,
+          VALUES($1,$2,$3,$4,CASE WHEN (SELECT kind FROM services WHERE clinic_id=$2 AND id=$4)='lab' THEN NULL ELSE $5::uuid END,$6,1,$7,'ordered','registration',$8)`, // Task 023: a lab ordered at registration has no performer.
           [randomUUID(), ctx.clinicId, visitId, serviceId, point.kind === 'doctor' ? point.user_id : null, ticketId, price.priceUzs.toString(), ctx.actorId]);
         charges++;
       }
       if (point.kind === 'doctor')
-        await ctx.tx.query('INSERT INTO patient_assignments(clinic_id,patient_id,user_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING', [ctx.clinicId, person.id, point.user_id]);
+        // Task 022: the grant belongs to this visit; re-routing an earlier patient moves it here and renews it.
+        await ctx.tx.query(`INSERT INTO patient_assignments(clinic_id,patient_id,user_id,visit_id) VALUES($1,$2,$3,$4)
+          ON CONFLICT (clinic_id,patient_id,user_id) DO UPDATE SET visit_id=EXCLUDED.visit_id, granted_at=now()`, [ctx.clinicId, person.id, point.user_id, visitId]);
       tickets.push({ id: ticketId, queuePointId: point.id, number, status: 'waiting', names: names(point) });
     }
     await withAudit(ctx.tx, ctx, 'registration.visit_created', visitId, { tickets: tickets.length, charges, businessDayId: day.id });
@@ -316,7 +318,7 @@ const TICKET_SELECT = `SELECT t.id,t.number,t.status,t.queue_point_id,t.called_a
   JOIN business_days d ON d.clinic_id=t.clinic_id AND d.id=t.business_day_id AND d.status='open'
   JOIN visits v ON v.clinic_id=t.clinic_id AND v.id=t.visit_id JOIN patients p ON p.clinic_id=v.clinic_id AND p.id=v.patient_id`;
 /** A doctor sees a ticket only at their own point and only while the patient is still assigned to them. */
-const OWN = `q.kind='doctor' AND q.user_id=$2 AND EXISTS (SELECT 1 FROM patient_assignments a WHERE a.clinic_id=p.clinic_id AND a.patient_id=p.id AND a.user_id=$2)`;
+const OWN = `q.kind='doctor' AND q.user_id=$2 AND patient_access_active(p.clinic_id, p.id, $2)`;
 const ticketView = (r: any) => ({ id: r.id, number: r.number, status: r.status, queuePointId: r.queue_point_id, names: names(r), visitId: r.visit_id,
   calledAt: r.called_at, startedAt: r.started_at, completedAt: r.completed_at,
   patient: { id: r.patient_id, patientNo: r.patient_no, fullName: r.full_name, birthDate: r.birth_date, gender: r.gender } });
@@ -371,7 +373,7 @@ export async function callNext(ctx: ClinicContext, raw: z.input<typeof CallNextI
   });
 }
 async function assigned(ctx: ClinicContext, patientId: string): Promise<boolean> {
-  return !!(await ctx.tx.query('SELECT 1 FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3 FOR SHARE', [ctx.clinicId, patientId, ctx.actorId])).rowCount;
+  return !!(await ctx.tx.query('SELECT 1 WHERE patient_access_active($1,$2,$3)', [ctx.clinicId, patientId, ctx.actorId])).rowCount;
 }
 
 /**

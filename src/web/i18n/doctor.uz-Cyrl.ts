@@ -89,5 +89,7 @@ export const doctor = {
   'doctor.complete': 'Қабулни якунлаш',
   'doctor.completeConfirm': 'Қабулни якунлайсизми? Кўрик хизмати бажарилган деб белгиланади.',
   'doctor.completed': 'Қабул якунланди.',
-  'doctor.otherFields': 'Овозли ёрдамчи орқали тасдиқланган майдонлар'
+  'doctor.otherFields': 'Овозли ёрдамчи орқали тасдиқланган майдонлар',
+  "doctor.cancelOrder": "Буюртмани бекор қилиш",
+  "doctor.cancelReason": "Бекор қилиш сабаби",
 } as const;

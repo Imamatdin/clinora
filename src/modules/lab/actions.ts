@@ -58,8 +58,9 @@ export async function orders(ctx: ClinicContext) {
  * each waiting line completes once, attributed to the new day; the closed day it was ordered on is untouched.
  */
 export async function postPendingConfirmations(ctx: ClinicContext, dayId: string) {
+  // Task 023: the technician is recorded in completed_by only. A lab line's performer stays the ordering doctor (or none).
   const posted = (await ctx.tx.query(`UPDATE charge_lines l SET status='completed', completed_by=p.requested_by, completed_at=now(),
-      performer_user_id=coalesce(l.performer_user_id,p.requested_by), completed_business_day_id=$2
+      completed_business_day_id=$2
     FROM lab_pending_confirmations p WHERE p.clinic_id=$1 AND p.posted_at IS NULL AND l.clinic_id=p.clinic_id AND l.id=p.charge_line_id AND l.status='ordered'
     RETURNING l.id`, [ctx.clinicId, dayId])).rows;
   await ctx.tx.query('UPDATE lab_pending_confirmations SET posted_business_day_id=$2, posted_at=now() WHERE clinic_id=$1 AND posted_at IS NULL', [ctx.clinicId, dayId]);
@@ -116,7 +117,7 @@ export async function confirm(ctx: ClinicContext, id: string, raw: z.input<typeo
       await recordAudit(c.tx, c.actorId, c.clinicId, 'lab.confirmation_pending', id, { version: r.result_version, visitDate: r.visit_date });
       return { id, status: 'pending', completedNow: false, visitDate: r.visit_date as string };
     }
-    const done = (await c.tx.query(`UPDATE charge_lines SET status='completed', completed_by=$3, completed_at=now(), performer_user_id=coalesce(performer_user_id,$3),
+    const done = (await c.tx.query(`UPDATE charge_lines SET status='completed', completed_by=$3, completed_at=now(),
       completed_business_day_id=$4 WHERE clinic_id=$1 AND id=$2 AND status='ordered'`, [c.clinicId, id, c.actorId, day.id])).rowCount;
     await recordAudit(c.tx, c.actorId, c.clinicId, 'lab.confirmed', id, { version: r.result_version, ...(late ? { late: true, visitDate: r.visit_date, postedTo: day.date } : {}) });
     return { id, status: 'completed', completedNow: !!done, ...(late ? { late: true, visitDate: r.visit_date as string, postedTo: day.date as string } : {}) };

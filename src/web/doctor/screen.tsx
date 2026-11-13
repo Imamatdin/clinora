@@ -15,7 +15,7 @@ type Visit = {
   visitOpen: boolean; ticket: { id: string; number: number; status: string } | null;
   revision: number; versionId: string | null; kind: string | null; amendmentReason: string | null;
   note: Note; prescription: Rx[]; otherFields: { key: string; value: unknown }[]; approval: Approval | null;
-  charges: { id: string; service: string; kind: string; status: string; quantity: number; unitPriceUzs: string; resultVersion: number | null }[];
+  charges: { id: string; service: string; kind: string; status: string; quantity: number; unitPriceUzs: string; resultVersion: number | null; mine: boolean }[];
 };
 type Card = {
   patient: { id: string; name: string; patientNo: number | null; birthDate: string | null };
@@ -193,6 +193,8 @@ function VisitScreen({ t, clinicId, base, request, encounterId, patientId, setDi
     const r = await post<{ revision: number }>('/approve', { expectedRevision: visit.revision });
     await reload(); setNotice(t('doctor.approvedNotice', { revision: r.revision }));
   }); };
+  const cancelOrder = (lineId: string) => { const reason = prompt(t('doctor.cancelReason'))?.trim(); if (reason) void run(async () => {
+    await request(`/api/clinics/${clinicId}/charges/${lineId}/cancel`, { idempotencyKey: crypto.randomUUID(), reason }); await reload(false); }); };
   const order = () => void run(async () => { await post('/orders', { items: [{ serviceId: service, quantity: 1 }] }); await reload(false); setNotice(t('doctor.ordered')); });
   const complete = () => { if (visit.ticket && confirm(t('doctor.completeConfirm'))) void run(async () => {
     const scope = `complete:${visit.ticket!.id}`;
@@ -257,7 +259,9 @@ function VisitScreen({ t, clinicId, base, request, encounterId, patientId, setDi
         {!visit.charges.length ? <p className="fine">{t('doctor.noCharges')}</p> : <ul className="dr-list">{visit.charges.map(l => <li key={l.id}>
           <span>{l.service}</span><span className="fine">{t('doctor.price', { amount: money(l.unitPriceUzs) })}</span>
           <span className={l.status === 'completed' ? 'tag ok' : 'tag'}>{t(`doctor.charge.${l.status}` as DoctorKey)}</span>
-          {l.resultVersion && <span className="tag ok">{t('doctor.resultReady', { version: l.resultVersion })}</span>}</li>)}</ul>}
+          {l.resultVersion && <span className="tag ok">{t('doctor.resultReady', { version: l.resultVersion })}</span>}
+          {/* Task 023: a doctor can cancel an order they placed that was not performed (an unpaid line; the server checks). */}
+          {l.mine && l.status === 'ordered' && visit.visitOpen && <button disabled={busy} onClick={() => cancelOrder(l.id)}>{t('doctor.cancelOrder')}</button>}</li>)}</ul>}
         {visit.ticket && visit.ticket.status !== 'completed' && <button className="primary big" disabled={busy} onClick={complete}>{t('doctor.complete')}</button>}
       </section>
     </div>

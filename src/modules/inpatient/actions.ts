@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { DomainError } from '../identity/access.js';
 import { calculateInvoice, countBedDays, uzs, type BedDayRule, type Discount } from '../billing/index.js';
 import { requireRole, recordAudit, type ClinicContext } from '../../server/roles.js';
-import { passwordMatches } from '../../server/security.js';
+import { verifyApproverPin } from '../identity/approval-pin.js';
 import { priceAt } from '../../server/repo/prices.js';
 import { dispense } from '../pharmacy/actions.js';
 import { AdmitInput, TransferInput, ServiceInput, CaretakerInput, DailyInput, KeyInput, ChangeRuleInput, RuleInput, type InvoiceView, type WardView } from './contracts.js';
@@ -70,30 +70,18 @@ async function line(ctx:ClinicContext,visit:string,service:string,quantity:numbe
     VALUES($1,$2,$3,$4,$5,$6,'completed',$7,$8,$9,$8,$9)`,[id,ctx.clinicId,visit,service,quantity,price.priceUzs.toString(),source,ctx.actorId,postedAt]);
   return id;
 }
-const OVERRIDE_MAX_ATTEMPTS=5;
 /**
- * A CEO/administrator approves an out-of-stock ward dispense by typing their PIN on the same
- * shared PC. Failures are counted per approver and device in their own table, never on the
- * sign-in PIN counter, and lock that pair for 15 minutes after five tries. The caller must
- * commit before reporting a refusal so the counter is never rolled back.
+ * A CEO/administrator approves an out-of-stock ward dispense by typing their PIN on the same shared PC.
+ * Task 022: the PIN goes through the one approver counter shared with cashier approvals (identity/approval-pin.ts):
+ * five failures from any device lock approving until a CEO or another administrator clears it. The stay and
+ * service are checked first, so a guess is never counted against nothing. The caller must commit before
+ * reporting a refusal so the counter is never rolled back.
  */
-async function approveOverride(ctx:ClinicContext,o:{approverId:string;pin:string}):Promise<string|null> {
+async function approveOverride(ctx:ClinicContext,stayId:string,serviceId:string,o:{approverId:string;pin:string}):Promise<string|null> {
   if(!ctx.deviceId||!(await ctx.tx.query('SELECT 1 FROM devices WHERE id=$1 AND clinic_id=$2 AND revoked_at IS NULL',[ctx.deviceId,ctx.clinicId])).rowCount)return null;
-  const approver=(await ctx.tx.query(`SELECT p.pin_hash FROM account_pins p JOIN accounts a ON a.id=p.account_id AND a.status='active' AND NOT a.must_change_password
-    JOIN memberships m ON m.user_id=a.id AND m.clinic_id=$2 AND m.status='active'
-    WHERE p.account_id=$1 AND EXISTS(SELECT 1 FROM membership_roles r WHERE r.clinic_id=m.clinic_id AND r.user_id=m.user_id AND r.role IN ('ceo','administrator'))`,[o.approverId,ctx.clinicId])).rows[0];
-  if(!approver){await passwordMatches(o.pin,'00000000000000000000000000000000:'+'00'.repeat(64));return null;}
-  await ctx.tx.query('INSERT INTO ward_override_attempts(approver_id,device_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[o.approverId,ctx.deviceId]);
-  const attempts=(await ctx.tx.query(`SELECT failed_attempts,locked_at>now()-interval '15 minutes' locked FROM ward_override_attempts WHERE approver_id=$1 AND device_id=$2 FOR UPDATE`,[o.approverId,ctx.deviceId])).rows[0];
-  if(attempts.locked)return null;
-  if(await passwordMatches(o.pin,approver.pin_hash)){
-    await ctx.tx.query('UPDATE ward_override_attempts SET failed_attempts=0,locked_at=NULL WHERE approver_id=$1 AND device_id=$2',[o.approverId,ctx.deviceId]);
-    return o.approverId;
-  }
-  // An expired lock starts a fresh count.
-  const failed=(attempts.locked===false?0:attempts.failed_attempts)+1;
-  await ctx.tx.query('UPDATE ward_override_attempts SET failed_attempts=$3,locked_at=CASE WHEN $3>=$4::int THEN now() ELSE NULL END WHERE approver_id=$1 AND device_id=$2',
-    [o.approverId,ctx.deviceId,Math.min(failed,OVERRIDE_MAX_ATTEMPTS),OVERRIDE_MAX_ATTEMPTS]);
+  if(!(await ctx.tx.query("SELECT 1 FROM admissions WHERE clinic_id=$1 AND id=$2 AND status='admitted'",[ctx.clinicId,stayId])).rowCount)return fail('NOT_FOUND');
+  if(!(await ctx.tx.query('SELECT 1 FROM services WHERE clinic_id=$1 AND id=$2 AND is_active',[ctx.clinicId,serviceId])).rowCount)return fail('INVALID_INPUT');
+  if(await verifyApproverPin(ctx,o.approverId,o.pin))return o.approverId;
   await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.override_failed',o.approverId,{deviceId:ctx.deviceId});
   return null;
 }
@@ -121,7 +109,7 @@ export async function ward(ctx:ClinicContext):Promise<WardView> {
       ac.display_name attending,a.attending_user_id FROM admissions a JOIN visits v ON v.id=a.visit_id JOIN patients p ON p.id=v.patient_id
       JOIN accounts ac ON ac.id=a.attending_user_id LEFT JOIN bed_assignments ba ON ba.admission_id=a.id AND ba.to_at IS NULL
       LEFT JOIN beds b ON b.id=ba.bed_id LEFT JOIN rooms r ON r.id=b.room_id
-      WHERE a.clinic_id=$1 AND (NOT $2::boolean OR (a.attending_user_id=$3 AND EXISTS(SELECT 1 FROM patient_assignments pa WHERE pa.clinic_id=a.clinic_id AND pa.patient_id=v.patient_id AND pa.user_id=$3)))
+      WHERE a.clinic_id=$1 AND (NOT $2::boolean OR (a.attending_user_id=$3 AND patient_access_active(a.clinic_id,v.patient_id,$3)))
       ORDER BY a.status,r.name,b.label,a.admitted_at DESC`,[ctx.clinicId,doctorOnly,ctx.actorId]),
     ctx.tx.query('SELECT bed_day_rule FROM clinic_settings WHERE clinic_id=$1',[ctx.clinicId])
   ]);
@@ -130,7 +118,8 @@ export async function ward(ctx:ClinicContext):Promise<WardView> {
     JOIN accounts a ON a.id=m.user_id AND a.status='active' JOIN account_pins p ON p.account_id=a.id
     WHERE m.clinic_id=$1 AND m.status='active' AND EXISTS(SELECT 1 FROM membership_roles r WHERE r.clinic_id=m.clinic_id AND r.user_id=m.user_id AND r.role IN ('ceo','administrator'))
     ORDER BY a.display_name,a.id`,[ctx.clinicId])).rows:[];
-  return JSON.parse(json({today:c.today,rule:settings.rows[0].bed_day_rule,effectiveRule:await ruleAt(ctx,c.today),beds:beds.rows,visits:visits.rows,departments:departments.rows,doctors:doctors.rows,services:services.rows,admissions:admissions.rows,approvers}));
+  const flags=doctorOnly?[]:await attention(ctx);
+  return JSON.parse(json({attention:flags,today:c.today,rule:settings.rows[0].bed_day_rule,effectiveRule:await ruleAt(ctx,c.today),beds:beds.rows,visits:visits.rows,departments:departments.rows,doctors:doctors.rows,services:services.rows,admissions:admissions.rows,approvers}));
 }
 export async function admit(ctx:ClinicContext,raw:unknown) {
   const i=parse(AdmitInput,raw);await guard(ctx);
@@ -149,15 +138,17 @@ export async function admit(ctx:ClinicContext,raw:unknown) {
     const id=randomUUID();
     await ctx.tx.query('INSERT INTO admissions(id,clinic_id,visit_id,department_id,attending_user_id,admitted_at,expected_discharge) VALUES($1,$2,$3,$4,$5,$6,$7)',[id,ctx.clinicId,i.visitId,i.departmentId,i.doctorId,c.instant,i.expectedDischarge]);
     await ctx.tx.query('INSERT INTO bed_assignments(id,clinic_id,admission_id,bed_id,from_at) VALUES($1,$2,$3,$4,$5)',[randomUUID(),ctx.clinicId,id,i.bedId,c.instant]);
-    await ctx.tx.query(`INSERT INTO patient_assignments(clinic_id,patient_id,user_id) VALUES($1,$2,$3)
-      ON CONFLICT(clinic_id,patient_id,user_id) DO NOTHING`,[ctx.clinicId,v.patient_id,i.doctorId]);
+    await ctx.tx.query(`INSERT INTO patient_assignments(clinic_id,patient_id,user_id,visit_id) VALUES($1,$2,$3,$4)
+      ON CONFLICT(clinic_id,patient_id,user_id) DO UPDATE SET visit_id=EXCLUDED.visit_id,granted_at=now()`,[ctx.clinicId,v.patient_id,i.doctorId,i.visitId]);
     await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.admitted',id);return {id};
   });
 }
 export async function transfer(ctx:ClinicContext,id:string,raw:unknown) {
   const i=parse(TransferInput,raw);await guard(ctx);
   return retry(ctx,i.key,{action:'transfer',id,...i},async()=>{
-    const a=await stay(ctx,id);await freeBed(ctx,i.bedId,a.department_id);const c=await clock(ctx);
+    const a=await stay(ctx,id);const bed=await freeBed(ctx,i.bedId,a.department_id);const c=await clock(ctx);
+    // Task 023: the new bed bills from its first full date on; a price in force now covers every later date.
+    if(!await priceAt(ctx.tx,ctx.clinicId,bed.bed_service_id,c.instant))return fail('INVALID_INPUT');
     await ctx.tx.query('UPDATE bed_assignments SET to_at=$3 WHERE clinic_id=$1 AND admission_id=$2 AND to_at IS NULL',[ctx.clinicId,id,c.instant]);
     await ctx.tx.query('INSERT INTO bed_assignments(id,clinic_id,admission_id,bed_id,from_at) VALUES($1,$2,$3,$4,$5)',[randomUUID(),ctx.clinicId,id,i.bedId,c.instant]);
     await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.transferred',id);return {id};
@@ -166,7 +157,7 @@ export async function transfer(ctx:ClinicContext,id:string,raw:unknown) {
 /** Returns `{refused}` (mapped to 403 after commit) when an override approval PIN is not accepted. */
 export async function addService(ctx:ClinicContext,id:string,raw:unknown):Promise<{id:string}|{refused:true}> {
   const i=parse(ServiceInput,raw);await guard(ctx);
-  const approverId=i.override?await approveOverride(ctx,i.override):undefined;
+  const approverId=i.override?await approveOverride(ctx,id,i.serviceId,i.override):undefined;
   if(approverId===null)return {refused:true};
   // The PIN is never stored: the replay payload keeps only the reason and the approver.
   const override=i.override&&{reason:i.override.reason,approverId:i.override.approverId};
@@ -186,9 +177,45 @@ export async function addCaretaker(ctx:ClinicContext,id:string,raw:unknown) {
   return retry(ctx,i.key,{action:'caretaker',id,...i},async()=>{
     await stay(ctx,id);const c=await clock(ctx);
     if(i.dailyServiceId&&!(await ctx.tx.query("SELECT 1 FROM services WHERE clinic_id=$1 AND id=$2 AND kind='caretaker' AND is_active",[ctx.clinicId,i.dailyServiceId])).rowCount)return fail('INVALID_INPUT');
+    // Task 023: caretaker days bill from today, priced at the start of each date. Prices only move forward,
+    // so a price in force at the start of today covers every date this caretaker will be billed.
+    if(i.dailyServiceId&&!await priceAt(ctx.tx,ctx.clinicId,i.dailyServiceId,await dayStart(ctx,c.today)))return fail('INVALID_INPUT');
     const caretakerId=randomUUID();await ctx.tx.query('INSERT INTO caretakers(id,clinic_id,admission_id,full_name,phone,from_date,daily_service_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[caretakerId,ctx.clinicId,id,i.fullName,i.phone,c.today,i.dailyServiceId]);
     await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.caretaker_added',id);return {id:caretakerId};
   });
+}
+
+async function dayStart(ctx:ClinicContext,date:string):Promise<Date> {
+  return (await ctx.tx.query('SELECT ($2::date::timestamp AT TIME ZONE timezone) start FROM clinics WHERE id=$1',[ctx.clinicId,date])).rows[0].start;
+}
+type StayDay={admission:string;visit:string;kind:'bed'|'caretaker';caretaker?:string;date:string;service:string;quantity:number;at:Date};
+/**
+ * Task 023: posts one dated bed or caretaker charge. A day the service has no price for is not charged and not
+ * fatal: it is flagged "needs attention" for the ward and administrator. While the stay is admitted, a later run
+ * charges it once a price covers it (a service's first price may be backdated). After discharge the database
+ * refuses new charges on the stay, so a flag left at discharge stays visible for the administrator to settle.
+ */
+async function stayDay(ctx:ClinicContext,d:StayDay):Promise<boolean> {
+  const price=await priceAt(ctx.tx,ctx.clinicId,d.service,d.at);
+  if(!price) {
+    const r=await ctx.tx.query(`INSERT INTO inpatient_attention(id,clinic_id,admission_id,kind,charge_date,service_id,caretaker_id,quantity,priced_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,[randomUUID(),ctx.clinicId,d.admission,d.kind,d.date,d.service,d.caretaker??null,d.quantity,d.at]);
+    if(r.rowCount)await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.unpriced_day',d.admission,{kind:d.kind,date:d.date,serviceId:d.service});
+    return false;
+  }
+  const charge=await line(ctx,d.visit,d.service,d.quantity,d.at,d.kind==='bed'?'bed_day':'caretaker');
+  if(d.kind==='bed')await ctx.tx.query('INSERT INTO bed_day_charges(clinic_id,admission_id,charge_date,charge_line_id) VALUES($1,$2,$3,$4)',[ctx.clinicId,d.admission,d.date,charge]);
+  else await ctx.tx.query('INSERT INTO caretaker_day_charges(clinic_id,caretaker_id,charge_date,charge_line_id) VALUES($1,$2,$3,$4)',[ctx.clinicId,d.caretaker,d.date,charge]);
+  await ctx.tx.query(`UPDATE inpatient_attention SET resolved_at=now() WHERE admission_id=$1 AND kind=$2 AND charge_date=$3
+    AND coalesce(caretaker_id,admission_id)=coalesce($4::uuid,admission_id) AND resolved_at IS NULL`,[d.admission,d.kind,d.date,d.caretaker??null]);
+  return true;
+}
+/** Unresolved "needs attention" days, for the ward screen and the discharge invoice. */
+export async function attention(ctx:ClinicContext,admissionId?:string) {
+  return (await ctx.tx.query(`SELECT f.id,f.admission_id,f.kind,f.charge_date::text date,s.name_uz_cyrl service,p.full_name patient
+    FROM inpatient_attention f JOIN services s ON s.id=f.service_id JOIN admissions a ON a.id=f.admission_id
+    JOIN visits v ON v.id=a.visit_id JOIN patients p ON p.id=v.patient_id
+    WHERE f.clinic_id=$1 AND f.resolved_at IS NULL AND ($2::uuid IS NULL OR f.admission_id=$2) ORDER BY f.charge_date,f.id LIMIT 200`,[ctx.clinicId,admissionId??null])).rows;
 }
 
 /** Charges settled calendar dates only. Today's bed occupancy remains provisional until discharge.
@@ -218,8 +245,7 @@ async function accrue(ctx:ClinicContext,id:string,through:string,discharge=false
       quantity=Math.max(quantity,minimum-prior);
     }
     if(quantity>0&&!(await ctx.tx.query('SELECT 1 FROM bed_day_charges WHERE admission_id=$1 AND charge_date=$2',[id,day.date])).rowCount) {
-      const charge=await line(ctx,a.visit_id,bed.bed_service_id,quantity,at,'bed_day');
-      await ctx.tx.query('INSERT INTO bed_day_charges(clinic_id,admission_id,charge_date,charge_line_id) VALUES($1,$2,$3,$4)',[ctx.clinicId,id,day.date,charge]);added++;
+      if(await stayDay(ctx,{admission:id,visit:a.visit_id,kind:'bed',date:day.date,service:bed.bed_service_id,quantity,at}))added++;
     }
     const caretakers=(await ctx.tx.query(`SELECT * FROM caretakers WHERE clinic_id=$1 AND admission_id=$2 AND daily_service_id IS NOT NULL
       AND from_date<=$3 AND (to_date IS NULL OR to_date>=$3)`,[ctx.clinicId,id,day.date])).rows;
@@ -228,8 +254,7 @@ async function accrue(ctx:ClinicContext,id:string,through:string,discharge=false
       const ctBillable=ctFirst&&ctLast?(rule.countAdmissionDay||rule.countDischargeDay):ctFirst?rule.countAdmissionDay:ctLast?rule.countDischargeDay:true;
       if(!ctBillable)continue;
       if((await ctx.tx.query('SELECT 1 FROM caretaker_day_charges WHERE caretaker_id=$1 AND charge_date=$2',[ct.id,day.date])).rowCount)continue;
-      const charge=await line(ctx,a.visit_id,ct.daily_service_id,1,at,'caretaker');
-      await ctx.tx.query('INSERT INTO caretaker_day_charges(clinic_id,caretaker_id,charge_date,charge_line_id) VALUES($1,$2,$3,$4)',[ctx.clinicId,ct.id,day.date,charge]);added++;
+      if(await stayDay(ctx,{admission:id,visit:a.visit_id,kind:'caretaker',caretaker:ct.id,date:day.date,service:ct.daily_service_id,quantity:1,at}))added++;
     }
   }
   return added;
@@ -249,6 +274,18 @@ export async function onBusinessDayOpen(ctx:ClinicContext) {
   const yesterday=(await ctx.tx.query('SELECT ($1::date-1)::text date',[c.today])).rows[0].date;
   return dailyCharges(ctx,{key:randomUUID(),through:yesterday});
 }
+/**
+ * Task 023: called by day close before its snapshot, so the stored close report includes the closing date's ward
+ * revenue. Accrues bed and caretaker days through the closing date for every admitted stay. Idempotent per date:
+ * the next day's open run (through yesterday) finds these days already charged.
+ */
+export async function accrueForClose(ctx:ClinicContext,date:string) {
+  await ctx.tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,11011))',[ctx.clinicId]);
+  let added=0;const ids=(await ctx.tx.query("SELECT id FROM admissions WHERE clinic_id=$1 AND status='admitted' ORDER BY id",[ctx.clinicId])).rows;
+  for(const a of ids)added+=await accrue(ctx,a.id,date);
+  if(added)await recordAudit(ctx.tx,ctx.actorId,ctx.clinicId,'inpatient.daily_charges',ctx.clinicId,{through:date,added,atClose:true});
+  return added;
+}
 export async function changeRule(ctx:ClinicContext,raw:unknown) {
   const i=parse(ChangeRuleInput,raw);await guard(ctx,['ceo','administrator']);
   return retry(ctx,i.key,{action:'rule',...i},async()=>{
@@ -259,7 +296,7 @@ export async function changeRule(ctx:ClinicContext,raw:unknown) {
 export async function invoice(ctx:ClinicContext,id:string):Promise<InvoiceView> {
   ctx.roles=(await requireRole(ctx.tx,ctx.actorId,ctx.clinicId,READ)).roles;const a=await stay(ctx,id,false);
   if(ctx.roles.includes('doctor')&&!ctx.roles.some(r=>(WARD as readonly string[]).includes(r)||r==='cashier')) {
-    if(a.attending_user_id!==ctx.actorId||!(await ctx.tx.query('SELECT 1 FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3',[ctx.clinicId,a.patient_id,ctx.actorId])).rowCount)return fail('FORBIDDEN');
+    if(a.attending_user_id!==ctx.actorId||!(await ctx.tx.query('SELECT 1 WHERE patient_access_active($1,$2,$3)',[ctx.clinicId,a.patient_id,ctx.actorId])).rowCount)return fail('FORBIDDEN');
   }
   const now=(await clock(ctx)).instant.toISOString();
   const saved=(await ctx.tx.query('SELECT snapshot FROM inpatient_discharge_invoices WHERE clinic_id=$1 AND admission_id=$2',[ctx.clinicId,id])).rows[0];
@@ -299,7 +336,7 @@ export async function discharge(ctx:ClinicContext,id:string,raw:unknown) {
   return retry(ctx,i.key,{action:'discharge',id,...i},async()=>{
     const a=await stay(ctx,id);await openBusinessDay(ctx);const c=await clock(ctx);
     await accrue(ctx,id,c.today,true);
-    const snapshot=await invoice(ctx,id);
+    const snapshot={...await invoice(ctx,id),needsAttention:(await attention(ctx,id)).map(f=>({kind:f.kind,date:f.date,service:f.service}))};
     await ctx.tx.query('INSERT INTO inpatient_discharge_invoices(clinic_id,admission_id,snapshot,issued_by) VALUES($1,$2,$3,$4)',[ctx.clinicId,id,json(snapshot),ctx.actorId]);
     await ctx.tx.query('UPDATE bed_assignments SET to_at=$3 WHERE clinic_id=$1 AND admission_id=$2 AND to_at IS NULL',[ctx.clinicId,id,c.instant]);
     await ctx.tx.query("UPDATE admissions SET status='discharged',discharged_at=$3 WHERE clinic_id=$1 AND id=$2",[ctx.clinicId,id,c.instant]);

@@ -29,7 +29,7 @@ registerRoutes("cashier", [
     new RegExp(`^cashier/shifts/${uuid}/cash-out$`),
     async (c, [id], b) => ({
       status: 201,
-      body: await a.cashOut(c, id!, parse(a.Out, await b())),
+      body: await a.cashOut(c, id!, parse(a.OutRequest, await b())),
     }),
   ),
   route("GET", new RegExp(`^cashier/visits/${uuid}$`), async (c, [id]) => ({

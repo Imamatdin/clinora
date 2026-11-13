@@ -39,12 +39,14 @@ export async function setRule(c:ClinicContext,input:z.infer<typeof Rule>) {
 }
 function at(data:Records,until:string,doctor?:string,affected?:Set<string>) {
   const out=new Map<string,Row>();
+  // Task 023: only performers who hold the doctor role earn or appear (a lab technician is never a payroll performer).
+  const doctors=data.doctorIds?new Set(data.doctorIds):null;
   const visits=affected?[...affected].map(id=>indexRecords(data).visits.get(id)!).filter(Boolean):data.visits;
   for(const v of visits) for(const l of invoiceAt(data,v,until)) {
-    if(!l.doctorId || (doctor && l.doctorId!==doctor))continue;
+    if(!l.doctorId || (doctor && l.doctorId!==doctor) || (doctors && !doctors.has(l.doctorId)))continue;
     const date=serviceDate(indexRecords(data).charges.get(l.id)!,data);
     const rule=data.rules.find(r=>r.user_id===l.doctorId && r.effective_from<=date);
-    if(!rule && l.status!=='cancelled') {
+    if(!rule && l.status==='completed') {
       out.set(l.id,{charge_line_id:l.id,user_id:l.doctorId,doctor:indexRecords(data).charges.get(l.id)!.doctor,rule_id:null,status:'rule_missing',value_uzs:l.value,entitlement_uzs:0n,from_receipts_uzs:0n,clinic_funded_uzs:0n});continue;
     }
     if(!rule)continue;
@@ -97,6 +99,9 @@ export async function finalize(c:ClinicContext,p:Period) {
     if(overlap.length===1 && overlap[0].from_date===p.from && overlap[0].to_date===p.to)return earnings(c,p);
     return fail('INVALID_TRANSITION');
   }
+  // Task 023: periods are contiguous: a new final period starts the day after the latest final period ends.
+  const previous=(await c.tx.query(`SELECT (max(to_date)+1)::text next FROM payroll_periods WHERE clinic_id=$1 AND status='final'`,[c.clinicId])).rows[0].next;
+  if(previous && p.from!==previous)return fail('INVALID_INPUT');
   // Closing every included day freezes the source ledgers before a financial commitment.
   const today=(await rules(c)).today;
   if(p.to>today || (await c.tx.query(`SELECT 1 FROM business_days WHERE clinic_id=$1 AND business_date BETWEEN $2 AND $3 AND status='open'`,[c.clinicId,p.from,p.to])).rowCount)return fail('INVALID_TRANSITION');

@@ -53,6 +53,17 @@ export function CashierPrint({ value: v }: { value: Record<string, any> }) {
             {t(label)}: {amount(v[key])}
           </p>
         ))}
+      {v.cashOutList?.length > 0 && (
+        <>
+          <h4>{t("cashier.cashOutList")}</h4>
+          {v.cashOutList.map((o: any) => (
+            <p key={o.id}>
+              {o.expense} · {amount(o.amount)}{o.note ? ` · ${o.note}` : ""}
+              {o.approvedBy && <> · {t("cashier.approvedBy", { name: o.approvedBy })}</>}
+            </p>
+          ))}
+        </>
+      )}
       {(v.note || v.reason) && <p>{v.note || v.reason}</p>}
       {v.closedAt && <p>{v.closedAt}</p>}
     </article>

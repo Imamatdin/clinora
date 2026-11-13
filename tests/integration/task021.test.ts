@@ -41,7 +41,7 @@ test('021: three inpatient days and caretaker dates reconcile even with real cre
 test('021: bounded ledger excludes history outside the period; own doctor records exclude another doctor',async t=>{
   const {f,call}=await setup(t),g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
   const date=(await f.pool.query('SELECT business_date FROM business_days WHERE id=$1',[g.day])).rows[0].business_date;
-  await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
+  await f.pool.query(`UPDATE charge_lines SET performer_user_id=$2,status='completed',completed_by=$2,completed_at=now() WHERE id=$1`,[g.line,f.owner.userId]);
   const foreign=id();await f.pool.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,source,created_by) VALUES($1,$2,$3,$4,1,123,'registration',$5)`,[foreign,f.owner.clinicId,g.visit,g.service,f.owner.userId]);
   await transaction(f.pool,async tx=>{
     const c=await requireRole(tx,f.owner.userId,f.owner.clinicId,['ceo']);
@@ -58,7 +58,7 @@ test('021: bounded ledger excludes history outside the period; own doctor record
 });
 test('021: missing payroll rules are visible, finalize names doctors, future corrections are audited',async t=>{
   const {f,call}=await setup(t),g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
-  await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
+  await f.pool.query(`UPDATE charge_lines SET performer_user_id=$2,status='completed',completed_by=$2,completed_at=now() WHERE id=$1`,[g.line,f.owner.userId]);
   const date=(await f.pool.query('SELECT business_date FROM business_days WHERE id=$1',[g.day])).rows[0].business_date,p={from:date,to:date};
   const draft=await call('/payroll/earnings',p);assert.equal(draft.lines[0].status,'rule_missing');assert.equal(draft.lines[0].charge_line_id,g.line);
   await call(`/business-days/${g.day}/close`,{});
@@ -72,11 +72,11 @@ test('021: missing payroll rules are visible, finalize names doctors, future cor
   assert.equal(audit.before.doctor_share_bp,5000);assert.equal(audit.after.doctor_share_bp,8000);
   assert.equal((await call('/payroll/finalize',p)).lines[0].entitlement_uzs,'500000');
 });
-test('021: approval failures are isolated by device and void records the approver',async t=>{
+test('021/022: approval failures count once per approver across devices; a manager clears the lock; void records the approver',async t=>{
   const {f,client,base,call}=await setup(t),g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
   await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,status,granted_by) VALUES($1,$2,$3,'active',$4)",[id(),f.owner.clinicId,f.other.userId,f.owner.userId]);
   await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'administrator',$3)",[f.owner.clinicId,f.other.userId,f.owner.userId]);
-  await transaction(f.pool,tx=>setOwnPin(tx,f.other.userId,'4826'));
+  await transaction(f.pool,tx=>setOwnPin(tx,f.other.userId,'482613'));
   await call(`/cashier/visits/${g.visit}/discount`,{kind:'fixed',amount:'10',reason:'Synthetic waiver'});
   const discount=(await f.pool.query('SELECT id FROM discounts WHERE clinic_id=$1',[f.owner.clinicId])).rows[0].id;
   await f.pool.query("DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2 AND role<>'cashier'",[f.owner.clinicId,f.owner.userId]);
@@ -87,12 +87,23 @@ test('021: approval failures are isolated by device and void records the approve
   await bind(client.cookie,device1);
   const firstDevice={Cookie:client.cookie+`; clinora_device=${digest(device1)}`};
   const deviceCall=async(input:unknown,status:number)=>{const r=await client.request(base+'/cashier/approvals',input,firstDevice);assert.equal(r.status,status,await r.text());};
-  const input={approverId:f.other.userId,pin:'4826',visitId:g.visit,operation:'void',payload:{discountId:discount,reason:'Synthetic void'}};
-  for(let n=0;n<5;n++)await deviceCall({...input,pin:'1111'},403);
+  const input={approverId:f.other.userId,pin:'482613',visitId:g.visit,operation:'void',payload:{discountId:discount,reason:'Synthetic void'}};
+  for(let n=0;n<5;n++)await deviceCall({...input,pin:'111111'},403);
+  // The sign-in PIN counter is untouched; the one approver counter is locked.
   assert.deepEqual((await f.pool.query('SELECT failed_attempts,locked_at FROM account_pins WHERE account_id=$1',[f.other.userId])).rows[0],{failed_attempts:0,locked_at:null});
+  assert.equal((await f.pool.query('SELECT failed_attempts FROM approval_pin_attempts WHERE account_id=$1',[f.other.userId])).rows[0].failed_attempts,5);
   await deviceCall(input,403);
   const otherClient=f.client();await otherClient.login();await bind(otherClient.cookie,device2);
   const secondDevice={Cookie:otherClient.cookie+`; clinora_device=${digest(device2)}`};
+  // Task 022: the lock follows the approver to every other device and session.
+  assert.equal((await otherClient.request(base+'/cashier/approvals',input,secondDevice)).status,403,'another device is locked too');
+  // No time expiry: only a CEO or another administrator clears it.
+  await f.pool.query("UPDATE approval_pin_attempts SET locked_at=now()-interval '30 days' WHERE account_id=$1",[f.other.userId]);
+  assert.equal((await otherClient.request(base+'/cashier/approvals',input,secondDevice)).status,403,'an old lock still holds');
+  await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'ceo',$2)",[f.owner.clinicId,f.owner.userId]);
+  assert.equal((await otherClient.request(base+`/staff/${f.other.userId}/approval-unlock`,{},secondDevice)).status,200);
+  assert.equal((await f.pool.query("SELECT count(*)::int n FROM audit_events WHERE action='approval.unlocked' AND resource_id=$1",[f.other.userId])).rows[0].n,1);
+  await f.pool.query("DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2 AND role='ceo'",[f.owner.clinicId,f.owner.userId]);
   const r=await otherClient.request(base+'/cashier/approvals',input,secondDevice);assert.equal(r.status,200);const approval=await r.json();
   const result=await otherClient.request(base+`/cashier/visits/${g.visit}/void`,{...input.payload,approvalId:approval.approvalId},secondDevice);assert.equal(result.status,200);
   assert.equal((await f.pool.query('SELECT voided_by FROM discounts WHERE id=$1',[discount])).rows[0].voided_by,f.other.userId);
@@ -155,11 +166,11 @@ test('021: discount void stores PIN approver separately from audited requesting 
   const discount=(await f.pool.query('SELECT id FROM discounts WHERE clinic_id=$1',[f.owner.clinicId])).rows[0].id;
   await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,status,granted_by) VALUES($1,$2,$3,'active',$4)",[id(),f.owner.clinicId,f.other.userId,f.owner.userId]);
   await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'administrator',$3)",[f.owner.clinicId,f.other.userId,f.owner.userId]);
-  await transaction(f.pool,tx=>setOwnPin(tx,f.other.userId,'4826'));
+  await transaction(f.pool,tx=>setOwnPin(tx,f.other.userId,'482613'));
   await f.pool.query("DELETE FROM membership_roles WHERE clinic_id=$1 AND user_id=$2 AND role<>'cashier'",[f.owner.clinicId,f.owner.userId]);
   await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'cashier',$2) ON CONFLICT DO NOTHING",[f.owner.clinicId,f.owner.userId]);
   const payload={discountId:discount,reason:'Synthetic void'};
-  const approval=await call('/cashier/approvals',{approverId:f.other.userId,pin:'4826',visitId:g.visit,operation:'void',payload});
+  const approval=await call('/cashier/approvals',{approverId:f.other.userId,pin:'482613',visitId:g.visit,operation:'void',payload});
   await call(`/cashier/visits/${g.visit}/void`,{...payload,approvalId:approval.approvalId});
   assert.equal((await f.pool.query('SELECT voided_by FROM discounts WHERE id=$1',[discount])).rows[0].voided_by,f.other.userId);
   assert.equal((await f.pool.query("SELECT actor_id FROM audit_events WHERE clinic_id=$1 AND action='cashier.discount_voided'",[f.owner.clinicId])).rows[0].actor_id,f.owner.userId);
@@ -167,7 +178,7 @@ test('021: discount void stores PIN approver separately from audited requesting 
 
 test('021: scoped doctor discount rounding matches complete invoice, including percent and fixed remainders',async t=>{
   const {f,call}=await setup(t),g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
-  await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
+  await f.pool.query(`UPDATE charge_lines SET performer_user_id=$2,status='completed',completed_by=$2,completed_at=now() WHERE id=$1`,[g.line,f.owner.userId]);
   const other=id();await f.pool.query(`INSERT INTO charge_lines(id,clinic_id,visit_id,service_id,quantity,unit_price_uzs,source,created_by) VALUES($1,$2,$3,$4,1,7,'registration',$5)`,[other,f.owner.clinicId,g.visit,g.service,f.owner.userId]);
   const date=(await f.pool.query('SELECT business_date FROM business_days WHERE id=$1',[g.day])).rows[0].business_date;
   for(const [kind,amount] of [['fixed','100003'],['percent','3333']] as const){
@@ -218,7 +229,7 @@ test('021: unbalanced visit is flagged in a successful immutable close snapshot'
 
 test('021: doctor-only payroll includes later visit-discount changes without new payments or owned lines',async t=>{
   const {f,call}=await setup(t),g=await seedCashier(f.pool,f.owner.clinicId,f.owner.userId);
-  await f.pool.query('UPDATE charge_lines SET performer_user_id=$2 WHERE id=$1',[g.line,f.owner.userId]);
+  await f.pool.query(`UPDATE charge_lines SET performer_user_id=$2,status='completed',completed_by=$2,completed_at=now() WHERE id=$1`,[g.line,f.owner.userId]);
   const date=(await f.pool.query('SELECT business_date FROM business_days WHERE id=$1',[g.day])).rows[0].business_date,next=new Date(Date.parse(date)+86400000).toISOString().slice(0,10);
   await call('/payroll/rules',{userId:f.owner.userId,shareBp:5000,basis:'billed',discountBearer:'proportional',categories:['consultation'],effectiveFrom:date},201);
   await f.pool.query(`INSERT INTO discounts(id,clinic_id,visit_id,kind,amount_uzs,reason,approved_by,created_by,created_at) VALUES($1,$2,$3,'fixed',100000,'Synthetic later waiver',$4,$4,($5::date+time '10:00') AT TIME ZONE 'Asia/Tashkent')`,[id(),f.owner.clinicId,g.visit,f.owner.userId,next]);

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { httpFixture } from './fixture.js';
+import { httpFixture, plainAccount } from './fixture.js';
 import { makePool } from '../../src/server/database.js';
 import { ApiError } from '../../src/contracts/index.js';
 
@@ -195,7 +195,7 @@ test('administrators cannot escalate to CEO, change themselves, or take over acc
   assert.equal((await admin.client.request(`${staffBase}/${cashier.staff.userId}/roles`, { roles: ['cashier', 'ceo'] })).status, 403, 'grant ceo to other');
   assert.equal((await admin.client.request(`${staffBase}/${cashier.staff.userId}/roles`, { roles: ['cashier', 'laboratory'] })).status, 200);
   // A self-registered account joined by invitation is not managed by this clinic.
-  const c = f.client(); await c.request('/api/auth/register', { email: 'invited@example.test', displayName: 'Synthetic Invitee', password: f.password });
+  const c = f.client(); await plainAccount(f.pool, { email: 'invited@example.test', displayName: 'Synthetic Invitee', password: f.password });
   const me = await c.login('invited@example.test');
   await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,role,clinical_access,status,granted_by) VALUES($1,$2,$3,'clinician',true,'active',$4)", [randomUUID(), A, me.id, f.owner.userId]);
   await f.pool.query("INSERT INTO membership_roles(clinic_id,user_id,role,granted_by) VALUES($1,$2,'doctor',$3)", [A, me.id, f.owner.userId]);

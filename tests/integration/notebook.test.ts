@@ -6,14 +6,16 @@ import { once } from 'node:events';
 import { createApp } from '../../src/server/app.js';
 import { makePool } from '../../src/server/database.js';
 import { digest } from '../../src/server/security.js';
-import { httpFixture,patientInput,encounterInput,noteInput,key } from './fixture.js';
+import { httpFixture,patientInput,encounterInput,noteInput,key,plainAccount } from './fixture.js';
 
 test('fresh migration repeat, explicit ownership, invitation scope/expiry/single use and pending registration',async t=>{
   const f=await httpFixture();t.after(()=>f.close());const owner=f.client(),pending=f.client();await owner.login();
   assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,String((await readdir('db/migrations')).filter(n=>/^\d+.*\.sql$/.test(n)).length));
   const signup={email:'pending@example.test',displayName:'Synthetic Pending',password:f.password};
-  assert.equal((await pending.request('/api/auth/register',{...signup,role:'doctor'})).status,422);
-  assert.equal((await pending.request('/api/auth/register',signup)).status,202);
+  // Task 022: public self-registration is closed (no route, no account created).
+  assert.equal((await pending.request('/api/auth/register',signup)).status,404);
+  assert.equal((await f.pool.query('SELECT count(*)::int n FROM accounts WHERE email=$1',[signup.email])).rows[0].n,0);
+  await plainAccount(f.pool,signup);
   const me=await pending.login(signup.email);assert.deepEqual(me.clinics,[]);assert.equal(me.professionalVerification.status,'unverified');
   const base=`/api/clinics/${f.owner.clinicId}`;
   assert.equal((await pending.request(base+'/patients')).status,403);
@@ -71,7 +73,7 @@ test('patient and clinic isolation, duplicate names, unique clinic MRN and DB co
   assert.equal((await b.request(bb+'/'+p.id)).status,404);
   assert.equal((await b.request(bb+'/'+p.id+'/encounters',encounterInput,{'Idempotency-Key':key()})).status,404);
   assert.equal((await b.request(bb+'?q=SYN-1')).status,200);
-  const signup={email:'sameclinic@example.test',displayName:'Synthetic Assigned Doctor',password:f.password};const c=f.client();await c.request('/api/auth/register',signup);const me=await c.login(signup.email);
+  const signup={email:'sameclinic@example.test',displayName:'Synthetic Assigned Doctor',password:f.password};const c=f.client();await plainAccount(f.pool,signup);const me=await c.login(signup.email);
   await f.pool.query("INSERT INTO memberships(id,clinic_id,user_id,role,clinical_access,status,granted_by) VALUES($1,$2,$3,'clinician',true,'active',$4)",[randomUUID(),f.owner.clinicId,me.id,f.owner.userId]);
   assert.deepEqual(await(await c.request(ba+'?q=Fictional')).json(),[]);
   assert.equal((await c.request(ba+'/'+p.id)).status,404);

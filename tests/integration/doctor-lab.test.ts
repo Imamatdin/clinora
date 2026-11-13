@@ -207,8 +207,9 @@ test('doctor orders a lab test at the current price; lab enters versioned result
   const ordered = await json(await A.request(base + '/orders', orderInput));
   assert.deepEqual(await json(await A.request(base + '/orders', orderInput)), ordered, 'retry orders once');
   const lineId = ordered.lines[0].id;
-  const row = (await f.pool.query('SELECT status, unit_price_uzs, source, created_by FROM charge_lines WHERE id=$1', [lineId])).rows[0];
-  assert.deepEqual(row, { status: 'ordered', unit_price_uzs: '45000', source: 'doctor', created_by: ids.a });
+  const row = (await f.pool.query('SELECT status, unit_price_uzs, source, created_by, performer_user_id FROM charge_lines WHERE id=$1', [lineId])).rows[0];
+  // Task 023: the ordering doctor is the lab line's performer from the start.
+  assert.deepEqual(row, { status: 'ordered', unit_price_uzs: '45000', source: 'doctor', created_by: ids.a, performer_user_id: ids.a });
 
   const list = await json(await lab.request(url('lab/orders')));
   assert.deepEqual(list.orders.map((o: { id: string }) => o.id), [lineId]);
@@ -222,8 +223,9 @@ test('doctor orders a lab test at the current price; lab enters versioned result
   const confirms = await Promise.all([1, 2].map(() => lab.request(url(`lab/orders/${lineId}/confirm`), { idempotencyKey: key() })));
   assert.deepEqual(confirms.map(r => r.status), [200, 200]);
   assert.deepEqual((await Promise.all(confirms.map(json))).map(b => b.completedNow).sort(), [false, true]);
-  const done = (await f.pool.query('SELECT status, completed_by, unit_price_uzs FROM charge_lines WHERE id=$1', [lineId])).rows[0];
-  assert.deepEqual(done, { status: 'completed', completed_by: ids.lab, unit_price_uzs: '45000' });
+  const done = (await f.pool.query('SELECT status, completed_by, unit_price_uzs, performer_user_id FROM charge_lines WHERE id=$1', [lineId])).rows[0];
+  // Task 023: the technician is completed_by only; the performer (who may earn on it) stays the ordering doctor.
+  assert.deepEqual(done, { status: 'completed', completed_by: ids.lab, unit_price_uzs: '45000', performer_user_id: ids.a });
   // A correction after confirmation is a new version; the charge is untouched.
   const r2 = await json(await lab.request(url(`lab/orders/${lineId}/results`), { idempotencyKey: key(), expectedVersion: 1, values: [values[0]!], comment: 'Қайта ўлчанди' }));
   assert.equal(r2.version, 2);
@@ -258,11 +260,17 @@ test('lab cannot read notes or touch payments; doctor cannot edit lab results; r
   const line = (await f.pool.query("SELECT id FROM charge_lines WHERE source='doctor' LIMIT 1")).rows[0].id;
   assert.equal((await A.request(url(`lab/orders/${line}/results`), { idempotencyKey: key(), expectedVersion: 2, values: [{ name: 'x', value: '1' }] })).status, 403);
   assert.equal((await A.request(url(`lab/orders/${line}/confirm`), { idempotencyKey: key() })).status, 403);
+  const saved = (await f.pool.query('SELECT * FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3', [f.owner.clinicId, ids.p1, ids.a])).rows[0];
   await f.pool.query('DELETE FROM patient_assignments WHERE clinic_id=$1 AND patient_id=$2 AND user_id=$3', [f.owner.clinicId, ids.p1, ids.a]);
-  assert.equal((await A.request(url(`doctor/encounters/${encounterA}`))).status, 404);
-  assert.equal((await A.request(url(`doctor/encounters/${encounterA}/prescription.pdf`))).status, 404);
+  // Task 022: the author keeps reading their approved note (approved version only, read-only); everything else is gone.
+  const own = await A.request(url(`doctor/encounters/${encounterA}`));
+  assert.equal(own.status, 200); const ownView = await json(own);
+  assert.equal(ownView.readOnly, true); assert.equal(ownView.versionId, ownView.approval.versionId); assert.deepEqual(ownView.charges, []);
+  assert.equal((await A.request(url(`doctor/encounters/${encounterA}/prescription.pdf`))).status, 200);
+  assert.equal((await A.request(url(`doctor/encounters/${encounterA}/note`), { idempotencyKey: key(), expectedRevision: ownView.revision, note: { reported: 'x', observed: '', assessment: '', plan: '' }, prescription: [], amendmentReason: 'x' })).status, 404);
+  assert.equal((await A.request(url(`doctor/encounters/${encounterA}/orders`), { idempotencyKey: key(), items: [{ serviceId: ids.labTest, quantity: 1 }] })).status, 404);
   assert.equal((await A.request(url(`doctor/patients/${ids.p1}`))).status, 404);
-  await f.pool.query('INSERT INTO patient_assignments(clinic_id,patient_id,user_id) VALUES($1,$2,$3)', [f.owner.clinicId, ids.p1, ids.a]);
+  await f.pool.query('INSERT INTO patient_assignments(clinic_id,patient_id,user_id,visit_id,granted_at) VALUES($1,$2,$3,$4,$5)', [f.owner.clinicId, ids.p1, ids.a, saved.visit_id, saved.granted_at]);
 });
 
 test('an approved note blocks a later assistant approval of the same document', async () => {

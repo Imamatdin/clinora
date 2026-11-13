@@ -8,7 +8,7 @@ import { api, type ApiConfig } from './notebook.js';
 import { PayrollRulesMissing } from '../modules/payroll/actions.js';
 import { LoginLimited } from '../modules/login/actions.js';
 import { DomainError } from '../modules/identity/access.js';
-import { migrationsCurrent, transaction } from './database.js';
+import { isRuleViolation, migrationsCurrent, RULE_VIOLATION_MESSAGE, transaction } from './database.js';
 
 // One structured line per request. Only method, a de-identified route shape, status and timing:
 // no query strings, bodies, cookies, headers, client addresses or record identifiers.
@@ -117,6 +117,7 @@ export async function createApp(webDirectory?: string, config?: ApiConfig, optio
           json(409,{error:{code:error.code,message:'PAYROLL_RULES_MISSING',doctors:error.doctors,requestId}});
         } else if (error instanceof DomainError) fail(error.code);
         else if (error && typeof error === 'object' && 'code' in error && error.code === '23505') fail('INVALID_INPUT');
+        else if (isRuleViolation(error)) json(409, { error: { code: 'INVALID_TRANSITION', message: RULE_VIOLATION_MESSAGE, requestId } });
         else fail('SERVICE_UNAVAILABLE'); // Never expose SQL or clinical values.
       }
     } else if (['GET', 'HEAD'].includes(req.method ?? '') && files.has(path)) {

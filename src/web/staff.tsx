@@ -3,7 +3,7 @@ import type { StaffView } from '../contracts/clinic.js';
 import { ROLES, type Role } from '../modules/identity/roles.js';
 import { ApiFailure, type Request } from './api.js';
 import { errorText, t, type UiKey } from './i18n/index.js';
-import { AccessActions } from './access/staff-access.js';
+import { AccessActions, CeoAccessPanel } from './access/staff-access.js';
 
 const roleLabel = (role: Role) => t(`role.${role}` as UiKey);
 
@@ -73,11 +73,14 @@ export function Staff({ clinicId, request, myId, myRoles }: { clinicId: string; 
             ? <button disabled={busy} onClick={() => { if (confirm(t('staff.blockConfirm', { name: s.fullName }))) void run(async () => { await request(`${base}/${s.userId}/status`, { status: 'blocked' }); setNotice(t('staff.blocked')); await load(); }); }}>{t('staff.block')}</button>
             : <button disabled={busy} onClick={() => void run(async () => { await request(`${base}/${s.userId}/status`, { status: 'active' }); setNotice(t('staff.unblocked')); await load(); })}>{t('staff.unblock')}</button>}
           {s.managed
-            ? <button disabled={busy} onClick={() => { if (confirm(t('staff.resetConfirm', { name: s.fullName }))) void run(async () => { const r = await request<{ temporaryPassword: string }>(`${base}/${s.userId}/password-reset`, {}); setSecret({ name: s.fullName, login: s.login, password: r.temporaryPassword }); await load(); }); }}>{t('staff.reset')}</button>
+            ? <button disabled={busy} onClick={() => { if (confirm(t('staff.resetConfirm', { name: s.fullName }))) void run(async () => { const r = await request<{ temporaryPassword: string } | { pendingConfirmation: true }>(`${base}/${s.userId}/password-reset`, {});
+              // Task 022: an administrator's reset of a doctor's password first goes to the CEO for confirmation.
+              if ('pendingConfirmation' in r) setNotice(t('access.pendingCeo')); else setSecret({ name: s.fullName, login: s.login, password: r.temporaryPassword }); await load(); }); }}>{t('staff.reset')}</button>
             : <p className="fine">{t('staff.notManaged')}</p>}
         </div>
         <AccessActions clinicId={clinicId} userId={s.userId} name={s.fullName} request={request} canManage={s.managed && !touchesCeo(s)} />
       </div>}
     </li>)}</ul>}
+    {isCeo && <CeoAccessPanel clinicId={clinicId} request={request} />}
   </section>;
 }

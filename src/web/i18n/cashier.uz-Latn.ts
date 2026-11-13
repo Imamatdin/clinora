@@ -55,4 +55,10 @@ export const cashierUzLatn: Record<keyof typeof cashier, string> = {
   "cashier.refundConfirm": "{amount} qaytarishni tasdiqlaysizmi?",
   "cashier.closeConfirm": "Sanalgan naqd pul: {amount}. Smenani yopamizmi?",
   "cashier.outConfirm": "Kassadan {amount} chiqarishni tasdiqlaysizmi?",
+  "cashier.cancelLine": "Bekor qilish",
+  "cashier.cancelled": "Bekor qilingan",
+  "cashier.outApprover": "Chiqimni tasdiqlovchi",
+  "cashier.outPin": "Tasdiqlovchi PIN-kodi",
+  "cashier.cashOutList": "Kassadan chiqimlar",
+  "cashier.approvedBy": "Tasdiqlagan: {name}",
 };

@@ -1,4 +1,5 @@
 import { accountLimitKey } from '../login/actions.js';
+import { APPROVER_PIN_DIGITS } from '../identity/approval-pin.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { Id } from '../../contracts/index.js';
@@ -109,9 +110,13 @@ export async function checkPin(tx: Tx, device: ActiveDevice, userId: string, pin
 
 /** Setting a new PIN also clears any lockout: it proves control of a signed-in session. */
 export async function setOwnPin(tx: Tx, userId: string, pin: string): Promise<{ pinSet: true }> {
+  // Task 022: anyone who can approve money or ward overrides (CEO, administrator) needs at least 6 digits.
+  const approver = (await tx.query(`SELECT 1 FROM membership_roles r JOIN memberships m ON m.clinic_id=r.clinic_id AND m.user_id=r.user_id AND m.status='active'
+    WHERE r.user_id=$1 AND r.role IN ('ceo','administrator') LIMIT 1`, [userId])).rowCount;
+  if (approver && pin.length < APPROVER_PIN_DIGITS) fail('INVALID_INPUT');
   const hash = await passwordHash(pin);
-  await tx.query(`INSERT INTO account_pins(account_id,pin_hash) VALUES($1,$2)
-    ON CONFLICT(account_id) DO UPDATE SET pin_hash=EXCLUDED.pin_hash, failed_attempts=0, locked_at=NULL, updated_at=now()`, [userId, hash]);
+  await tx.query(`INSERT INTO account_pins(account_id,pin_hash,pin_digits) VALUES($1,$2,$3)
+    ON CONFLICT(account_id) DO UPDATE SET pin_hash=EXCLUDED.pin_hash, pin_digits=EXCLUDED.pin_digits, failed_attempts=0, locked_at=NULL, updated_at=now()`, [userId, hash, pin.length]);
   await tx.query('INSERT INTO audit_events(id,actor_id,clinic_id,action,resource_id) VALUES($1,$2,NULL,$3,$2)', [randomUUID(), userId, 'pin.set']);
   return { pinSet: true };
 }
@@ -132,16 +137,17 @@ export async function unlockPin(ctx: ClinicContext, userId: string): Promise<{ l
 }
 
 /** Access summary per staff member for the manager's staff screen. */
-export async function staffAccess(ctx: ClinicContext): Promise<{ userId: string; telegramLinked: boolean; invitePending: boolean; pinSet: boolean; pinLocked: boolean; loginUnlockAt: string | null }[]> {
+export async function staffAccess(ctx: ClinicContext): Promise<{ userId: string; telegramLinked: boolean; invitePending: boolean; pinSet: boolean; pinLocked: boolean; approvalLocked: boolean; loginUnlockAt: string | null }[]> {
   const rows = (await ctx.tx.query(`SELECT m.user_id,
       EXISTS(SELECT 1 FROM telegram_links l WHERE l.account_id=m.user_id) linked,
       EXISTS(SELECT 1 FROM telegram_invites i WHERE i.account_id=m.user_id AND i.clinic_id=m.clinic_id AND i.consumed_at IS NULL AND i.revoked_at IS NULL AND i.expires_at>now()) pending,
-      p.account_id IS NOT NULL pin_set, coalesce(p.locked_at IS NOT NULL,false) pin_locked
+      p.account_id IS NOT NULL pin_set, coalesce(p.locked_at IS NOT NULL,false) pin_locked,
+      EXISTS(SELECT 1 FROM approval_pin_attempts x WHERE x.account_id=m.user_id AND x.locked_at IS NOT NULL) approval_locked
     FROM memberships m LEFT JOIN account_pins p ON p.account_id=m.user_id
     WHERE m.clinic_id=$1 AND m.status IN ('active','blocked') ORDER BY m.user_id`, [ctx.clinicId])).rows;
   const limits = (await ctx.tx.query('SELECT key,locked_until FROM password_login_limits WHERE locked_until>now() AND key=ANY($1::text[])', [rows.map(r => accountLimitKey(r.user_id))])).rows;
   const locked = new Map(limits.map(r => [r.key, r.locked_until.toISOString() as string]));
-  return rows.map(r => ({ loginUnlockAt: locked.get(accountLimitKey(r.user_id)) ?? null, userId: r.user_id, telegramLinked: r.linked, invitePending: r.pending, pinSet: r.pin_set, pinLocked: r.pin_locked }));
+  return rows.map(r => ({ loginUnlockAt: locked.get(accountLimitKey(r.user_id)) ?? null, userId: r.user_id, telegramLinked: r.linked, invitePending: r.pending, pinSet: r.pin_set, pinLocked: r.pin_locked, approvalLocked: r.approval_locked }));
 }
 
 export async function myAccess(ctx: ClinicContext): Promise<{ telegramLinked: boolean; pinSet: boolean; pinLocked: boolean }> {

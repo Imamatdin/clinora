@@ -5,6 +5,7 @@ import { createApp } from '../../src/server/app.js';
 import { makePool, migrate } from '../../src/server/database.js';
 import { provisionOwner } from '../../src/server/provision.js';
 import { recordingTelegramApi } from '../../src/modules/telegram/api.js';
+import { passwordHash } from '../../src/server/security.js';
 
 /** Synthetic bot for tests. Outbound calls are recorded, never sent. */
 export const TEST_BOT={botToken:'123456789:TEST_synthetic_bot_token_not_real_000000',webhookSecret:'synthetic-webhook-secret-0123456789abcdef',botUsername:'clinora_test_bot'};
@@ -42,6 +43,12 @@ export async function httpFixture(){
     async restart(){await new Promise<void>(resolve=>server.close(()=>resolve()));server=await createApp(undefined,config);await listen();},
     async close(){await new Promise<void>(resolve=>server.close(()=>resolve()));await db.close();}
   };
+}
+/** Task 022 closed public self-registration. Tests create an unprivileged, membership-less account directly. */
+export async function plainAccount(pool:import('pg').Pool,input:{email:string;displayName:string;password:string}){
+  const userId=randomUUID();
+  await pool.query('INSERT INTO accounts(id,email,display_name,password_hash) VALUES($1,$2,$3,$4)',[userId,input.email.toLowerCase(),input.displayName,await passwordHash(input.password)]);
+  return userId;
 }
 export const patientInput={displayName:'Fictional Patient',dateOfBirth:'1994-04-23',mrn:null};
 export const encounterInput={occurrence:{precision:'date',date:'2020-02-29',timezone:'Asia/Tashkent'},location:'Synthetic North / room 2',specialty:'General medicine'};

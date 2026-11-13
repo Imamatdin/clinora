@@ -11,5 +11,5 @@ registerRoutes('reports',[
   {method:'GET',pattern:new RegExp(`^reports/days/${uuid}$`),roles:['ceo','administrator','cashier'],handle:async(c,[id])=>({body:capReport(await dayReport(c,id!))})},
   {method:'POST',pattern:/^reports\/export$/,roles:['ceo'],handle:async(c,_p,b)=>{const i=parse(Export,await b());return {body:await reportExport(c,await dashboard(c,{from:i.from,to:i.to}),i.format)};}},
   {method:'POST',pattern:new RegExp(`^reports/days/${uuid}/print$`),roles:['ceo','administrator','cashier'],handle:async(c,[id],b)=>{const i=parse(z.object({format:z.enum(['pdf','thermal'])}).strict(),await b()); const report=await dayReport(c,id!);return {body:await reportExport(c,report,i.format,true)};}},
-  {method:'POST',pattern:/^reports\/full-export$/,roles:['ceo'],handle:async(c,_p,b)=>{parse(z.object({}).strict(),await b());return {body:await fullExport(c)};}}
+  {method:'POST',pattern:/^reports\/full-export$/,roles:['ceo'],handle:async(c,_p,b)=>{parse(z.object({}).strict(),await b());return {stream:await fullExport(c)};}}
 ]);

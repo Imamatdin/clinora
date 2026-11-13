@@ -1,7 +1,8 @@
 import { checkOutboxUser, lockOutbox, wipeOutbox } from './registration/outbox.js';
 export class ApiFailure extends Error { constructor(public code: string, public unlockAt?: string) { super(code); } }
 
-export type Request = <T>(path: string, body?: unknown, idempotent?: boolean) => Promise<T>;
+/** `timeoutMs` (default 15 s) covers the whole response, body included; raise it only for large downloads. */
+export type Request = <T>(path: string, body?: unknown, idempotent?: boolean, timeoutMs?: number) => Promise<T>;
 
 /**
  * JSON API client. Mutations carry the CSRF token. An idempotent mutation reuses its key while
@@ -9,7 +10,7 @@ export type Request = <T>(path: string, body?: unknown, idempotent?: boolean) =>
  */
 export function createRequest(csrf: () => string): Request {
   let retry: { path: string; payload: string; key: string } | null = null;
-  return async function request<T>(path: string, body?: unknown, idempotent = false): Promise<T> {
+  return async function request<T>(path: string, body?: unknown, idempotent = false, timeoutMs = 15000): Promise<T> {
     const csrfToken = csrf(); // Capture before a concurrent shell lock clears the token.
     let key: string | undefined;
     if (idempotent) {
@@ -22,8 +23,12 @@ export function createRequest(csrf: () => string): Request {
     if (key) headers['Idempotency-Key'] = key;
     let response: Response;
     try {
-      response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) });
+      response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(timeoutMs) });
     } catch { throw new ApiFailure('SERVICE_UNAVAILABLE'); }
+    // A successful non-JSON response is a file download (e.g. the streamed clinic export): hand back a Blob.
+    if (response.ok && !response.headers.get('content-type')?.startsWith('application/json')) {
+      try { return await response.blob() as T; } catch { throw new ApiFailure('SERVICE_UNAVAILABLE'); }
+    }
     const value = await response.json().catch(() => null);
     if (response.status === 401) {
       // A long outage expires the server session even while the registrar is actively typing.

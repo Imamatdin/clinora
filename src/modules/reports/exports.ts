@@ -1,7 +1,10 @@
 import PDFDocument from 'pdfkit';
-import { zipSync, strToU8 } from 'fflate';
+import { zipSync, strToU8, Zip, ZipDeflate } from 'fflate';
+import { once } from 'node:events';
+import type { StreamResult } from '../../server/routes/types.js';
 import { join } from 'node:path';
 import { requireRole, recordAudit, type ClinicContext } from '../../server/roles.js';
+import { DomainError } from '../identity/access.js';
 import type { Report } from './actions.js';
 
 export type Download = {name:string;mime:string;base64:string};
@@ -60,29 +63,51 @@ export async function reportExport(c:ClinicContext,report:Report,format:'pdf'|'x
   await recordAudit(c.tx,c.actorId,c.clinicId,'reports.exported',c.clinicId,{format,from:report.from,to:report.to});
   return format==='xlsx'?download('clinora-report.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',xlsx(rows)):download('clinora-report.pdf','application/pdf',await pdf('Касса ва клиника ҳисоботи',rows,format==='thermal'));
 }
-export async function fullExport(c:ClinicContext) {
+/** Clinical/operational allowlist. Authentication tokens, passwords, invite codes, provider
+ * credentials and replay caches never belong in a portable clinic archive. */
+const EXPORT_TABLES=['clinics','patients','patient_assignments','patient_duplicate_overrides','encounters','documents','document_versions','note_approvals','assistant_captures','assistant_transcripts','assistant_segments','assistant_drafts','assistant_extraction_runs','assistant_proposals','assistant_field_versions','assistant_approvals','visits','business_days','departments','services','service_groups','service_prices','doctor_profiles','catalog_doctors','doctor_services','queue_points','queue_tickets','charge_lines','discounts','payments','payment_allocations','cashier_allocation_adjustments','receipts','cash_desks','cash_shifts','expense_types','cash_outs','admissions','rooms','room_types','beds','bed_assignments','bed_day_charges','caretakers','caretaker_day_charges','lab_results','surgeries','stock_movements','pharmacy_settings','doctor_split_rules','payroll_periods','payroll_lines','clinic_settings','districts','mahallas','membership_roles','audit_events'];
+const EXCLUDED_COLUMNS:Record<string,string[]>={assistant_captures:['lease_token','lease_until','client_key','telegram_file_id']};
+/** Rows fetched per cursor round trip; bounds memory regardless of clinic size. */
+export const EXPORT_BATCH=2000;
+/**
+ * Full clinic archive, streamed (task 024): the request transaction checks the role and records the
+ * audit event; app.ts then runs `write` in one READ ONLY REPEATABLE READ snapshot, which rechecks the
+ * role, reads each table through a cursor and deflates CSV into the ZIP as it goes.
+ */
+export async function fullExport(c:ClinicContext):Promise<StreamResult> {
   await requireRole(c.tx,c.actorId,c.clinicId,['ceo']);
-  // Explicit clinical/operational allowlist. Authentication tokens, passwords, invite codes,
-  // provider credentials and replay caches never belong in a portable clinic archive.
-  const tables=['clinics','patients','patient_assignments','patient_duplicate_overrides','encounters','documents','document_versions','note_approvals','assistant_captures','assistant_transcripts','assistant_segments','assistant_drafts','assistant_extraction_runs','assistant_proposals','assistant_field_versions','assistant_approvals','visits','business_days','departments','services','service_groups','service_prices','doctor_profiles','catalog_doctors','doctor_services','queue_points','queue_tickets','charge_lines','discounts','payments','payment_allocations','cashier_allocation_adjustments','receipts','cash_desks','cash_shifts','expense_types','cash_outs','admissions','rooms','room_types','beds','bed_assignments','bed_day_charges','caretakers','caretaker_day_charges','lab_results','surgeries','stock_movements','pharmacy_settings','doctor_split_rules','payroll_periods','payroll_lines','clinic_settings','districts','mahallas','membership_roles','audit_events'];
-  // A single statement keeps all exported tables in the same snapshot.
-  const sql:string[]=[];
-  // Cast bigint columns before JSON encoding (including nested record fields via row projection).
-  const projections=await c.tx.query(`SELECT table_name,column_name,data_type FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=ANY($1::text[]) ORDER BY ordinal_position`,[tables]);
-  const columns=(table:string)=>projections.rows.filter(r=>r.table_name===table && !(table==='assistant_captures' && ['lease_token','lease_until','client_key','telegram_file_id'].includes(r.column_name)));
-  for(let i=0;i<tables.length;i++){
-    const cols=columns(tables[i]!).map(r=>`"${r.column_name}"${r.data_type==='bigint'?'::text':''}`);
-    sql[i]=`coalesce((SELECT jsonb_agg(t) FROM (SELECT ${cols.join(',')} FROM ${tables[i]} WHERE ${tables[i]==='clinics'?'id':'clinic_id'}=$1) t),'[]') t${i}`;
-  }
-  const all=(await c.tx.query('SELECT '+sql.join(','),[c.clinicId])).rows[0];
-  const files:Record<string,Uint8Array>={};
-  for(let i=0;i<tables.length;i++){
-    const rows=all[`t${i}`] as Record<string,unknown>[]; const cols=columns(tables[i]!).map(r=>r.column_name as string);
-    files[`${tables[i]}.csv`]=strToU8(csv([cols,...rows.map(r=>cols.map(k=>r[k]))]));
-  }
-  const staff=(await c.tx.query(`SELECT a.id,a.display_name,a.login,a.phone,m.status FROM accounts a JOIN memberships m ON m.user_id=a.id WHERE m.clinic_id=$1`,[c.clinicId])).rows;
-  files['staff.csv']=strToU8(csv([['id','display_name','login','phone','status'],...staff.map(a=>[a.id,a.display_name,a.login,a.phone,a.status])]));
-  files['README.txt']=strToU8('Clinora clinic data export. UTF-8 CSV; integer UZS. Authentication secrets excluded. Sensitive clinical data: store with restricted access.');
-  await recordAudit(c.tx,c.actorId,c.clinicId,'reports.full_export',c.clinicId,{tables:tables.length+1});
-  return download('clinora-clinic.zip','application/zip',Buffer.from(zipSync(files)));
+  await recordAudit(c.tx,c.actorId,c.clinicId,'reports.full_export',c.clinicId,{tables:EXPORT_TABLES.length+1});
+  const {actorId,clinicId}=c;
+  return {contentType:'application/zip',filename:'clinora-clinic.zip',write:async(tx,out)=>{
+    // Access revoked since the request is refused here too (plain read: the snapshot is read-only).
+    const still=(await tx.query(`SELECT 1 FROM memberships m JOIN membership_roles r ON r.clinic_id=m.clinic_id AND r.user_id=m.user_id
+      WHERE m.clinic_id=$1 AND m.user_id=$2 AND m.status='active' AND r.role='ceo'`,[clinicId,actorId])).rowCount;
+    if(!still)throw new DomainError('FORBIDDEN');
+    let failed:Error|null=null;
+    const zip=new Zip((error,chunk,final)=>{if(error){failed=error;return;}out.write(chunk);if(final)failed??=null;});
+    const drain=async()=>{if(failed)throw failed;if(out.writableNeedDrain)await once(out,'drain');};
+    const file=async(name:string,header:string[],rows:AsyncIterable<unknown[][]>)=>{
+      const entry=new ZipDeflate(name,{level:6});zip.add(entry);
+      entry.push(strToU8(csv([header])));
+      for await(const batch of rows)if(batch.length){entry.push(strToU8('\r\n'+csv(batch).slice(1)));await drain();}
+      entry.push(new Uint8Array(0),true);await drain();
+    };
+    const projections=(await tx.query(`SELECT table_name,column_name,data_type FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=ANY($1::text[]) ORDER BY ordinal_position`,[EXPORT_TABLES])).rows;
+    for(const table of EXPORT_TABLES){
+      const columns=projections.filter(r=>r.table_name===table && !(EXCLUDED_COLUMNS[table]??[]).includes(r.column_name));
+      // bigint as text (exact UZS); timestamps in the same ISO form the archive always used.
+      const select=columns.map(r=>r.data_type==='bigint'?`"${r.column_name}"::text`:r.data_type==='timestamp with time zone'?`to_json("${r.column_name}")#>>'{}' "${r.column_name}"`:`"${r.column_name}"`);
+      await tx.query(`DECLARE export_rows NO SCROLL CURSOR FOR SELECT ${select.join(',')} FROM ${table} WHERE ${table==='clinics'?'id':'clinic_id'}=$1`,[clinicId]);
+      const names=columns.map(r=>r.column_name as string);
+      await file(`${table}.csv`,names,(async function*(){
+        for(;;){const rows=(await tx.query(`FETCH ${EXPORT_BATCH} FROM export_rows`)).rows;if(!rows.length)break;yield rows.map(r=>names.map(k=>r[k]));}
+      })());
+      await tx.query('CLOSE export_rows');
+    }
+    const staff=(await tx.query(`SELECT a.id,a.display_name,a.login,a.phone,m.status FROM accounts a JOIN memberships m ON m.user_id=a.id WHERE m.clinic_id=$1`,[clinicId])).rows;
+    await file('staff.csv',['id','display_name','login','phone','status'],(async function*(){yield staff.map(a=>[a.id,a.display_name,a.login,a.phone,a.status]);})());
+    const readme=new ZipDeflate('README.txt',{level:6});zip.add(readme);
+    readme.push(strToU8('Clinora clinic data export. UTF-8 CSV; integer UZS. Authentication secrets excluded. Sensitive clinical data: store with restricted access.'),true);
+    zip.end();await drain();
+  }};
 }

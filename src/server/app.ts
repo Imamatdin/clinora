@@ -8,7 +8,7 @@ import { api, type ApiConfig } from './notebook.js';
 import { PayrollRulesMissing } from '../modules/payroll/actions.js';
 import { LoginLimited } from '../modules/login/actions.js';
 import { DomainError } from '../modules/identity/access.js';
-import { migrationsCurrent } from './database.js';
+import { migrationsCurrent, transaction } from './database.js';
 
 // One structured line per request. Only method, a de-identified route shape, status and timing:
 // no query strings, bodies, cookies, headers, client addresses or record identifiers.
@@ -96,6 +96,18 @@ export async function createApp(webDirectory?: string, config?: ApiConfig, optio
           res.writeHead(200, { 'Content-Type': result.file.contentType, 'Content-Length': result.file.data.length,
             'Content-Disposition': `inline; filename="${result.file.filename.replace(/[^a-zA-Z0-9._-]/g, '')}"` });
           res.end(req.method === 'HEAD' ? undefined : result.file.data);
+        } else if (result.stream !== undefined) { // Streamed downloads (full clinic export): never held in memory whole.
+          const stream = result.stream;
+          res.writeHead(200, { 'Content-Type': stream.contentType, 'Cache-Control': 'no-store',
+            'Content-Disposition': `attachment; filename="${stream.filename.replace(/[^a-zA-Z0-9._-]/g, '')}"` });
+          if (req.method === 'HEAD') { res.end(); return; }
+          try {
+            await transaction(config.pool, async tx => {
+              await tx.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+              await stream.write(tx, res);
+            });
+            res.end();
+          } catch { res.destroy(); } // Headers are sent: a cut connection is the only honest failure signal.
         } else json(result.status ?? 200, result.body);
       } catch (error) {
         if (error instanceof LoginLimited) {

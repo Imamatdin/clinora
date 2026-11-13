@@ -16,7 +16,7 @@ const days = Number(process.env.LOAD_DAYS ?? 730);
 test(`reports stay under ${LIMIT_MS} ms with ${days} days of history`, { timeout: 15 * 60_000 }, async () => {
   const f = await httpFixture();
   try {
-    let started = performance.now();
+    const started = performance.now();
     const seed = await seedHistory(f.pool, f.owner.clinicId, f.owner.userId, days);
     const seedMs = Math.round(performance.now() - started);
     // One seeded doctor gets a synthetic sign-in so the doctor's own earnings view is measured.
@@ -43,13 +43,21 @@ test(`reports stay under ${LIMIT_MS} ms with ${days} days of history`, { timeout
     const dayId = (await f.pool.query("SELECT id FROM business_days WHERE clinic_id=$1 AND status='open'", [f.owner.clinicId])).rows[0].id;
     await run('day close', ceo, `/business-days/${dayId}/close`, {});
 
+    // Full export: streamed, so recorded for the handoff but not held to the 2 s report target.
+    const t0 = performance.now();
+    const archive = await ceo.request(base + '/reports/full-export', {});
+    assert.equal(archive.status, 200); assert.equal(archive.headers.get('content-length'), null);
+    let exportBytes = 0; const reader = archive.body!.getReader();
+    for (let r = await reader.read(); !r.done; r = await reader.read()) exportBytes += r.value.length;
+    const exportMs = Math.round(performance.now() - t0);
+    assert.ok(exportBytes > 1_000_000, String(exportBytes));
     // Sanity: the measured requests really carried the stated volume.
     assert.ok(Number(dayToday.totals.patients) >= 150, String(dayToday.totals.patients));
     assert.ok(BigInt(month.totals.collected) > 0n);
     assert.ok(BigInt(dayToday.totals.outstanding) > BigInt(month.totals.value) / 100n, 'debts from earlier months are in outstanding');
     assert.ok(own.lines.length > 100 && own.lines.every((l: { user_id: string }) => l.user_id === seed.doctors[0]));
     assert.ok(payroll.lines.length > 1000);
-    process.stdout.write(`# load: ${JSON.stringify({ days, seedMs, counts: seed.counts, timings, responseBytes: sizes })}\n`);
+    process.stdout.write(`# load: ${JSON.stringify({ days, seedMs, counts: seed.counts, timings, responseBytes: sizes, fullExport: { ms: exportMs, bytes: exportBytes } })}\n`);
     for (const [name, ms] of Object.entries(timings)) assert.ok(ms < LIMIT_MS, `${name} took ${ms} ms (limit ${LIMIT_MS})`);
   } finally { await f.close(); }
 });

@@ -9,6 +9,7 @@
 
 /* The visit: the patient's card beside the note. */
 .dr-visit { display: grid; gap: 28px; min-width: 0; max-width: none !important; }
+.dr-visit > [aria-live] { grid-column: 1 / -1; display: grid; gap: 8px; } .dr-visit > [aria-live]:empty { margin-bottom: -28px; }
 .dr-main { display: grid; gap: 28px; min-width: 0; }
 .dr-card { display: grid; gap: 12px; min-width: 0; align-content: start; }
 .dr-patient h3 { font-family: var(--serif); font-size: 1.75rem; font-weight: 600; line-height: 1.12; }

@@ -8,7 +8,8 @@ import { seedDemoStaff } from '../../src/server/demo-staff.js';
 import { seedDemoCatalog } from '../../src/server/demo-catalog.js';
 import { DICTIONARIES, LOCALE_LABELS, LOCALES, type UiKey } from '../../src/web/i18n/index.js';
 import { MODULES, modulesFor } from '../../src/web/modules.js';
-import type { Role } from '../../src/modules/identity/roles.js';
+import { MANAGERS, type Role } from '../../src/modules/identity/roles.js';
+import { go, headerButton } from './ui.js';
 
 /*
  * Task 017: every role lands on its main job, sees only its own modules, and the screen follows the ease-of-use
@@ -51,26 +52,30 @@ test('role homes: landing module, own navigation and ease-of-use rules in three 
         await page.getByRole('button', { name: T0['auth.signIn'], exact: true }).click();
         for (const locale of LOCALES) {
           const D = DICTIONARIES[locale], T = (k: UiKey) => D[k];
-          // Task 025: below 900 px the language switch is in the header menu.
-          if (width < 900) await page.locator('.header-menu-toggle').click();
-          await page.getByRole('banner').locator('.lang-switch').getByRole('button', { name: LOCALE_LABELS[locale], exact: true }).click();
-          await expect(page.getByRole('banner').getByRole('group', { name: T('app.language') })).toBeVisible();
-          if (width < 900) await page.locator('.header-menu-toggle').click();
-          await expect(page.getByRole('heading', { level: 1, name: T(`home.${role}.title` as UiKey) })).toBeVisible();
-          await expect(page.locator('html')).toHaveAttribute('lang', locale);
-          // Navigation lists exactly this role's modules, the landing module first and current.
+          // Task 028: the language is chosen in Settings (and saved to the account), not in the header.
+          await go(page, 'settings');
+          await page.locator('.lang-switch').getByRole('button', { name: LOCALE_LABELS[locale], exact: true }).click();
+          await expect(page.getByRole('main').getByRole('group', { name: T('app.language') })).toBeVisible();
+          await expect(page.getByRole('banner').locator('.lang-switch')).toHaveCount(0);
+          // Navigation lists exactly this role's screens (plus staff for managers, and settings), the landing screen first.
           const mine = modulesFor(role, MODULES);
           expect(mine[0]!.id, `${role} lands on its main job`).toBe(LANDING[role]);
-          if (mine.length > 1) {
-            // Tabs that do not fit sit in the "More" menu (task 025); together they are exactly this role's modules.
-            const nav = page.locator('.role-modules > nav.sections'), tabs = nav.locator(':scope > button');
-            await expect(tabs.first()).toHaveAttribute('aria-current', 'page');
-            const more = nav.locator('.tabs-more > button');
-            if (await more.count()) await more.click();
-            const all = [...await tabs.allTextContents(), ...await nav.locator('.tabs-menu button').allTextContents()];
-            expect(all.sort()).toEqual(mine.map(m => T(m.label)).sort());
-            if (await more.count()) await more.click();
+          const wanted = [...mine.map(m => m.id), ...(MANAGERS.includes(role) ? ['staff'] : []), 'settings'];
+          const bar = page.locator(width < 900 ? 'nav.bottombar' : 'nav.rail');
+          const listed = await bar.locator('[data-nav]').evaluateAll(els => els.map(e => e.getAttribute('data-nav')!));
+          const more = page.locator('.more-toggle');
+          if (width < 900 && await more.isVisible()) {
+            // Places beyond the first four sit in the "More" sheet; together they are exactly this role's screens.
+            await more.click();
+            listed.push(...await page.getByRole('dialog').locator('[data-nav]').evaluateAll(els => els.map(e => e.getAttribute('data-nav')!)));
+            await page.keyboard.press('Escape');
           }
+          expect(listed, `${role} navigation`).toEqual(wanted);
+          expect(await bar.locator('[data-nav]').evaluateAll(els => els.map(e => e.textContent))).toEqual(expect.arrayContaining([T(mine[0]!.label)]));
+          await go(page, LANDING[role]);
+          await expect(page.getByRole('heading', { level: 1, name: T(mine[0]!.label), exact: true })).toBeVisible();
+          await expect(page.locator(`[data-nav="${LANDING[role]}"]`).locator('visible=true').first()).toHaveAttribute('aria-current', 'page');
+          await expect(page.locator('html')).toHaveAttribute('lang', locale);
           await page.waitForTimeout(300); // let the landing screen finish loading before measuring
           // Ease-of-use checks on every visible button and the page width.
           const found = await page.evaluate(() => {
@@ -88,8 +93,7 @@ test('role homes: landing module, own navigation and ease-of-use rules in three 
           problems.push(...found.map(p => `${role} ${locale} ${width}px: ${p}`));
           await page.screenshot({ path: `${OUT}/${role}-${locale}-${width}.png`, fullPage: true });
         }
-        if (width < 900) await page.locator('.header-menu-toggle').click();
-        await page.getByRole('button', { name: DICTIONARIES.ru['app.signOut'], exact: true }).click();
+        await headerButton(page, DICTIONARIES.ru['app.signOut']);
         await expect(page.getByLabel(DICTIONARIES.ru['auth.identifier'], { exact: true })).toBeVisible();
       }
     }
@@ -97,7 +101,7 @@ test('role homes: landing module, own navigation and ease-of-use rules in three 
     for (const role of Object.keys(LANDING) as Role[]) {
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.goto(`${f.origin}/help/${role}`);
-      await page.getByRole('button', { name: 'Ўзб', exact: true }).click();
+      await page.getByRole('button', { name: LOCALE_LABELS['uz-Cyrl'], exact: true }).click();
       const D = DICTIONARIES['uz-Cyrl'];
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(D['help.title'].replace('{role}', D[`role.${role}` as UiKey]));
       await expect(page.locator('.help-body ol li')).toHaveCount(5);

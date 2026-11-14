@@ -44,7 +44,7 @@
 .ceo-performance-facts button b { color: var(--ink); font-size: var(--t-body); font-weight: 600; }
 .ceo-performance-facts button:hover:not(:disabled) { background: none; } .ceo-performance-facts button:hover:not(:disabled) b { color: var(--indigo); }
 .ceo-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0 4px; }
-.ceo-chips button { min-height: 44px; padding: 6px 14px; border-radius: 999px; background: none; color: var(--ink-2); font-weight: 500; font-size: var(--t-small); }
+.ceo-chips button { min-height: 48px; padding: 6px 14px; border-radius: 999px; background: none; color: var(--ink-2); font-weight: 500; font-size: var(--t-small); }
 .ceo-chips button[aria-pressed=true] { background: var(--tint-2); color: var(--indigo); font-weight: 600; }
 .ceo-all { margin-top: 4px; background: none; color: var(--indigo); padding-inline: 0; font-weight: 600; }
 .ceo-all:hover:not(:disabled) { background: none; text-decoration: underline; text-underline-offset: 4px; }

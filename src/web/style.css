@@ -161,7 +161,7 @@ svg.abr { stroke: none; fill: none; }
 
 /* Segmented control */
 .seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--fill); border-radius: var(--r); max-width: 100%; }
-.seg button { min-height: 42px; padding: 8px 16px; border-radius: 9px; background: none; color: var(--ink-2); font-weight: 500; white-space: nowrap; }
+.seg button { min-height: 48px; padding: 8px 18px; border-radius: 9px; background: none; color: var(--ink-2); font-weight: 500; white-space: nowrap; }
 .seg button:hover:not(:disabled) { background: none; color: var(--ink); }
 .seg { border-radius: 999px; } .seg button { border-radius: 999px; }
 .seg button[aria-pressed=true], .seg button.current { background: #fff; color: var(--ink); font-weight: 600; }
@@ -172,10 +172,10 @@ svg.abr { stroke: none; fill: none; }
 .rail { position: sticky; top: 0; height: 100dvh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 18px 12px 14px; background: var(--bg-2); }
 .brand { font-size: 1.375rem; font-weight: 700; letter-spacing: -.05em; padding: 4px 12px 18px; display: flex; align-items: baseline; gap: 8px; }
 .brand small { letter-spacing: 0; font-weight: 500; }
-.nav-item { justify-content: flex-start; gap: 12px; width: 100%; min-height: 44px; padding: 8px 12px; border-radius: 10px; background: none; color: var(--ink-2); font-weight: 500; text-align: start; }
+.nav-item { justify-content: flex-start; gap: 12px; width: 100%; min-height: 48px; padding: 8px 12px; border-radius: 10px; background: none; color: var(--ink-2); font-weight: 500; text-align: start; }
 .nav-item:hover:not(:disabled) { background: var(--fill-2); color: var(--ink); }
 .nav-item[aria-current=page] { background: var(--tint-2); color: var(--indigo); font-weight: 600; }
-.icon-button { width: 44px; min-width: 44px; min-height: 44px; padding: 0; background: none; color: var(--ink-2); border-radius: 50%; }
+.icon-button { width: 48px; min-width: 48px; min-height: 48px; padding: 0; background: none; color: var(--ink-2); border-radius: 50%; }
 .icon-button:hover:not(:disabled) { background: var(--fill-2); color: var(--ink); }
 svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .nav-item svg, .bar-item svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
@@ -186,11 +186,11 @@ svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; s
 .topbar .brand { display: none; padding: 0; }
 .clinic-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .day { font-size: var(--t-small); color: var(--ink-2); font-weight: 500; white-space: nowrap; }
-button.day { min-height: 44px; padding: 6px 10px; background: none; margin-left: -10px; }
+button.day { min-height: 48px; padding: 6px 10px; background: none; margin-left: -10px; }
 button.day:hover:not(:disabled) { background: var(--fill); }
 .topbar-end { margin-left: auto; display: flex; align-items: center; gap: 6px; min-width: 0; }
 .person { font-weight: 500; color: var(--ink); max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
-button.person-menu { background: none; padding: 6px 10px; min-height: 44px; }
+button.person-menu { background: none; padding: 6px 10px; min-height: 48px; }
 button.person-menu:hover:not(:disabled) { background: var(--fill); }
 .page { width: 100%; padding: 8px var(--pad) 96px; display: grid; gap: 16px; align-content: start; }
 .page > *, .screen > * { max-width: var(--col); } .page > .screen { max-width: none; display: grid; gap: 16px; align-content: start; min-width: 0; }
@@ -245,7 +245,7 @@ button.person-menu:hover:not(:disabled) { background: var(--fill); }
 .auth .primary, .lock .primary { width: 100%; }
 .auth-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
 .password-field { position: relative; display: grid; }
-.password-field input { padding-right: 56px; }
+.password-field input { padding-right: 60px; }
 .password-toggle { position: absolute; right: 4px; bottom: 4px; }
 .pending { max-width: 520px; padding: 24px var(--pad); display: grid; gap: 14px; }
 .people { list-style: none; padding: 0; margin: 0; }

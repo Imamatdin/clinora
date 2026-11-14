@@ -1,14 +1,14 @@
 /* Task 017 cheat sheet: readable on screen, one A4 page when printed. */
-.help-sheet{max-width:900px;margin:0 auto;padding:24px 16px;font-size:18px;color:#213c44}
+.help-sheet{max-width:900px;margin:0 auto;padding:24px 16px;font-size:18px;color:var(--ink)}
 .help-tools{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:16px}
-.help-brand{font-weight:700;color:#145b54;margin:0}
+.help-brand{font-weight:700;color:var(--indigo);margin:0}
 .help-sheet h1{font-size:1.8rem;margin:6px 0}
-.help-lead{color:#5c7379}
+.help-lead{color:var(--ink-2)}
 .help-body{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:start}
 .help-body ol{padding-left:1.4em;margin:0;display:grid;gap:14px;line-height:1.5}
-.help-body figure{margin:0;border:1px solid #d7e2df;border-radius:8px;padding:8px;background:#fff}
+.help-body figure{margin:0;border-radius:16px;overflow:hidden}
 .help-body img{width:100%;height:auto;display:block}
-.help-body figcaption{font-size:.8rem;color:#5c7379;margin-top:6px}
-.help-footer{margin-top:24px;border-top:1px solid #d7e2df;padding-top:12px;font-size:.9rem}
+.help-body figcaption{font-size:.8rem;color:var(--ink-2);margin-top:6px}
+.help-footer{margin-top:24px;border-top:1px solid var(--line);padding-top:12px;font-size:.9rem}
 @media(max-width:640px){.help-body{grid-template-columns:1fr}.help-body figure{max-width:300px}}
 @media print{@page{size:A4;margin:14mm}.help-tools{display:none}.help-sheet{max-width:none;padding:0;font-size:13pt}.help-body{grid-template-columns:minmax(0,1fr) 62mm}body{background:#fff}}

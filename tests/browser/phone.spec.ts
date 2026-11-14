@@ -11,10 +11,13 @@ import { DICTIONARIES } from '../../src/web/i18n/index.js';
 import { ceo as CEO } from '../../src/web/i18n/ceo.uz-Cyrl.js';
 import { lab as LAB } from '../../src/web/i18n/lab.uz-Cyrl.js';
 import type { Role } from '../../src/modules/identity/roles.js';
+import { go, headerButton } from './ui.js';
 
 /*
- * Task 025: phone layout on the synthetic demo clinic day. Every role at 390x844: no sideways scrolling and a
- * one-row header; the CEO dashboard collapses its breakdowns; first-screen screenshots at 390 and 1366 px.
+ * Tasks 025 and 028: phone layout on the synthetic demo clinic day. Every role at 390x844: no sideways scrolling, a
+ * one-row header (brand and business day), a bottom bar of at most five places with nothing cut off, and Settings
+ * holding the language, PIN and Telegram, and sign out. From 900 px the left rail replaces the bottom bar. The CEO
+ * dashboard collapses its breakdowns; first-screen screenshots at 390 and 1366 px.
  */
 const OUT = 'work/browser-evidence/phone';
 const T = DICTIONARIES['uz-Cyrl'];
@@ -30,9 +33,8 @@ async function signIn(page: Page, origin: string, login: string, password: strin
   await expect(page.locator('main.page')).toBeVisible();
   await page.waitForTimeout(500); // let the landing screen finish loading before measuring
 }
-async function signOut(page: Page, phone: boolean) {
-  if (phone) await page.locator('.header-menu-toggle').click();
-  await page.getByRole('button', { name: T['app.signOut'], exact: true }).click();
+async function signOut(page: Page) {
+  await headerButton(page, T['app.signOut']);
   await expect(page.getByLabel(T['auth.identifier'], { exact: true })).toBeVisible();
 }
 
@@ -59,37 +61,37 @@ test('phone layout: one-row header and no sideways scroll for every role; CEO da
         await signIn(page, f.origin, `phone.${LOGIN[role]}`, f.password);
         const m = await page.evaluate(() => {
           const bar = document.querySelector('.topbar')!.getBoundingClientRect();
-          const parts = ['.topbar .brand', '.topbar > .pill', '.header-menu-toggle'].map(s => document.querySelector(s)?.getBoundingClientRect());
+          const parts = ['.topbar .brand', '.topbar .day'].map(s => document.querySelector(s)?.getBoundingClientRect());
           return { scroll: document.documentElement.scrollWidth, inner: window.innerWidth, bar: bar.height, height: document.documentElement.scrollHeight,
             parts: parts.map(r => r && r.width ? { top: r.top, bottom: r.bottom } : null) };
         });
         if (m.scroll > m.inner) problems.push(`${role} ${width}px: page scrolls sideways (${m.scroll}px)`);
+        await page.screenshot({ path: `${OUT}/${role}-${width}.png`, fullPage: true });
         if (phone) {
-          // One row: logo, business-day badge and menu button share a line, and the header is no taller than one touch row.
+          // One row: the brand and the business day share a line, and the header is no taller than one touch row.
           if (m.bar > 72) problems.push(`${role}: header is ${Math.round(m.bar)}px high`);
-          if (m.parts.some(p => !p)) problems.push(`${role}: header is missing the logo, day badge or menu button`);
+          if (m.parts.some(p => !p)) problems.push(`${role}: header is missing the brand or the business day`);
           const rows = m.parts.filter(Boolean) as { top: number; bottom: number }[];
           if (rows.some(a => rows.some(b => a.bottom <= b.top))) problems.push(`${role}: header items are on more than one row`);
-          // The menu holds the name, language, PIN and Telegram, and sign out.
-          await page.locator('.header-menu-toggle').click();
-          const panel = page.locator('.header-menu-panel');
-          await expect(panel.locator('.lang-switch')).toBeVisible();
-          await expect(panel.getByRole('button', { name: T['access.me.button'], exact: true })).toBeVisible();
-          await expect(panel.getByRole('button', { name: T['app.signOut'], exact: true })).toBeVisible();
-          await page.keyboard.press('Escape');
-          await expect(panel.locator('.lang-switch')).toBeHidden();
-          await expect(page.locator('.header-menu-toggle')).toBeFocused();
-          // No tab row is cut off at the right edge.
-          const clipped = await page.evaluate(() => Array.from(document.querySelectorAll('nav.sections > button, nav.sections > .tabs-more > button'))
-            .filter(b => b.getBoundingClientRect().right > window.innerWidth + 0.5).map(b => b.textContent));
-          if (clipped.length) problems.push(`${role}: tabs cut off: ${clipped.join(', ')}`);
+          // The bottom bar: at most five places, each at least 44 px high, none cut off at either edge.
+          await expect(page.locator('nav.rail')).toBeHidden();
+          const bar = await page.evaluate(() => Array.from(document.querySelectorAll('nav.bottombar > button')).map(b => { const r = b.getBoundingClientRect(); return { text: b.textContent, left: r.left, right: r.right, height: r.height }; }));
+          if (!bar.length || bar.length > 5) problems.push(`${role}: bottom bar has ${bar.length} places`);
+          for (const b of bar) if (b.left < -0.5 || b.right > 390.5 || b.height < 44) problems.push(`${role}: bottom bar item cut off or too small: ${b.text}`);
           if (role === 'ceo') test.info().annotations.push({ type: 'ceo-dashboard-height-390', description: `${m.height}px` });
+          // Settings holds what is set once: the language, PIN and Telegram, and sign out. Nothing of it is in the header.
+          await expect(page.getByRole('banner').locator('.lang-switch')).toHaveCount(0);
+          await go(page, 'settings');
+          await expect(page.getByRole('main').locator('.lang-switch')).toBeVisible();
+          await expect(page.getByRole('main').getByRole('heading', { name: T['access.me.pinTitle'], exact: true })).toBeVisible();
+          await expect(page.getByRole('main').getByRole('button', { name: T['app.signOut'], exact: true })).toBeVisible();
+          if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)) problems.push(`${role}: settings scrolls sideways`);
+          await page.locator('nav.bottombar > button').first().click();
         } else {
-          await expect(page.locator('.header-menu-toggle')).toBeHidden();
-          await expect(page.getByRole('banner').locator('.lang-switch')).toBeVisible();
-          await expect(page.getByRole('banner').getByRole('button', { name: T['app.signOut'], exact: true })).toBeVisible();
+          await expect(page.locator('nav.bottombar')).toBeHidden();
+          await expect(page.locator('nav.rail')).toBeVisible();
+          await expect(page.getByRole('banner').locator('.clinic-name')).toBeVisible();
         }
-        await page.screenshot({ path: `${OUT}/${role}-${width}.png`, fullPage: true });
 
         if (role === 'ceo' && phone) {
           // About three phone screens for the default view (measured 2,720 px on the demo day; 6,597 px before task 025).
@@ -147,7 +149,7 @@ test('phone layout: one-row header and no sideways scroll for every role; CEO da
           await expect(lab).toContainText(LAB['lab.orderedAtRegistration'].replace('{name}', registrar).replace('{role}', T['role.registrar']));
           await expect(lab).not.toContainText(LAB['lab.orderedBy'].replace('{name}', registrar));
         }
-        await signOut(page, phone);
+        await signOut(page);
       }
     }
     expect([...new Set(problems)]).toEqual([]);

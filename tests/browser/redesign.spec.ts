@@ -10,12 +10,13 @@ import { seedDemoDay } from '../../src/server/demo-day.js';
 import { DICTIONARIES } from '../../src/web/i18n/index.js';
 import { registration as REG } from '../../src/web/i18n/registration.uz-Cyrl.js';
 import type { Role } from '../../src/modules/identity/roles.js';
+import { go, headerButton } from './ui.js';
 
 /*
- * Task 026: screenshots of every role on the synthetic demo clinic day, at 390 and 1366 px, in color and in
- * greyscale (rule 8: with color removed, sections and rows must still read). Full page, uploaded by CI as the
- * synthetic-browser-evidence artifact. The cashier and registration screens are also captured mid-task.
- * Also checks the type contract: the page renders in the bundled Onest, not a fallback.
+ * Task 028: screenshots of every role on the synthetic demo clinic day, at 390 and 1440 px, in color and in
+ * greyscale (docs/DESIGN.md: with color removed, structure must still read). Uploaded by CI as the
+ * synthetic-browser-evidence artifact. Sign-in, Settings, and the doctor, cashier and registration screens mid-task
+ * are captured too. Also checks the type contract: the page renders in the bundled Onest, names in the bundled serif.
  */
 const OUT = 'work/browser-evidence/redesign';
 const T = DICTIONARIES['uz-Cyrl'];
@@ -31,9 +32,8 @@ async function signIn(page: Page, origin: string, login: string, password: strin
   await expect(page.locator('main.page')).toBeVisible();
   await page.waitForTimeout(500);
 }
-async function signOut(page: Page, phone: boolean) {
-  if (phone) await page.locator('.header-menu-toggle').click();
-  await page.getByRole('button', { name: T['app.signOut'], exact: true }).click();
+async function signOut(page: Page) {
+  await headerButton(page, T['app.signOut']);
   await expect(page.getByLabel(T['auth.identifier'], { exact: true })).toBeVisible();
 }
 async function shoot(page: Page, name: string, width: number) {
@@ -46,7 +46,7 @@ async function shoot(page: Page, name: string, width: number) {
 }
 
 test.use({ actionTimeout: 15000 });
-test('redesign screenshots: every role at 390 and 1366, color and greyscale, in the bundled font', async ({ browser }) => {
+test('design screenshots: every role at 390 and 1440, color and greyscale, in the bundled fonts', async ({ browser }) => {
   test.setTimeout(300000);
   const f = await processFixture({ ASSISTANT_SIMULATION: 'false' });
   try {
@@ -60,18 +60,31 @@ test('redesign screenshots: every role at 390 and 1366, color and greyscale, in 
       await seedDemoDay(tx, c, { ...ids, doctorIds } as Parameters<typeof seedDemoDay>[2]);
     });
     await mkdir(OUT, { recursive: true });
-    for (const width of [390, 1366]) {
+    for (const width of [390, 1440]) {
       const phone = width < 900;
       // Phones at device scale 2 (what a person sees); the desktop capture at 1 keeps the files reviewable.
       const context = await browser.newContext({ viewport: { width, height: phone ? 844 : 900 }, deviceScaleFactor: phone ? 2 : 1 });
       const page = await context.newPage();
+      await page.goto(f.origin); await expect(page.getByLabel(T['auth.identifier'], { exact: true })).toBeVisible(); await shoot(page, 'sign-in', width);
       for (const role of Object.keys(LOGIN) as Role[]) {
         await signIn(page, f.origin, `shot.${LOGIN[role]}`, f.password);
         const family = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
         expect(family).toMatch(/^"?Onest"?/);
         expect(await page.evaluate(() => document.fonts.check('16px Onest', 'Ўзбекча қўғҳ ʻ'))).toBe(true);
+        // Names are set in the bundled serif: its Cyrillic, extended Cyrillic and Latin subsets all load from this origin.
+        expect(await page.evaluate(async () => (await document.fonts.load('600 16px "Source Serif 4"', 'Ҳамидов Қўчқор Ғайрат oʻgʻli')).length)).toBeGreaterThanOrEqual(3);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         await shoot(page, role, width);
+        if (role === 'doctor') {
+          // Call the next patient and open the visit: the doctor's working screen.
+          const dr = page.locator('section.dr');
+          const act = dr.locator('.dr-current button.primary'), visit = dr.locator('.dr-visit');
+          await act.click(); // call the next patient (or, on the second pass, reopen the visit already started)
+          await page.waitForTimeout(1200); // the queue reloads, then either the visit is open or the button now says "start"
+          if (!await visit.isVisible()) await act.click();
+          await expect(visit).toBeVisible();
+          await shoot(page, 'doctor-visit', width);
+        }
         if (role === 'cashier') {
           const cash = page.locator('section.cashier');
           // An outpatient who still owes money, so the bill shows a balance due.
@@ -79,29 +92,28 @@ test('redesign screenshots: every role at 390 and 1366, color and greyscale, in 
             WHERE v.clinic_id=$1 AND v.type='outpatient' AND (SELECT coalesce(sum(quantity*unit_price_uzs),0) FROM charge_lines l WHERE l.clinic_id=v.clinic_id AND l.visit_id=v.id AND l.status<>'cancelled')
               > (SELECT coalesce(sum(CASE kind WHEN 'payment' THEN amount_uzs ELSE -amount_uzs END),0) FROM payments x WHERE x.clinic_id=v.clinic_id AND x.visit_id=v.id)
             ORDER BY p.patient_no LIMIT 1`, [c])).rows[0] as { patient_no: number; full_name: string };
-          const no = owing.patient_no, surname = owing.full_name.split(' ')[0]!;
-          await cash.getByLabel(T['cashier.search'], { exact: true }).fill(String(no));
+          await cash.getByLabel(T['cashier.search'], { exact: true }).fill(String(owing.patient_no));
           await cash.getByRole('button', { name: T['cashier.find'], exact: true }).click();
-          await cash.getByRole('button', { name: new RegExp(`^${no} · ${surname}`) }).click();
+          await cash.getByRole('button', { name: `${owing.patient_no} · ${owing.full_name}`, exact: true }).click();
           await expect(cash.getByRole('heading', { name: owing.full_name, exact: true })).toBeVisible();
+          await cash.getByLabel(T['cashier.given'], { exact: true }).fill('200000');
           await shoot(page, 'cashier-bill', width);
         }
         if (role === 'registrar') {
           const reg = page.locator('section.registration');
           await reg.getByLabel(REG['registration.search'], { exact: true }).fill('Каримова');
-          await reg.getByRole('button', { name: REG['registration.find'], exact: true }).click();
-          await expect(reg.locator('.registration-results li').first()).toBeVisible();
+          await expect(reg.locator('.registration-results li').first()).toBeVisible(); // results appear as she types
           await shoot(page, 'registration-results', width);
           await reg.locator('.registration-results button').first().click();
           await reg.locator('.registration-point').first().getByRole('checkbox').check();
           await shoot(page, 'registration-route', width);
-          await reg.getByText(REG['registration.more'], { exact: true }).click();
           await reg.getByRole('button', { name: REG['registration.back'], exact: true }).click();
           await reg.getByRole('button', { name: REG['registration.new'], exact: true }).click();
           await shoot(page, 'registration-form', width);
           await reg.getByRole('button', { name: REG['registration.back'], exact: true }).click();
         }
-        await signOut(page, phone);
+        if (role === 'ceo') { await go(page, 'settings'); await shoot(page, 'settings', width); }
+        await signOut(page);
       }
       await context.close();
     }

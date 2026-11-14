@@ -160,8 +160,9 @@ svg.abr { stroke: none; fill: none; }
 .ticket.wide { width: auto; min-width: calc(var(--s) * 1.18); padding-inline: calc(var(--s) * .3); font-size: calc(var(--s) * .36); }
 
 /* Segmented control */
-.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--fill); border-radius: var(--r); max-width: 100%; }
-.seg button { min-height: 48px; padding: 8px 18px; border-radius: 9px; background: none; color: var(--ink-2); font-weight: 500; white-space: nowrap; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--fill); border-radius: var(--r); max-width: 100%; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.seg::-webkit-scrollbar { display: none; }
+.seg button { flex: 0 0 auto; min-height: 48px; padding: 8px clamp(10px, 3.4vw, 18px); border-radius: 9px; background: none; color: var(--ink-2); font-weight: 500; white-space: nowrap; }
 .seg button:hover:not(:disabled) { background: none; color: var(--ink); }
 .seg { border-radius: 999px; } .seg button { border-radius: 999px; }
 .seg button[aria-pressed=true], .seg button.current { background: #fff; color: var(--ink); font-weight: 600; }

@@ -128,8 +128,8 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await signIn('day.lab');
     // Newest first: the doctor's glucose order, then the registrar's blood count.
     for (const [param, value, unit] of [['Глюкоза', '5.2', 'ммоль/л'], ['Гемоглобин', '131', 'г/л']]) {
-      await expect(dr.getByRole('heading', { name: T('lab.title'), exact: true })).toBeVisible();
-      await dr.getByRole('button', { name: T('lab.open'), exact: true }).first().click();
+      await expect(page.getByRole('heading', { name: T('module.labOrders'), exact: true })).toBeVisible();
+      await dr.locator('.dr-orders button').first().click();
       await dr.getByLabel(T('lab.param'), { exact: true }).fill(param!);
       await dr.getByLabel(T('lab.value'), { exact: true }).fill(value!);
       await dr.getByLabel(T('lab.unit'), { exact: true }).fill(unit!);

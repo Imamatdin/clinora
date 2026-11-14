@@ -98,8 +98,8 @@ for (const width of [360, 1280]) test(`doctor and lab complete one visit at ${wi
 
     // Lab: open the order, enter a result, save, confirm.
     await signIn('lab.e2e@example.test');
-    await expect(dr.getByRole('heading', { name: T('lab.title'), exact: true })).toBeVisible();
-    await dr.getByRole('button', { name: T('lab.open'), exact: true }).click();
+    await expect(page.getByRole('heading', { name: T('module.labOrders'), exact: true })).toBeVisible();
+    await dr.locator('.dr-orders button').first().click();
     await dr.getByLabel(T('lab.param'), { exact: true }).fill('Гемоглобин');
     await dr.getByLabel(T('lab.value'), { exact: true }).fill('128');
     await dr.getByLabel(T('lab.unit'), { exact: true }).fill('г/л');

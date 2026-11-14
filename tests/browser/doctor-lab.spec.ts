@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { processFixture, T } from './process-fixture.js';
 import { passwordHash } from '../../src/server/security.js';
-import { headerButton } from './ui.js';
+import { headerButton, visitPart } from './ui.js';
 
 /*
  * Task 010 acceptance: at phone width the doctor calls the next patient, writes and approves a note with a
@@ -87,6 +87,7 @@ for (const width of [360, 1280]) test(`doctor and lab complete one visit at ${wi
     const pdfHref = await dr.getByRole('link', { name: T('doctor.pdf'), exact: true }).getAttribute('href');
     const pdf = await page.evaluate(async href => { const r = await fetch(href!); return { status: r.status, type: r.headers.get('content-type') }; }, pdfHref);
     expect(pdf).toEqual({ status: 200, type: 'application/pdf' });
+    await visitPart(page, 'orders');
     await dr.getByLabel(T('doctor.service'), { exact: true }).selectOption({ value: cbc });
     await dr.getByRole('button', { name: T('doctor.order'), exact: true }).click();
     await expect(dr.getByRole('status').filter({ hasText: T('doctor.ordered') })).toBeVisible();
@@ -114,6 +115,7 @@ for (const width of [360, 1280]) test(`doctor and lab complete one visit at ${wi
     // Doctor: reopen the visit, sees the result on the patient card, completes the consultation.
     await signIn('doctor.e2e@example.test');
     await dr.getByRole('button', { name: T('doctor.open'), exact: true }).click();
+    await visitPart(page, 'history');
     await expect(dr.locator('.dr-patient').getByText('128', { exact: true })).toBeVisible();
     await dr.getByRole('button', { name: T('doctor.complete'), exact: true }).click();
     await expect(dr.getByRole('status').filter({ hasText: T('doctor.completed') })).toBeVisible();

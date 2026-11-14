@@ -7,23 +7,29 @@
 .dr-list .row-end { font-size: var(--t-small); }
 ::view-transition-group(*) { animation-duration: .42s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
 
-/* The visit: the patient's card beside the note. */
-.dr-visit { display: grid; gap: 28px; min-width: 0; max-width: none !important; }
-.dr-visit > [aria-live] { grid-column: 1 / -1; display: grid; gap: 8px; } .dr-visit > [aria-live]:empty { margin-bottom: -28px; }
-.dr-main { display: grid; gap: 28px; min-width: 0; }
-.dr-card { display: grid; gap: 12px; min-width: 0; align-content: start; }
-.dr-patient h3 { font-family: var(--serif); font-size: 1.75rem; font-weight: 600; line-height: 1.12; }
+/* The visit: the patient in the hero, then one part at a time (note, assistant, orders, history). */
+.dr-visit { display: grid; gap: 20px; min-width: 0; max-width: none !important; }
+.dr-visit > :not(.hero) { max-width: 760px; }
+.dr-visit .seg { justify-self: start; overflow-x: auto; }
+.dr-visit > [aria-live]:empty { display: none; }
+.dr-main { display: grid; gap: 20px; min-width: 0; }
+.dr-main > [hidden] { display: none; }
+.dr-card { display: grid; gap: 14px; min-width: 0; align-content: start; }
+.dr-card .dr-head { justify-content: flex-start; }
 .dr-history, .dr-labs, .dr-orders { list-style: none; margin: 0; padding: 0; }
-.dr-history li, .dr-labs li { display: grid; gap: 2px; padding: 10px 0; border-top: 1px solid var(--line); }
+.dr-history li, .dr-labs li { display: grid; gap: 4px; padding: 12px 0; border-top: 1px solid var(--line); }
 .dr-history li:first-child, .dr-labs li:first-child { border-top: 0; }
 .dr-labs table { width: 100%; font-size: var(--t-small); }
 .dr-labs td { padding: 4px 8px 4px 0; border: 0; overflow-wrap: anywhere; }
-.dr-card .dr-list > li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 0; }
 .dr-rx { display: grid; gap: 12px; }
+.dr-rx > button { justify-self: start; }
 .dr-rx-line { display: grid; gap: 8px 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.dr-save { padding-top: 4px; } .dr-save p { flex-basis: 100%; }
+.dr-order { align-items: flex-end; }
+.dr-finish { padding-top: 12px; border-top: 1px solid var(--line); }
 .dr dl div { display: grid; gap: 2px; margin: 6px 0; }
 @media (min-width: 900px) {
-  .dr-visit { grid-template-columns: minmax(260px, 1fr) 2fr; align-items: start; }
   .dr-rx-line { grid-template-columns: 2fr 1fr 1fr 1fr; }
   .dr-rx-line legend, .dr-rx-line label:nth-of-type(5), .dr-rx-line button { grid-column: 1 / -1; }
 }
+@media (max-width: 640px) { .dr-save button, .dr-finish button { width: 100%; } .dr-visit .seg { max-width: 100%; } .dr-visit .seg button { padding-inline: 12px; } }

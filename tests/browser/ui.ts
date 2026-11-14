@@ -66,3 +66,10 @@ export async function openDaySheet(page: Page) {
   await page.locator('.day-toggle').click();
   await expect(page.getByRole('dialog')).toBeVisible();
 }
+
+/** Inside an open visit the doctor sees one part at a time: 'note', 'assistant', 'orders' or 'history' (by position, so it works in any language). */
+export async function visitPart(page: Page, part: 'note' | 'assistant' | 'orders' | 'history') {
+  const tabs = page.locator('.dr-visit > .seg button');
+  const index = { note: 0, assistant: 1, orders: -2, history: -1 }[part];
+  await (index < 0 ? tabs.nth(await tabs.count() + index) : tabs.nth(index)).click();
+}

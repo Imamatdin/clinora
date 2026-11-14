@@ -6,7 +6,7 @@ import { transaction } from '../../src/server/database.js';
 import { seedDemoStaff } from '../../src/server/demo-staff.js';
 import { seedDemoCatalog } from '../../src/server/demo-catalog.js';
 import { assistant } from '../../src/web/i18n/assistant.uz-Cyrl.js';
-import { expectHeaderButton, headerButton, openDaySheet, tab } from './ui.js';
+import { expectHeaderButton, headerButton, openDaySheet, tab, visitPart } from './ui.js';
 
 /*
  * Task 017 acceptance: one synthetic clinic day, every role through the real browser and the compiled server.
@@ -100,7 +100,9 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await expect(page.getByRole('heading', { name: T('module.myQueue'), exact: true })).toBeVisible();
     await dr.getByRole('button', { name: T('doctor.callNext'), exact: true }).click();
     await dr.getByRole('button', { name: T('doctor.start'), exact: true }).click();
+    await visitPart(page, 'assistant');
     await expect(page.locator('.assistant').getByText(assistant['assistant.unavailableBanner'])).toBeVisible();
+    await visitPart(page, 'note');
     await dr.getByLabel(T('doctor.field.reported'), { exact: true }).fill('Синтетик: 2 кундан бери бош оғриғи');
     await dr.getByLabel(T('doctor.field.assessment'), { exact: true }).fill('R51 Бош оғриғи (синтетик)');
     await dr.getByRole('button', { name: T('doctor.rx.add'), exact: true }).click();
@@ -113,6 +115,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await expect(dr.getByRole('status').filter({ hasText: T('doctor.saved', { revision: 1 }) }).first()).toBeVisible();
     await dr.getByRole('button', { name: T('doctor.approve'), exact: true }).click();
     await expect(dr.getByText(T('doctor.approvedTag', { revision: 2 }), { exact: true })).toBeVisible();
+    await visitPart(page, 'orders');
     await dr.getByLabel(T('doctor.service'), { exact: true }).selectOption({ value: await serviceId('L03') });
     await dr.getByRole('button', { name: T('doctor.order'), exact: true }).click();
     await expect(dr.getByRole('status').filter({ hasText: T('doctor.ordered') })).toBeVisible();
@@ -192,8 +195,8 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     // Ward round: the attending surgeon opens the admitted patient's note from the doctor home (no queue ticket).
     await tab(page, T('module.myQueue'));
     await page.locator('.dr-list li', { hasText: 'Синтетик Стационар Бемор' }).getByRole('button').click();
-    await expect(page.locator('section.dr').getByRole('heading', { name: T('doctor.note'), exact: true })).toBeVisible();
-    await expect(page.locator('.dr-patient').getByText('Синтетик Стационар Бемор', { exact: true })).toBeVisible();
+    await expect(page.locator('section.dr').getByLabel(T('doctor.field.reported'), { exact: true })).toBeVisible();
+    await expect(page.locator('.dr-visit-hero').getByRole('heading', { name: 'Синтетик Стационар Бемор', exact: true })).toBeVisible();
     await signOut();
 
     // 8. Inpatient daily bed charges run through yesterday (two bed days).

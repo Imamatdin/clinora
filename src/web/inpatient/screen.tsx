@@ -8,6 +8,8 @@ import { inpatientRu } from '../i18n/inpatient.ru.js';
 import type { WardView, InvoiceView } from '../../modules/inpatient/contracts.js';
 
 import { useLocale } from '../i18n/locale.js';
+import { AbrField } from '../abr.js';
+import { Icon } from '../shell.js';
 
 function Screen({clinic,request,myId,setDirty}:ModuleProps) {
   const locale=useLocale();
@@ -34,56 +36,67 @@ function Screen({clinic,request,myId,setDirty}:ModuleProps) {
   const freeBeds=data?.beds.filter(b=>!b.admission_id).map(b=>({id:b.id,name:`${b.room} · ${b.label}`}))??[];
   const active=data?.admissions.find(a=>a.id===selected);
   const stays=data?.admissions.filter(a=>!mine||a.attending_user_id===myId)??[];
-  return <div className="inpatient">
-    <header><h2>{t('inpatient.title')}</h2></header>
-    {error&&<p role="alert">{error}</p>}<p role="status">{busy?t('inpatient.saving'):notice}</p>
-    <button disabled={busy} onClick={()=>void run(refresh)}>{t('inpatient.refresh')}</button>
-    {!data?<p>{t('inpatient.loading')}</p>:<>
+  const occupied=data?.beds.filter(b=>b.admission_id).length??0;
+  const dmy=(iso:string)=>iso.slice(0,10).split('-').reverse().join('.');
+  return <div className="inpatient screen">
+    {error&&<p role="alert" className="error">{error}</p>}<p role="status" className={busy||!notice?'sr-only':'notice'}>{busy?t('inpatient.saving'):notice}</p>
+    {!data?<p role="status">{t('inpatient.loading')}</p>:<>
+      <div className="hero"><AbrField/><div className="hero-in ward-hero">
+        <div><p className="hero-label">{t('inpatient.occupied')}</p><p className="hero-figure">{occupied}<small>/ {data.beds.length}</small></p></div>
+        <button className="quiet" disabled={busy} onClick={()=>void run(refresh)}><Icon name="refresh"/>{t('inpatient.refresh')}</button>
+      </div></div>
       {/* Task 023: stay days that could not be priced; they are not charged until a price covers them. */}
-      {data.attention.length>0&&<section className="notice" aria-label={t('inpatient.attention')}><h3>{t('inpatient.attention')}</h3><ul>{data.attention.map(a=><li key={a.id}>{t('inpatient.attentionLine',{patient:a.patient,date:a.date,service:a.service})}</li>)}</ul></section>}
+      {data.attention.length>0&&<section className="ward-attention" aria-label={t('inpatient.attention')}><h3 className="section-label attn">{t('inpatient.attention')}</h3><ul className="rows">{data.attention.map(a=><li key={a.id}><div className="row"><span className="row-body">{t('inpatient.attentionLine',{patient:a.patient,date:dmy(a.date),service:a.service})}</span></div></li>)}</ul></section>}
       <section aria-label={t('inpatient.room')} className="bed-map">{data.beds.map(b=><div key={b.id} data-occupied={!!b.admission_id}><strong>{b.room} · {b.label}</strong><p>{b.admission_id?`${t('inpatient.occupied')} · ${b.patient}`:t('inpatient.free')}</p></div>)}</section>
-      {canWrite&&<details><summary>{t('inpatient.admit')}</summary><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,'/admit',f=>({visitId:f.get('visit'),departmentId:f.get('department'),doctorId:f.get('doctor'),bedId:f.get('bed'),expectedDischarge:f.get('expected')||null}))}><fieldset disabled={busy}>
+      {canWrite&&<details className="ward-form"><summary><Icon name="plus"/>{t('inpatient.admit')}</summary><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,'/admit',f=>({visitId:f.get('visit'),departmentId:f.get('department'),doctorId:f.get('doctor'),bedId:f.get('bed'),expectedDischarge:f.get('expected')||null}))}><fieldset disabled={busy}>
         {choose('visit',data.visits.map(v=>({id:v.id,name:`${v.patient_no} · ${v.patient}`})))}
         <label>{t('inpatient.department')}<select name="department" required aria-label={t('inpatient.department')} value={admitDept} onChange={e=>setAdmitDept(e.target.value)}><option value="">{t('inpatient.choose')}</option>{data.departments.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
         {choose('doctor',data.doctors)}{choose('bed',data.beds.filter(b=>!b.admission_id&&(!admitDept||!b.department_id||b.department_id===admitDept)).map(b=>({id:b.id,name:`${b.room} · ${b.label}`})))}
-        <label>{t('inpatient.expected')}<input name="expected" type="date" min={data.today}/></label><button>{t('inpatient.admit')}</button>
+        <label>{t('inpatient.expected')}<input name="expected" type="date" min={data.today}/></label><button className="primary">{t('inpatient.admit')}</button>
       </fieldset></form></details>}
-      <label><input type="checkbox" checked={mine} onChange={e=>setMine(e.target.checked)}/>{t('inpatient.myPatients')}</label>
-      <section className="stays">{stays.length===0?<p>{t('inpatient.empty')}</p>:stays.map(a=><button disabled={busy} key={a.id} aria-pressed={selected===a.id} onClick={()=>void run(async()=>{setSelected(a.id);setBill(null);setConfirm(false);setDirty(false);setBill(await request<InvoiceView>(`${base}/${a.id}/invoice`));})}>
-        {a.patient} · {a.room} {a.bed} · {a.attending} · {t(a.status==='admitted'?'inpatient.admitted':'inpatient.discharged')}
+      <div className="ward-list-head"><h3 className="section-label">{t('inpatient.allPatients')} · <b>{stays.length}</b></h3>
+        <label className="check"><input type="checkbox" checked={mine} onChange={e=>setMine(e.target.checked)}/>{t('inpatient.myPatients')}</label></div>
+      <section className="stays">{stays.length===0?<p className="empty">{t('inpatient.empty')}</p>:stays.map(a=><button disabled={busy} key={a.id} aria-pressed={selected===a.id} className="row" onClick={()=>void run(async()=>{setSelected(a.id);setBill(null);setConfirm(false);setDirty(false);setBill(await request<InvoiceView>(`${base}/${a.id}/invoice`));})}>
+        <span className="row-body"><span className="row-title">{a.patient}</span><span className="row-meta">{a.room} {a.bed} · {a.attending}</span></span>
+        <span className={`row-end ${a.status==='admitted'?'':'okc'}`}>{t(a.status==='admitted'?'inpatient.admitted':'inpatient.discharged')}</span><span className="chev" aria-hidden="true"/>
       </button>)}</section>
-      {active&&<section key={active.id} className="stay-detail"><h3>{active.patient}</h3>
-        {bill&&<div><h4>{t('inpatient.invoice')}</h4>{bill.lines.map(l=><p key={l.id}>{l.name} · {l.quantity} × {amount(l.price)} = {amount(l.value)} {t('inpatient.uzs')}</p>)}
-          {bill.needsAttention?.length?<div className="notice"><strong>{t('inpatient.attention')}</strong>{bill.needsAttention.map(n=><p key={n.kind+n.date+n.service}>{t('inpatient.attentionLine',{patient:bill.patient,date:n.date,service:n.service})}</p>)}</div>:null}
+      {active&&<section key={active.id} className="stay-detail">
+        <div className="hero"><AbrField/><div className="hero-in">
+          <h3 className="hero-name">{active.patient}</h3>
+          <p className="muted">{active.room} {active.bed} · {active.attending}</p>
+          {bill&&<><p className="hero-label">{t('inpatient.due')}</p><p className={`hero-figure ${BigInt(bill.due)>0n?'attn':'okc'}`}>{amount(bill.due)}<small>{t('inpatient.uzs')}</small></p></>}
+        </div></div>
+        {bill&&<div className="stay-bill"><h4 className="section-label">{t('inpatient.invoice')}</h4><ul className="rows">{bill.lines.map(l=><li key={l.id}><div className="row"><span className="row-body"><span className="row-title">{l.name}</span><span className="row-meta">{l.quantity} × {amount(l.price)}</span></span><span className="row-end num">{amount(l.value)} {t('inpatient.uzs')}</span></div></li>)}</ul>
+          {bill.needsAttention?.length?<div className="error"><strong>{t('inpatient.attention')}</strong>{bill.needsAttention.map(n=><p key={n.kind+n.date+n.service}>{t('inpatient.attentionLine',{patient:bill.patient,date:dmy(n.date),service:n.service})}</p>)}</div>:null}
+          <dl className="cashier-totals">{(['value','discount','payable','paid','due'] as const).map(k=><div key={k} className={k==='due'?'total':''}><dt>{t(`inpatient.${k}`)}</dt><dd data-testid={`inpatient-${k}`}>{BigInt(bill[k]).toLocaleString('ru-RU')} {t('inpatient.uzs')}</dd></div>)}</dl>
           <p className="fine">{t('inpatient.linesAsOf')}: {new Date(bill.linesAsOf).toLocaleString(locale)} · {t('inpatient.paymentsAsOf')}: {new Date(bill.paymentsAsOf).toLocaleString(locale)}</p>
-          <dl>{(['value','discount','payable','paid','due'] as const).map(k=><div key={k}><dt>{t(`inpatient.${k}`)}</dt><dd data-testid={`inpatient-${k}`}>{BigInt(bill[k]).toLocaleString('ru-RU')} {t('inpatient.uzs')}</dd></div>)}</dl>
-          <a className="invoice-pdf" href={`${base}/${selected}/invoice-pdf`} target="_blank" rel="noopener noreferrer">{t('inpatient.print')}</a>
+          <a className="button secondary invoice-pdf" href={`${base}/${selected}/invoice-pdf`} target="_blank" rel="noopener noreferrer">{t('inpatient.print')}</a>
         </div>}
         {canWrite&&active.status==='admitted'&&<>
-          <details><summary>{t('inpatient.addService')}</summary><p>{t('inpatient.medicineHelp')}</p><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,`/${selected}/services`,f=>({serviceId:f.get('service'),quantity:Number(f.get('quantity')),
+          <details className="ward-form"><summary>{t('inpatient.addService')}</summary><p className="fine">{t('inpatient.medicineHelp')}</p><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,`/${selected}/services`,f=>({serviceId:f.get('service'),quantity:Number(f.get('quantity')),
               ...f.get('approver')?{override:{reason:f.get('overrideReason'),approverId:f.get('approver'),pin:f.get('approverPin')}}:{}}))}><fieldset disabled={busy}>
             {choose('service',data.services.filter(s=>!['bed','caretaker'].includes(s.kind)).map(s=>({id:s.id,name:`${s.name} · ${s.price===null?'—':amount(s.price)}`})))}
             <label>{t('inpatient.quantity')}<input name="quantity" type="number" min="1" max="10000" required defaultValue="1"/></label>
-            {data.approvers.length>0&&<details className="override"><summary>{t('inpatient.override')}</summary><p>{t('inpatient.overrideHelp')}</p>
+            {data.approvers.length>0&&<details className="override"><summary>{t('inpatient.override')}</summary><p className="fine">{t('inpatient.overrideHelp')}</p>
               <label>{t('inpatient.approver')}<select name="approver" defaultValue=""><option value="">{t('inpatient.choose')}</option>{data.approvers.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
               <label>{t('inpatient.overrideReason')}<input name="overrideReason" maxLength={1000}/></label>
               <label>{t('inpatient.approverPin')}<input name="approverPin" type="password" inputMode="numeric" autoComplete="off" pattern="[0-9]{4,6}"/></label>
             </details>}
-            <button>{t('inpatient.addService')}</button>
+            <button className="primary">{t('inpatient.addService')}</button>
           </fieldset></form></details>
-          <details><summary>{t('inpatient.transfer')}</summary><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,`/${selected}/transfer`,f=>({bedId:f.get('bed')}))}><fieldset disabled={busy}>{choose('bed',freeBeds)}<button>{t('inpatient.transfer')}</button></fieldset></form></details>
-          <details><summary>{t('inpatient.caretaker')}</summary><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,`/${selected}/caretakers`,f=>({fullName:f.get('name'),phone:f.get('phone')||null,dailyServiceId:f.get('dailyService')||null}))}><fieldset disabled={busy}>
+          <details className="ward-form"><summary>{t('inpatient.transfer')}</summary><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,`/${selected}/transfer`,f=>({bedId:f.get('bed')}))}><fieldset disabled={busy}>{choose('bed',freeBeds)}<button className="primary">{t('inpatient.transfer')}</button></fieldset></form></details>
+          <details className="ward-form"><summary>{t('inpatient.caretaker')}</summary><form onChange={()=>setDirty(true)} onSubmit={e=>submit(e,`/${selected}/caretakers`,f=>({fullName:f.get('name'),phone:f.get('phone')||null,dailyServiceId:f.get('dailyService')||null}))}><fieldset disabled={busy}>
             <label>{t('inpatient.name')}<input name="name" maxLength={200} required/></label><label>{t('inpatient.phone')}<input name="phone" type="tel" pattern="\+[1-9][0-9]{7,14}"/></label>
-            {choose('dailyService',data.services.filter(s=>s.kind==='caretaker'),false)}<button>{t('inpatient.addCaretaker')}</button>
+            {choose('dailyService',data.services.filter(s=>s.kind==='caretaker'),false)}<button className="primary">{t('inpatient.addCaretaker')}</button>
           </fieldset></form></details>
-          {confirm?<div role="group" aria-label={t('inpatient.discharge')}><p>{t('inpatient.confirmDischarge')}</p><button disabled={busy} onClick={()=>void run(async()=>{setBill(await mutate(`/${selected}/discharge`,{}) as InvoiceView);setConfirm(false);await refresh();setNotice(t('inpatient.saved'));})}>{t('inpatient.confirm')}</button><button disabled={busy} onClick={()=>setConfirm(false)}>{t('inpatient.cancel')}</button></div>:<button disabled={busy} onClick={()=>setConfirm(true)}>{t('inpatient.discharge')}</button>}
+          {confirm?<div role="group" aria-label={t('inpatient.discharge')} className="ward-confirm"><p>{t('inpatient.confirmDischarge')}</p><div className="actions"><button className="primary big" disabled={busy} onClick={()=>void run(async()=>{setBill(await mutate(`/${selected}/discharge`,{}) as InvoiceView);setConfirm(false);await refresh();setNotice(t('inpatient.saved'));})}>{t('inpatient.confirm')}</button><button className="big" disabled={busy} onClick={()=>setConfirm(false)}>{t('inpatient.cancel')}</button></div></div>:<button className="big ward-discharge" disabled={busy} onClick={()=>setConfirm(true)}>{t('inpatient.discharge')}</button>}
         </>}
       </section>}
-      {canWrite&&<details><summary>{t('inpatient.daily')}</summary><p>{t('inpatient.dailyHelp')}</p><form onSubmit={e=>submit(e,'/daily',f=>({through:f.get('through')}))}><fieldset disabled={busy}><label>{t('inpatient.through')}<input name="through" type="date" required max={new Date(Date.parse(`${data.today}T00:00:00Z`)-86400000).toISOString().slice(0,10)}/></label><button>{t('inpatient.daily')}</button></fieldset></form></details>}
-      {manager&&<details><summary>{t('inpatient.rule')}</summary><form onSubmit={e=>submit(e,'/rule',f=>({rule:{countAdmissionDay:f.get('admissionDay')==='on',countDischargeDay:f.get('dischargeDay')==='on',minimumDays:Number(f.get('minimum'))}}))}><fieldset disabled={busy}>
+      {canWrite&&<details className="ward-form"><summary>{t('inpatient.daily')}</summary><p className="fine">{t('inpatient.dailyHelp')}</p><form onSubmit={e=>submit(e,'/daily',f=>({through:f.get('through')}))}><fieldset disabled={busy}><label>{t('inpatient.through')}<input name="through" type="date" required max={new Date(Date.parse(`${data.today}T00:00:00Z`)-86400000).toISOString().slice(0,10)}/></label><button className="primary">{t('inpatient.daily')}</button></fieldset></form></details>}
+      {manager&&<details className="ward-form"><summary>{t('inpatient.rule')}</summary><form onSubmit={e=>submit(e,'/rule',f=>({rule:{countAdmissionDay:f.get('admissionDay')==='on',countDischargeDay:f.get('dischargeDay')==='on',minimumDays:Number(f.get('minimum'))}}))}><fieldset disabled={busy}>
         <label><input type="checkbox" name="admissionDay" defaultChecked={data.rule.countAdmissionDay}/>{t('inpatient.admissionDay')}</label>
         <label><input type="checkbox" name="dischargeDay" defaultChecked={data.rule.countDischargeDay}/>{t('inpatient.dischargeDay')}</label>
-        <label>{t('inpatient.minimum')}<input type="number" name="minimum" min="1" max="365" required defaultValue={data.rule.minimumDays}/></label><button>{t('inpatient.saveRule')}</button>
+        <label>{t('inpatient.minimum')}<input type="number" name="minimum" min="1" max="365" required defaultValue={data.rule.minimumDays}/></label><button className="primary">{t('inpatient.saveRule')}</button>
       </fieldset></form></details>}
     </>}
   </div>;

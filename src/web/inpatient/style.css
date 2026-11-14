@@ -1,17 +1,28 @@
-/* Ward (full redesign in phase 2; here only brought into the Abr language). The bed map stays a map: a bed is a tile. */
-.inpatient { display: grid; gap: 16px; align-content: start; min-width: 0; }
-.inpatient header, .inpatient dl > div { display: flex; gap: 12px 20px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
-.inpatient header h2 { font-family: var(--serif); font-size: 1.75rem; }
+/* Ward (docs/DESIGN.md): how many beds are taken, the bed map, the people staying, then one stay at a time.
+   The bed map stays a map: a bed is a tile because the map is a picture of the ward. */
+.inpatient { min-width: 0; }
+.ward-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .inpatient label:has(input[type=checkbox]) { display: flex; align-items: center; gap: 12px; min-height: 48px; color: var(--ink); font-size: var(--t-body); }
 .inpatient button { white-space: normal; overflow-wrap: anywhere; }
-.inpatient details { border-top: 1px solid var(--line); }
-.inpatient details[open] { display: grid; gap: 14px; padding-bottom: 16px; }
-.bed-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
-.bed-map > div { background: var(--ok-fill); color: var(--ok); padding: 14px 16px; border-radius: 16px; overflow-wrap: anywhere; font-size: var(--t-small); display: grid; gap: 2px; align-content: start; min-height: 76px; }
+.bed-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.bed-map > div { background: var(--ok-fill); color: var(--ok); padding: 12px 14px; border-radius: 16px; overflow-wrap: anywhere; font-size: var(--t-small); display: grid; gap: 2px; align-content: start; min-height: 72px; }
 .bed-map > div strong { color: var(--ink); font-size: var(--t-body); }
+.bed-map > div p { margin: 0; }
 .bed-map > div[data-occupied=true] { background: var(--tint-2); color: var(--ink); }
-.stays { display: grid; gap: 0; }
-.stays > button { justify-content: flex-start; text-align: start; background: none; border-radius: 0; border-top: 1px solid var(--line); min-height: 60px; padding: 12px 0; font-weight: 500; }
+.ward-form { border-top: 1px solid var(--line); }
+.ward-form > summary { color: var(--ink); }
+.ward-form[open] { padding-bottom: 20px; }
+.ward-form form, .ward-form fieldset { display: grid; gap: 14px; max-width: 520px; }
+.ward-form button.primary { justify-self: start; }
+.ward-list-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ward-list-head .section-label { margin: 0; }
+.stays { display: grid; }
+.stays > button { border-top: 1px solid var(--line); }
 .stays > button:first-child { border-top: 0; }
-.stays > button:hover:not(:disabled) { background: none; color: var(--indigo); }
-.stay-detail { display: grid; gap: 14px; padding: 20px 0; border-top: 1px solid var(--line); }
+.stays > button[aria-pressed=true] .row-title { color: var(--indigo); }
+.stay-detail { display: grid; gap: 16px; max-width: none !important; }
+.stay-detail > :not(.hero) { max-width: var(--col); }
+.stay-bill { display: grid; gap: 12px; }
+.stay-bill .invoice-pdf { justify-self: start; }
+.ward-confirm { display: grid; gap: 12px; padding: 20px; border-radius: 24px; background: var(--attn-fill); }
+.ward-discharge { justify-self: start; }

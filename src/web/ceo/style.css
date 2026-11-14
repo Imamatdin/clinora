@@ -65,12 +65,23 @@
 }
 @media (max-width: 640px) { .ceo-secondary { grid-template-columns: 1fr; } .ceo-kpi-row { gap: 12px 28px; } .ceo-trend-bars { height: 72px; } }
 
-/* Payroll, rules and export (restyled in phase 2; kept readable in the new language). */
-.ceo-heading { display: grid; gap: 6px; } .ceo-heading h2 { font-family: var(--serif); font-size: 1.75rem; } .ceo-eyebrow { display: none; }
-.ceo-rules, .ceo-pay-results { display: grid; gap: 14px; padding-top: 20px; border-top: 1px solid var(--line); }
-.ceo-rule-current { display: flex; align-items: baseline; gap: 16px; } .ceo-rule-current > strong { font-size: 3rem; font-weight: 500; letter-spacing: -.04em; color: var(--indigo); }
-.ceo-rule-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } .ceo-kind-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 12px; } .ceo-kind-grid label { display: flex; align-items: center; min-height: 48px; gap: 10px; color: var(--ink); font-size: var(--t-body); }
-.ceo-pay-doctor { border-top: 1px solid var(--line); } .ceo-pay-doctor summary { justify-content: space-between; color: var(--ink); } .ceo-pay-doctor dl { display: flex; flex-wrap: wrap; gap: 20px; margin: 12px 0; } .ceo-pay-doctor dd { font-size: 1.5rem; font-weight: 600; }
-.ceo-pay-lines { list-style: none; padding: 0; margin: 0; } .ceo-pay-lines li { display: flex; justify-content: space-between; gap: 16px; border-top: 1px solid var(--line); padding: 10px 0; overflow-wrap: anywhere; } .ceo-pay-lines small { display: block; }
-.ceo-actions { display: flex; gap: 12px; flex-wrap: wrap; } .ceo-confirm { display: grid; gap: 12px; padding: 16px 20px; border-radius: 24px; background: var(--attn-fill); } .ceo-history { padding-left: 20px; } .ceo-history li { border-top: 1px solid var(--line); padding: 12px 0; }
+/* Payroll (docs/DESIGN.md): pick the period, see the sum, open a doctor for the lines. Split rules are set once, below. */
+.ceo-pay-results { display: grid; gap: 12px; max-width: none !important; grid-template-columns: minmax(0, 1fr); }
+.ceo-pay-results > :not(.hero) { max-width: var(--col); }
+.ceo-pay-doctor { border-top: 1px solid var(--line); } .ceo-pay-doctor:first-of-type { border-top: 0; }
+.ceo-pay-doctor summary { justify-content: space-between; color: var(--ink); min-height: 60px; gap: 12px 16px; flex-wrap: wrap; }
+.ceo-pay-doctor summary::after { margin-left: 4px; }
+.ceo-pay-doctor summary strong { margin-left: auto; font-weight: 600; }
+.ceo-pay-doctor dl { display: flex; flex-wrap: wrap; gap: 8px 40px; margin: 4px 0 12px; } .ceo-pay-doctor dd { font-size: 1.25rem; font-weight: 600; }
+.ceo-pay-lines { list-style: none; padding: 0; margin: 0 0 12px; } .ceo-pay-lines li { display: flex; justify-content: space-between; gap: 16px; border-top: 1px solid var(--line); padding: 10px 0; overflow-wrap: anywhere; font-size: var(--t-small); color: var(--ink-2); }
+.ceo-pay-lines span { min-width: 0; } .ceo-pay-lines small { display: block; } .ceo-pay-lines strong { color: var(--ink); }
+.ceo-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.ceo-confirm { display: grid; gap: 12px; padding: 20px; border-radius: 24px; background: var(--attn-fill); max-width: 520px; } .ceo-confirm p { font-weight: 500; }
+.ceo-rules { display: grid; gap: 14px; padding-top: 12px; border-top: 1px solid var(--line); margin-top: 12px; }
+.ceo-rules > label { max-width: 420px; }
+.ceo-rule-current { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; } .ceo-rule-current > strong { font-size: 3rem; font-weight: 500; letter-spacing: -.04em; color: var(--indigo); line-height: 1; } .ceo-rule-current > span { color: var(--ink-2); font-size: var(--t-small); }
+.ceo-rules .ceo-more { border-top: 1px solid var(--line); padding-top: 0; } .ceo-rules .ceo-more > summary { color: var(--ink); } .ceo-rules .ceo-more[open] { padding-bottom: 16px; }
+.ceo-rules form { max-width: 640px; }
+.ceo-rule-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } .ceo-kind-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 12px; } .ceo-kind-grid label { display: flex; align-items: center; min-height: 48px; gap: 10px; color: var(--ink); font-size: var(--t-body); font-weight: 400; }
+.ceo-history { padding: 0; margin: 0; list-style: none; } .ceo-history li { border-top: 1px solid var(--line); padding: 12px 0; display: grid; gap: 2px; } .ceo-history li:first-child { border-top: 0; } .ceo-history p { font-size: var(--t-small); color: var(--ink-2); }
 @media (max-width: 640px) { .ceo-rule-grid { grid-template-columns: 1fr; } .ceo-kind-grid { grid-template-columns: 1fr 1fr; } }

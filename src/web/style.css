@@ -194,7 +194,8 @@ button.day:hover:not(:disabled) { background: var(--fill); }
 button.person-menu { background: none; padding: 6px 10px; min-height: 48px; }
 button.person-menu:hover:not(:disabled) { background: var(--fill); }
 .page { width: 100%; padding: 8px var(--pad) 96px; display: grid; gap: 16px; align-content: start; }
-.page > *, .screen > * { max-width: var(--col); } .page > .screen { max-width: none; display: grid; gap: 16px; align-content: start; min-width: 0; }
+/* Zero specificity, so any component's own max-width wins over this default column width. */
+:where(.page, .screen) > * { max-width: var(--col); } .page > .screen { max-width: none; display: grid; gap: 16px; align-content: start; min-width: 0; }
 /* One column that can shrink: a long select option or an unbroken word must never widen the page. */
 .page, .page > .screen, .stay-detail, .dr-visit, .dr-main, .dr-card, .ceo-report, .cashier-body, .registration-route, .registration-form, .registration-done { grid-template-columns: minmax(0, 1fr); }
 .page > h1 { margin: 8px 0; }
@@ -253,7 +254,7 @@ button.person-menu:hover:not(:disabled) { background: var(--fill); }
 .pending { max-width: 520px; padding: 24px var(--pad); display: grid; gap: 14px; }
 .people { list-style: none; padding: 0; margin: 0; }
 .people > li { border-top: 1px solid var(--line); } .people > li:first-child { border-top: 0; }
-.person-button { width: 100%; min-height: 64px; justify-content: space-between; background: none; border-radius: 0; padding: 12px 0; font-size: 1.125rem; font-weight: 500; text-align: start; }
+.person-button { font-family: var(--serif); width: 100%; min-height: 64px; justify-content: space-between; background: none; border-radius: 0; padding: 12px 0; font-size: 1.125rem; font-weight: 500; text-align: start; }
 .person-button:hover:not(:disabled) { background: none; color: var(--indigo); }
 .person-button small { color: var(--attn); }
 .pin-form { max-width: 320px; }
@@ -279,7 +280,9 @@ button.person-menu:hover:not(:disabled) { background: var(--fill); }
 .staff-list > li { border-top: 1px solid var(--line); padding: 14px 0; }
 .staff-list > li:first-child { border-top: 0; }
 .staff-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
-.staff-row > div { display: grid; gap: 2px; min-width: 0; }
+.staff-row > div { display: grid; gap: 2px; min-width: 0; } .staff-row .name { font-size: 1.125rem; }
+.staff-list > li.blocked .name { color: var(--ink-2); }
+.staff { display: grid; gap: 16px; }
 .staff-manage, .access-actions { margin-top: 12px; display: grid; gap: 12px; }
 .secret { display: grid; gap: 10px; padding: 16px 20px; border-radius: var(--r-lg); background: var(--ok-fill); }
 .password { font-family: ui-monospace, monospace; font-size: 1.5rem; letter-spacing: .06em; overflow-wrap: anywhere; }

@@ -34,10 +34,8 @@ export function Catalog({ clinic, request, setDirty }: ModuleProps) {
   const locale = useLocale(), t = translator(locale);
   const [tab, setTab] = useState<'lists' | 'points' | 'import'>('lists');
   const base = `/api/clinics/${clinic.id}/catalog`;
-  return <section className="catalog">
-    <div className="catalog-head">
-      <h2>{t('catalog.title')}</h2>
-    </div>
+  return <section className="catalog screen">
+    <h2 className="sr-only">{t('catalog.title')}</h2>
     <div className="catalog-tabs" role="tablist">
       {(['lists', 'points', 'import'] as const).map(id => <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{t(`catalog.tab.${id}`)}</button>)}
     </div>

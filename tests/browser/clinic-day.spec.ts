@@ -145,9 +145,9 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
 
     // 5. Pharmacy dispenses the prescribed medicine to the outpatient's visit.
     await signIn('day.pharmacy');
-    const ph = page.locator('section').filter({ has: page.getByRole('heading', { name: T('pharmacy.title'), exact: true }) }).last();
+    const ph = page.locator('section.pharmacy');
     await ph.getByLabel(T('pharmacy.item'), { exact: true }).selectOption({ value: await serviceId('M01') });
-    await ph.getByLabel(T('pharmacy.title'), { exact: true }).selectOption('dispense');
+    await ph.getByRole('group', { name: T('pharmacy.title'), exact: true }).getByRole('button', { name: T('pharmacy.mode.dispense'), exact: true }).click();
     await ph.getByLabel(T('pharmacy.visit'), { exact: true }).selectOption({ value: outpatient.id });
     await ph.locator('input[name="qty"]').fill('6');
     await ph.getByRole('button', { name: T('pharmacy.save'), exact: true }).click();

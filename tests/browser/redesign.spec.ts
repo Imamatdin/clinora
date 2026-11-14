@@ -112,7 +112,28 @@ test('design screenshots: every role at 390 and 1440, color and greyscale, in th
           await shoot(page, 'registration-form', width);
           await reg.getByRole('button', { name: REG['registration.back'], exact: true }).click();
         }
-        if (role === 'ceo') { await go(page, 'settings'); await shoot(page, 'settings', width); }
+        if (role === 'ceo') {
+          await go(page, 'payroll');
+          await page.locator('.ceo-dates button').click();
+          await expect(page.locator('.ceo-pay-results')).toBeVisible();
+          await shoot(page, 'payroll', width);
+          await go(page, 'reports'); await expect(page.locator('.ceo-report')).toBeVisible(); await shoot(page, 'cash-report', width);
+          await go(page, 'settings'); await shoot(page, 'settings', width);
+        }
+        if (role === 'administrator') {
+          await go(page, 'staff'); await expect(page.locator('.staff-list > li').first()).toBeVisible(); await shoot(page, 'staff', width);
+          await go(page, 'catalog'); await page.waitForTimeout(600); await shoot(page, 'catalog', width);
+        }
+        if (role === 'laboratory') {
+          await page.locator('.dr-orders button').first().click();
+          await expect(page.locator('.lab-order')).toBeVisible();
+          await shoot(page, 'lab-order', width);
+        }
+        if (role === 'inpatient') {
+          await page.locator('.stays button').first().click();
+          await expect(page.getByTestId('inpatient-due')).toBeVisible();
+          await shoot(page, 'ward-stay', width);
+        }
         await signOut(page);
       }
       await context.close();

@@ -1,37 +1,37 @@
-/* Catalog and import (task 005). Administrator work, mostly on clinic PCs; still usable at 360 px. */
-.catalog { font-size: 1rem; max-width: 960px; }
-.catalog h2 { margin: 0.3rem 0; }
-.catalog fieldset { border: 0; padding: 0; margin: 0.4rem 0; min-width: 0; }
-.catalog label { margin: 8px 0; }
-
-
-
-.catalog button { margin: 4px 6px 4px 0; }
-
-
-
-
-.catalog-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.5rem; }
-.catalog-lang { flex-direction: row !important; align-items: center; }
-.catalog-lang select { width: auto !important; }
-.catalog-tabs, .catalog-lists { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.5rem 0; }
-.catalog-tabs button, .catalog-lists button { margin: 0;  }
-.catalog-tabs button.on, .catalog-lists button.on { background: var(--tint-2); color: var(--indigo); font-weight: 600; }
-.catalog-search { display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end; }
-.catalog-search button { margin: 0.6rem 0; }
-.catalog-items, .catalog-history, .catalog-checks, .catalog-objects { list-style: none; padding: 0; margin: 0.5rem 0; }
-.catalog-items > li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.4rem; border-top: 1px solid var(--line); padding: 12px 0; }
+/* Catalog and import (docs/DESIGN.md). Set up once by the administrator, mostly on a clinic PC; still usable at 360 px.
+   A row is a name, its details and its price; the row's actions are quiet text, not three buttons per row. */
+.catalog { display: grid; gap: 14px; align-content: start; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.catalog-tabs, .catalog-lists { display: flex; gap: 2px; padding: 3px; background: var(--fill); border-radius: 999px; overflow-x: auto; scrollbar-width: none; justify-self: start; max-width: 100%; }
+.catalog-tabs::-webkit-scrollbar, .catalog-lists::-webkit-scrollbar { display: none; }
+.catalog-tabs button, .catalog-lists button { flex: 0 0 auto; min-height: 48px; padding: 8px clamp(10px, 3vw, 18px); border-radius: 999px; background: none; color: var(--ink-2); white-space: nowrap; }
+.catalog-tabs button.on, .catalog-lists button.on { background: #fff; color: var(--ink); font-weight: 600; }
+.catalog-lists { background: none; padding: 0; gap: 4px; flex-wrap: wrap; overflow: visible; }
+.catalog-lists button.on { background: var(--tint-2); color: var(--indigo); }
+.catalog-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; max-width: 640px; }
+.catalog-items, .catalog-history, .catalog-checks, .catalog-objects { list-style: none; padding: 0; margin: 0; }
+.catalog-items > li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 20px; border-top: 1px solid var(--line); padding: 12px 0; }
+.catalog-items > li:first-child { border-top: 0; }
 .catalog-items > li.off { color: var(--ink-2); }
-.catalog-item-main { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; flex: 1 1 260px; }
-.catalog-item-main strong { font-size: 1.1rem; overflow-wrap: anywhere; }
-.catalog-price { font-weight: bold; white-space: nowrap; }
-.catalog-actions { display: flex; flex-wrap: wrap; align-items: center; }
-.catalog-panel { border-radius: 24px; padding: 20px; margin: 12px 0; background: var(--tint); display: grid; gap: 12px; }
-.catalog-confirm { background: var(--attn-fill); padding: 16px 20px; border-radius: 24px; margin: 12px 0; }
-.catalog-mapping { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 1rem; }
+.catalog-item-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 20px; min-width: 0; flex: 1 1 320px; }
+.catalog-item-main > * { grid-column: 1; }
+.catalog-item-main strong { font-weight: 500; overflow-wrap: anywhere; }
+.catalog-item-main > span { font-size: var(--t-small); color: var(--ink-2); }
+.catalog-item-main > .catalog-price { grid-column: 2; grid-row: 1 / span 3; align-self: center; font-size: var(--t-body); font-weight: 600; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.catalog-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0 4px; }
+.catalog-actions button { min-height: 48px; padding: 6px 10px; background: none; color: var(--ink-2); font-size: var(--t-small); font-weight: 500; }
+.catalog-actions button:hover:not(:disabled) { background: var(--fill); color: var(--indigo); }
+.catalog-panel { border-radius: 24px; padding: 24px; background: var(--tint); display: grid; gap: 14px; max-width: 640px; }
+.catalog-panel input:not([type=checkbox]):not([type=radio]), .catalog-panel select, .catalog-panel textarea { background: #fff; }
+.catalog-confirm { background: var(--attn-fill); padding: 16px 20px; border-radius: 24px; display: grid; gap: 10px; }
+.catalog-mapping { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 20px; }
 .catalog-table { overflow-x: auto; max-width: 100%; }
-.catalog-table table { border-collapse: collapse; min-width: 100%; }
-
-.catalog-more summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; font-weight: bold; }
-.catalog-checks li, .catalog-objects li { padding: 0.2rem 0; border-bottom: 1px solid var(--line); }
-.catalog-history li { padding: 0.3rem 0; border-bottom: 1px solid var(--line); }
+.catalog-table table { min-width: 100%; font-size: var(--t-small); }
+.catalog-more summary { color: var(--ink); }
+.catalog-checks li, .catalog-objects li, .catalog-history li { padding: 10px 0; border-top: 1px solid var(--line); }
+.catalog-checks li:first-child, .catalog-objects li:first-child, .catalog-history li:first-child { border-top: 0; }
+.catalog fieldset { display: grid; gap: 12px; }
+/* With a mouse, a row's actions appear when the row is pointed at or focused; on touch they are always there. */
+@media (hover: hover) and (min-width: 900px) {
+  .catalog-items > li .catalog-actions { opacity: 0; transition: opacity .12s; }
+  .catalog-items > li:hover .catalog-actions, .catalog-items > li:focus-within .catalog-actions { opacity: 1; }
+}

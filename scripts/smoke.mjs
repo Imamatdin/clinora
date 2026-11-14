@@ -34,6 +34,9 @@ try {
   assert.equal((await (await fetch(base + '/api/health')).json()).increment, 0);
   assert.equal((await fetch(base + '/.env')).status, 404);
   for (const file of ['/sw.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']) assert.equal((await fetch(base + file)).status, 200, file);
+  // Task 026: the self-hosted font is served same-origin with its type, as the service worker precaches it.
+  const font = await fetch(base + '/assets/onest-cyrillic-ext-700-normal.woff2');
+  assert.equal(font.status, 200, 'font'); assert.equal(font.headers.get('content-type'), 'font/woff2');
   assert.match(response.headers.get('content-security-policy'), /frame-ancestors https:\/\/web\.telegram\.org/);
   assert.equal((await fetch(base + '/telegram-web-app.js')).status, 404);
   assert.equal((await fetch(base + '/api/telegram/webhook', { method: 'POST' })).status, 401);

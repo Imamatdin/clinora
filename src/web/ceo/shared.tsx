@@ -9,7 +9,8 @@ const dictionaries={'uz-Cyrl':ceo,'uz-Latn':ceoUzLatn,ru:ceoRu};
 export const t=(key:Key)=>dictionaries[currentLocale()][key];
 /** Reports follow the shell's single interface language (header switch). */
 export const useReportLocale=useLocale;
-export const money=(value:string|bigint)=>BigInt(value).toLocaleString('ru-RU');
+/** Same grouping as formatUzs (billing/money.ts) on every screen: a plain space every three digits (task 026). */
+export const money=(value:string|bigint)=>BigInt(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g,' ');
 export const metric=(key:string)=>t(`ceo.${key}` as Key);
 export function saveFile(file:Download) {
   const raw=atob(file.base64),bytes=Uint8Array.from(raw,c=>c.charCodeAt(0));

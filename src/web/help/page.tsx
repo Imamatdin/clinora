@@ -22,7 +22,7 @@ export function HelpPage({ role }: { role: Role | null }) {
   document.title = t('help.title', { role: name });
   return <main className="help-sheet" lang={locale}>
     <div className="help-tools">
-      <div className="lang-switch" role="group" aria-label={t('app.language')}>{LOCALES.map(l =>
+      <div className="seg lang-switch" role="group" aria-label={t('app.language')}>{LOCALES.map(l =>
         <button key={l} type="button" lang={l} className={l === locale ? 'current' : ''} aria-pressed={l === locale} onClick={() => setLocale(l)}>{LOCALE_LABELS[l]}</button>)}</div>
       <button type="button" className="primary" onClick={() => window.print()}>{t('help.print')}</button>
       <a className="help-link" href="/">{t('help.open')}</a>

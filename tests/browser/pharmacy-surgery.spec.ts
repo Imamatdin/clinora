@@ -19,11 +19,11 @@ for(const width of [360,1280]) test(`pharmacy receipt, dispense and surgery reac
     await page.getByRole('button',{name:T('auth.signIn'),exact:true}).click();
     // Several modules can share a role's home now (cashier merged first); open pharmacy explicitly.
     await tab(page,T('pharmacy.title'));
-    const screen=page.locator('section').filter({has:page.getByRole('heading',{name:T('pharmacy.title'),exact:true})}).last();
+    const screen=page.locator('section.pharmacy');
     await expect(screen.getByLabel(T('pharmacy.item'),{exact:true})).toBeVisible();
     await screen.locator('input[name="qty"]').fill('3');await screen.getByLabel(T('pharmacy.cost'),{exact:true}).fill('10000');await screen.getByLabel(T('pharmacy.supplier'),{exact:true}).fill('Synthetic supplier');
     await screen.getByRole('button',{name:T('pharmacy.save'),exact:true}).click();await expect(screen.getByRole('status').filter({hasText:T('pharmacy.saved')})).toBeVisible();
-    await screen.getByLabel(T('pharmacy.title'),{exact:true}).selectOption('dispense');await screen.locator('input[name="qty"]').fill('1');
+    await screen.getByRole('group',{name:T('pharmacy.title'),exact:true}).getByRole('button',{name:T('pharmacy.mode.dispense'),exact:true}).click();await screen.locator('input[name="qty"]').fill('1');
     await screen.getByRole('button',{name:T('pharmacy.save'),exact:true}).click();
     await expect(screen.getByText(T('pharmacy.onHand')+': 2 дона',{exact:true})).toBeVisible();
     await tab(page,T('surgery.title'));

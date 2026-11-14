@@ -41,8 +41,8 @@ export function Staff({ clinicId, request, myId, myRoles }: { clinicId: string; 
   }
   const touchesCeo = (s: StaffView) => s.roles.includes('ceo') && !isCeo;
   return <section className="staff" aria-labelledby="staff-heading">
-    <div className="section-heading"><div><h1 id="staff-heading">{t('staff.title')}</h1><p className="muted">{t('staff.lead')}</p></div>
-      {!adding && <button className="primary big" disabled={busy} onClick={() => { setAdding(true); setError(''); }}>{t('staff.add')}</button>}</div>
+    <div className="section-heading"><h1 id="staff-heading">{t('staff.title')}</h1>
+      {!adding && <button className="primary" disabled={busy} onClick={() => { setAdding(true); setError(''); }}>{t('staff.add')}</button>}</div>
     <div aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>
     {secret && <div className="secret" role="dialog" aria-labelledby="secret-title"><h2 id="secret-title">{t('staff.tempTitle')}</h2>
       <p>{t('staff.tempLead', { name: secret.name })}</p>{secret.login && <p>{t('staff.tempLogin', { login: secret.login })}</p>}
@@ -59,11 +59,11 @@ export function Staff({ clinicId, request, myId, myRoles }: { clinicId: string; 
     {staff === null ? <p role="status" className="empty">{t('staff.loading')}</p> : !staff.length ? <p className="empty">{t('staff.empty')}</p> :
     <ul className="staff-list">{staff.map(s => <li key={s.userId} className={s.status === 'blocked' ? 'blocked' : ''}>
       <div className="staff-row">
-        <div><strong>{s.fullName}</strong><span className="fine">{[s.login, s.phone].filter(Boolean).join(' · ')}</span>
+        <div><strong className="name">{s.fullName}</strong><span className="fine">{[s.login, s.phone].filter(Boolean).join(' · ')}</span>
           <span className="chips">{s.roles.length ? s.roles.map(r => <span className="chip" key={r}>{roleLabel(r)}</span>) : <span className="chip">{t('staff.noRoles')}</span>}
             <span className={`chip ${s.status}`}>{t(`staff.status.${s.status}` as UiKey)}</span>{s.mustChangePassword && <span className="chip">{t('staff.mustChange')}</span>}</span></div>
         {s.userId === myId ? <span className="fine">{t('staff.you')}</span> :
-          <button disabled={busy || touchesCeo(s)} aria-expanded={open === s.userId} onClick={() => { setOpen(open === s.userId ? '' : s.userId); setEditRoles(s.roles); setError(''); }}>{t('staff.manage')}</button>}
+          <button className="quiet" disabled={busy || touchesCeo(s)} aria-expanded={open === s.userId} onClick={() => { setOpen(open === s.userId ? '' : s.userId); setEditRoles(s.roles); setError(''); }}>{t('staff.manage')}</button>}
       </div>
       {open === s.userId && <div className="staff-manage">
         <RolePicker name={`roles-${s.userId}`} selected={editRoles} onChange={setEditRoles} canGrantCeo={isCeo} disabled={busy} />

@@ -1,55 +1,47 @@
-/* Registrar screen (task 007). Phone first: works at 360 px; large touch targets. */
-.registration { font-size: 1rem; max-width: 760px; }
-.registration fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
-.registration label { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.6rem 0; }
-.registration input, .registration select, .registration button, .registration .button { min-height: 48px; font-size: 1rem; max-width: 100%; box-sizing: border-box; }
-.registration input:not([type=checkbox]):not([type=radio]), .registration select { width: 100%; padding: 0 0.6rem; }
-.registration input[type=checkbox], .registration input[type=radio] { width: 24px; height: 24px; min-height: 24px; flex: none; }
-.registration button, .registration .button { margin: 0.3rem 0.3rem 0.3rem 0; padding: 0 1rem; }
-.registration .button { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; border: 2px solid currentColor; border-radius: 6px; }
-.registration .primary { display: block; width: 100%; font-size: 1.2rem; font-weight: bold; margin: 0.8rem 0; }
-.registration-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.5rem; }
-.registration-lang { flex-direction: row !important; align-items: center; }
-.registration-lang select { width: auto !important; }
-.registration-banner { padding: 0.8rem; border: 2px solid #8a5a00; background: #fff4dc; color: #3d2800; }
-.registration-search { display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end; }
-.registration-search input { font-size: 1.15rem !important; min-height: 56px !important; }
-.registration-search button { min-height: 56px; margin: 0.6rem 0; }
-.registration-results, .registration-points, .registration-services, .registration-tickets { list-style: none; padding: 0; margin: 0.5rem 0; }
-.registration-results li { margin: 0.4rem 0; }
-.registration-card { display: block; width: 100%; text-align: start; padding: 0.8rem !important; border: 2px solid #204b5c; border-radius: 8px; background: #fff; color: #10232b; }
-.registration-card.selected { background: #eaf4f7; }
-.registration-card-body { display: flex; flex-direction: column; gap: 0.2rem; }
-.registration-card-body strong { font-size: 1.15rem; }
-.registration .muted { color: #44545b; }
-.registration-gender { display: flex; gap: 1rem; flex-wrap: wrap; }
-.registration-gender legend { margin-bottom: 0.3rem; }
-.registration .choice { flex-direction: row; align-items: center; gap: 0.6rem; min-height: 48px; margin: 0.2rem 0; }
-.registration-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; max-width: 320px; }
-.registration-keypad button { margin: 0; font-size: 1.3rem; }
+/* Registration: the search field is the screen (docs/DESIGN.md). Results, queue points and services are rows. */
+.search-field { position: relative; display: flex; align-items: center; background: #fff; border-radius: 999px; padding: 6px 6px 6px 22px; gap: 10px; max-width: 640px; }
+.search-field > svg { color: var(--ink-2); }
+.search-field input:not([type=checkbox]):not([type=radio]) { flex: 1; min-height: 56px; padding: 0; background: none; border-radius: 0; font-size: 1.25rem; }
+.search-field input:not([type=checkbox]):not([type=radio]):focus-visible { outline: 0; background: none; }
+.search-field:focus-within { outline: 2.5px solid var(--indigo); }
+.search-field button { flex: none; min-height: 56px; padding-inline: 26px; }
+.registration-new { justify-self: start; }
+.registration-card { text-align: start; }
+.registration-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.registration .back { margin-left: -10px; color: var(--ink); }
+.registration-form, .registration-route, .registration-done { display: grid; gap: 16px; align-content: start; }
+.registration-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
+.registration-fields .wide { grid-column: 1 / -1; }
+.registration-gender .seg { display: flex; width: 100%; }
+.seg-choice { flex: 1; position: relative; display: block; cursor: pointer; }
+.seg-choice input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer; }
+.seg-choice span { display: grid; place-items: center; min-height: 50px; border-radius: 999px; font-size: var(--t-body); color: var(--ink-2); font-weight: 500; }
+.seg-choice input:checked + span { background: #fff; color: var(--ink); font-weight: 600; }
+.seg-choice input:focus-visible + span { outline: 2.5px solid var(--indigo); }
+.registration-keypad { grid-column: 1 / -1; display: none; }
 .registration-keypad .wide { grid-column: span 3; font-size: 1rem; }
-.registration-points > li { border: 2px solid #b8c6cc; border-radius: 8px; padding: 0.3rem 0.8rem; margin: 0.5rem 0; }
-.registration-points > li.on { border-color: #204b5c; background: #f2f8fa; }
-.registration-point { flex-direction: row !important; align-items: center; gap: 0.8rem; min-height: 56px; cursor: pointer; }
-.registration-point > span { display: flex; flex-direction: column; }
-.registration-services { padding-inline-start: 2.2rem; }
-.registration-services .price { margin-inline-start: auto; white-space: nowrap; }
-.registration-total { font-size: 1.15rem; font-weight: bold; }
-.registration-duplicates { border: 3px solid #8a5a00; background: #fff8e8; padding: 0.8rem; border-radius: 8px; margin: 0.8rem 0; }
-.registration-tickets li { font-size: 1.25rem; padding: 0.5rem 0; border-bottom: 1px solid #ccd6da; }
-.registration-more summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; }
-
-.offline-status { border: 2px solid #93600b; padding: 12px; margin-block: 12px; }
-.offline-status li { margin-block: 12px; overflow-wrap: anywhere; }
-.offline-status button, .offline-status a { margin: 4px; }
-.offline-attention { border-left: 4px solid #a22; padding: 12px; }
-.offline-print { display: none; }
+@media (pointer: coarse) and (min-width: 700px) { .registration-keypad { display: grid; } }
+.registration-duplicates { display: grid; gap: 12px; padding: 20px; border-radius: 24px; background: var(--attn-fill); }
+.registration-duplicates h3 { color: var(--attn); }
+.registration-point { cursor: pointer; font-size: var(--t-body); color: var(--ink); }
+.registration-points > li.on .registration-point .row-title { color: var(--indigo); }
+.registration-services { list-style: none; margin: 0 0 12px; padding: 0 0 0 38px; }
+.registration-services .choice { justify-content: flex-start; }
+.registration-services .price { margin-inline-start: auto; color: var(--ink-2); }
+.registration-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; padding-top: 8px; }
+.registration-total { font-size: var(--t-head); font-weight: 700; font-variant-numeric: tabular-nums; }
+a.button.secondary { background: var(--fill); color: var(--ink); border-radius: var(--r); font-weight: 500; }
+a.button.secondary:hover { background: var(--fill-2); }
+@media (max-width: 640px) {
+  .registration-fields { grid-template-columns: 1fr; }
+  .search-field { padding-left: 16px; } .search-field > svg { display: none; }
+  .search-field button { padding-inline: 18px; }
+  .registration-foot .primary { width: 100%; }
+}
 @media print {
   @page { size: 80mm auto; margin: 3mm; }
   body:has(> .offline-print) > * { display: none !important; }
   body > .offline-print { display: block !important; width: 100%; max-width: 74mm; color: black; background: white; }
-  .offline-print .ticket { break-after: page; text-align: center; }
+  .offline-print .ticket { break-after: page; text-align: center; -webkit-mask: none; mask: none; background: none; width: auto; height: auto; display: block; }
   .offline-print .number { font-size: 28px; font-weight: bold; overflow-wrap: anywhere; }
 }
-.offline-waiting { margin: 8px 16px; }
-.offline-waiting p { overflow-wrap: anywhere; }

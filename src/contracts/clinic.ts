@@ -11,6 +11,7 @@ export const StaffCreateInput = z.object({
 }).strict();
 export const StaffRolesInput = z.object({ roles: RoleSet }).strict();
 export const StaffStatusInput = z.object({ status: z.enum(['active', 'blocked']) }).strict();
+export const LocaleInput = z.object({ locale: z.enum(['uz-Cyrl', 'uz-Latn', 'ru']) }).strict();
 export const PasswordChangeInput = z.object({ currentPassword: z.string().min(1).max(128), newPassword: Password }).strict()
   .refine(v => v.currentPassword !== v.newPassword, 'New password must differ');
 export const EmptyInput = z.object({}).strict();
@@ -24,4 +25,4 @@ export type BusinessDayView = {
   openedBy: string; openedAt: string; closedBy: string | null; closedAt: string | null
 };
 export type CurrentDayView = { today: string; timezone: string; day: BusinessDayView | null; openDay: BusinessDayView | null };
-export type ClinicMembershipView = { id: string; name: string; roles: RoleName[]; isOwner: boolean; clinicalAccess: boolean };
+export type ClinicMembershipView = { defaultLocale?: 'uz-Cyrl' | 'uz-Latn' | 'ru'; id: string; name: string; roles: RoleName[]; isOwner: boolean; clinicalAccess: boolean };

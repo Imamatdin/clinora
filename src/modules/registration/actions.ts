@@ -312,7 +312,7 @@ export async function createVisit(ctx: ClinicContext, raw: z.input<typeof VisitI
 // Queue board (doctor UI arrives in C6; the API is here)
 // ---------------------------------------------------------------------------------------------
 
-const TICKET_SELECT = `SELECT t.id,t.number,t.status,t.queue_point_id,t.called_at,t.started_at,t.completed_at,t.visit_id,
+const TICKET_SELECT = `SELECT t.id,t.number,t.status,t.queue_point_id,t.created_at,t.called_at,t.started_at,t.completed_at,t.visit_id,
     q.name_uz_cyrl,q.name_uz_latn,q.name_ru,p.id patient_id,p.patient_no,p.full_name,p.birth_date,p.gender
   FROM queue_tickets t JOIN queue_points q ON q.clinic_id=t.clinic_id AND q.id=t.queue_point_id
   JOIN business_days d ON d.clinic_id=t.clinic_id AND d.id=t.business_day_id AND d.status='open'
@@ -320,7 +320,7 @@ const TICKET_SELECT = `SELECT t.id,t.number,t.status,t.queue_point_id,t.called_a
 /** A doctor sees a ticket only at their own point and only while the patient is still assigned to them. */
 const OWN = `q.kind='doctor' AND q.user_id=$2 AND patient_access_active(p.clinic_id, p.id, $2)`;
 const ticketView = (r: any) => ({ id: r.id, number: r.number, status: r.status, queuePointId: r.queue_point_id, names: names(r), visitId: r.visit_id,
-  calledAt: r.called_at, startedAt: r.started_at, completedAt: r.completed_at,
+  createdAt: r.created_at, calledAt: r.called_at, startedAt: r.started_at, completedAt: r.completed_at,
   patient: { id: r.patient_id, patientNo: r.patient_no, fullName: r.full_name, birthDate: r.birth_date, gender: r.gender } });
 const manager = (ctx: ClinicContext) => ctx.roles.some(r => QUEUE_MANAGERS.includes(r));
 

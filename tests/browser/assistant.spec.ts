@@ -6,7 +6,8 @@ import { assistant } from '../../src/web/i18n/assistant.uz-Cyrl.js';
 import { assistantUzLatn } from '../../src/web/i18n/assistant.uz-Latn.js';
 import { assistantRu } from '../../src/web/i18n/assistant.ru.js';
 import type { AKey } from '../../src/web/assistant/i18n.js';
-import { tab } from './ui.js';
+import { go, setLanguage, visitPart } from './ui.js';
+import { LOCALE_LABELS } from '../../src/web/i18n/locale.js';
 
 /** Panel strings by short key, from the registered feature dictionaries. */
 const strip = (d: Record<string, string>) => Object.fromEntries(Object.entries(d).map(([k, v]) => [k.slice('assistant.'.length), v])) as Record<AKey, string>;
@@ -31,9 +32,10 @@ async function openVisit(page: Page, f: Awaited<ReturnType<typeof processFixture
   await page.getByLabel(T('auth.identifier'), { exact: true }).fill('owner@example.test');
   await page.getByLabel(T('auth.password'), { exact: true }).fill(f.password);
   await page.getByRole('button', { name: T('auth.signIn'), exact: true }).click();
-  await tab(page, T('role.doctor'));
+  await go(page, 'doctor');
   await page.getByRole('button', { name: T('doctor.callNext'), exact: true }).click();
   await page.getByRole('button', { name: T('doctor.start'), exact: true }).click();
+  await visitPart(page, 'assistant');
   await expect(page.getByRole('heading', { name: A.title })).toBeVisible();
 }
 async function reviewAndApprove(page: Page) {
@@ -92,13 +94,13 @@ test('language switch and simulated demo fallback', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await openVisit(page, f, 'Fictional Fallback — demo only');
     const panel = page.locator('.assistant');
-    // One header switch changes every screen, the assistant panel included (task 017).
-    const languages = page.getByRole('banner').locator('.lang-switch'); // its label changes with the language
-    await languages.getByRole('button', { name: 'Рус', exact: true }).click();
+    // The language is chosen once, in Settings, and changes every screen, the assistant panel included (tasks 017, 028).
+    const reopenIn = async (label: string) => { await setLanguage(page, label, 'doctor'); await page.locator('.dr-current button.primary').click(); await visitPart(page, 'assistant'); };
+    await reopenIn(LOCALE_LABELS.ru);
     await expect(panel.getByRole('heading', { name: assistantDictionaries.ru.title })).toBeVisible();
-    await languages.getByRole('button', { name: 'Oʻzb', exact: true }).click();
+    await reopenIn(LOCALE_LABELS['uz-Latn']);
     await expect(panel.getByRole('heading', { name: assistantDictionaries['uz-Latn'].title })).toBeVisible();
-    await languages.getByRole('button', { name: 'Ўзб', exact: true }).click();
+    await reopenIn(LOCALE_LABELS['uz-Cyrl']);
     await panel.getByRole('button', { name: A.demoRun }).click();
     await reviewAndApprove(page);
   } finally { await f.close(); }

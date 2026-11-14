@@ -117,5 +117,7 @@ export const accessRu: Record<AccessKey, string> = {
   'access.notice.someone': 'сотрудник',
   'access.notice.dismiss': 'Понятно',
   'access.pinChangeRequired': 'Для подтверждений установите новый PIN не короче 6 цифр.',
-  'access.pinChangeOpen': 'Изменить PIN'
+  'access.pinChangeOpen': 'Изменить PIN',
+  'access.me.pinChange': 'Изменить',
+  'access.me.pinSet': 'Задать',
 };

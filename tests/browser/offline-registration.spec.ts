@@ -19,7 +19,7 @@ async function enrolled(page: Page, f: F, userId: string) {
   const loaded = page.waitForResponse(r => r.url().endsWith('/registration/options') && r.status() === 200);
   await page.goto(f.origin);
   await loaded;
-  await expect(page.getByRole('heading', { name: T('registration.title'), exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: T('module.registration'), exact: true })).toBeVisible();
   await expect(page.locator('.registration-banner')).toHaveCount(0);
   return id;
 }
@@ -267,7 +267,9 @@ test('a long outage locks an expired session but the same registrar recovers que
     await page.getByLabel(T('access.device.pin'), { exact: true }).fill('2580');
     await page.getByRole('button', { name: T('access.device.unlock'), exact: true }).click();
     await expect(page.getByText(pending(0), { exact: true })).toBeVisible();
-    expect((await queued(page))).toEqual([]);
-    expect((await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(1);
+    // "0 pending" can show for a moment before the unlocked outbox is read, so wait for the sync itself
+    // (this check raced on main too: 5 failures in 12 runs).
+    await expect.poll(() => queued(page)).toEqual([]);
+    await expect.poll(async () => (await f.pool.query('SELECT count(*)::int n FROM visits')).rows[0].n).toBe(1);
   } finally { await f.close(); }
 });

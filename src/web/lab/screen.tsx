@@ -3,6 +3,8 @@ import { ApiFailure, type Request } from '../api.js';
 import { errorText, t as coreT, useLocale, type UiKey } from '../i18n/index.js';
 import type { ModuleProps, WebModule } from '../modules.js';
 import { translator, type LabKey } from './i18n.js';
+import { AbrField } from '../abr.js';
+import { Icon, Seg } from '../shell.js';
 
 type Order = { id: string; status: string; service: string; patientName: string; patientNo: number | null; orderedBy: string; orderedByRole: string | null; orderedAt: string; resultVersion: number | null;
   visitDate: string; late: boolean; pending: boolean };
@@ -35,26 +37,31 @@ function LabHome({ clinic, request, setDirty }: ModuleProps) {
     return () => clearInterval(timer);
   }, [clinic.id, openId]);
 
-  if (openId) return <section className="dr">
-    <div className="dr-head"><button className="quiet" onClick={() => { setDirty(false); setOpenId(''); void load(); }}>{t('lab.back')}</button></div>
+  if (openId) return <section className="dr screen">
+    <div className="dr-head"><button className="quiet back" onClick={() => { setDirty(false); setOpenId(''); void load(); }}><Icon name="back" />{t('lab.back')}</button></div>
     <LabOrder key={openId} t={t} base={base} id={openId} request={request} setDirty={setDirty} />
   </section>;
   const shown = (data?.orders ?? []).filter(o => filter === 'all' || o.status === filter);
-  return <section className="dr">
-    <div className="dr-head"><h2>{t('lab.title')}</h2></div>
+  const waiting = (data?.orders ?? []).filter(o => o.status === 'ordered').length;
+  return <section className="dr screen">
     {error && <p role="alert" className="error">{error}</p>}
-    {!data ? <p>{t('lab.loading')}</p> : !data.day && !data.orders.length ? <p className="empty">{t('lab.noDay')}</p> : <>
+    {!data ? <p role="status">{t('lab.loading')}</p> : !data.day && !data.orders.length ? <p className="empty">{t('lab.noDay')}</p> : <>
       {!data.day && <p className="notice">{t('lab.noDay')}</p>}
-      <div className="dr-actions" role="group" aria-label={t('lab.filter')}>
-        {FILTERS.map(f => <button key={f} className={f === filter ? 'primary' : ''} aria-pressed={f === filter} onClick={() => setFilter(f)}>{t(`lab.filter.${f}`)}</button>)}
-        <button className="quiet" disabled={busy} onClick={() => { setBusy(true); load().catch(() => setError(errorText('SERVICE_UNAVAILABLE'))).finally(() => setBusy(false)); }}>{t('lab.refresh')}</button>
+      <div className="hero"><AbrField /><div className="hero-in">
+        <p className="hero-label">{t('lab.filter.ordered')}</p><p className="hero-figure">{waiting}</p>
+      </div></div>
+      <div className="dr-actions">
+        <Seg label={t('lab.filter')} value={filter} onChange={setFilter} options={FILTERS.map(f => [f, t(`lab.filter.${f}`)] as const)} />
+        <button className="quiet" disabled={busy} onClick={() => { setBusy(true); load().catch(() => setError(errorText('SERVICE_UNAVAILABLE'))).finally(() => setBusy(false)); }}><Icon name="refresh" />{t('lab.refresh')}</button>
       </div>
-      {!shown.length ? <p className="empty">{t('lab.empty')}</p> : <ul className="dr-orders">{shown.map(o => <li key={o.id} className="dr-card">
-        <div><strong>{o.service}</strong> <span className={o.status === 'completed' ? 'tag ok' : 'tag'}>{t(`lab.status.${o.status}` as LabKey)}</span>
-          {o.late && <span className="tag">{t('lab.late', { date: o.visitDate.split('-').reverse().join('.') })}</span>}{o.pending && <span className="tag">{t('lab.pendingTag')}</span>}</div>
-        <div>{o.patientName}{o.patientNo ? ' · ' + t('lab.patientNo', { number: o.patientNo }) : ''}</div>
-        <div className="fine">{orderedLabel(t, o)} · {time(o.orderedAt)}{o.resultVersion ? ' · ' + t('lab.resultSaved', { version: o.resultVersion }) : ''}</div>
-        <button className="primary" onClick={() => setOpenId(o.id)}>{t('lab.open')}</button>
+      {!shown.length ? <p className="empty">{t('lab.empty')}</p> : <ul className="dr-orders rows">{shown.map(o => <li key={o.id}>
+        <button className="row" aria-label={`${t('lab.open')}: ${o.service} · ${o.patientName}`} onClick={() => setOpenId(o.id)}>
+          <span className="row-body"><strong className="row-title">{o.service}</strong>
+            <span className="row-meta">{o.patientName}{o.patientNo ? ' · ' + t('lab.patientNo', { number: o.patientNo }) : ''}</span>
+            <span className="row-meta">{orderedLabel(t, o)} · {time(o.orderedAt)}{o.resultVersion ? ' · ' + t('lab.resultSaved', { version: o.resultVersion }) : ''}</span></span>
+          <span className="row-end lab-state"><span className={o.status === 'completed' ? 'tag ok' : 'tag'}>{t(`lab.status.${o.status}` as LabKey)}</span>
+            {o.late && <span className="tag attn">{t('lab.late', { date: o.visitDate.split('-').reverse().join('.') })}</span>}{o.pending && <span className="tag attn">{t('lab.pendingTag')}</span>}</span>
+          <span className="chev" aria-hidden="true" /></button>
       </li>)}</ul>}
     </>}
   </section>;
@@ -92,39 +99,38 @@ function LabOrder({ t, base, id, request, setDirty }: { t: T; base: string; id: 
   }); };
   const setCell = (i: number, k: keyof Value, value: string) => { setRows(old => old.map((r, j) => j === i ? { ...r, [k]: value } : r)); markDirty(true); };
 
-  return <div className="dr-main">
-    <div aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>
-    <article className="dr-card">
-      <h3>{order.service} <span className={order.status === 'completed' ? 'tag ok' : 'tag'}>{t(`lab.status.${order.status}` as LabKey)}</span></h3>
-      <p>{order.patientName}{order.patientNo ? ' · ' + t('lab.patientNo', { number: order.patientNo }) : ''}</p>
-      <p className="fine">{t('lab.birthDate', { date: order.birthDate ? order.birthDate.split('-').reverse().join('.') : t('lab.unknown') })} · {orderedLabel(t, order)}</p>
-    </article>
+  return <div className="dr-visit lab-order">
+    <div className="hero"><AbrField /><div className="hero-in">
+      <p className="hero-label"><span className={`dot ${order.status === 'completed' ? 'ok' : ''}`}>{t(`lab.status.${order.status}` as LabKey)}</span></p>
+      <h2 className="lab-test">{order.service}</h2>
+      <p className="name lab-patient">{order.patientName}</p>
+      <p className="muted">{[order.patientNo && t('lab.patientNo', { number: order.patientNo }), t('lab.birthDate', { date: order.birthDate ? order.birthDate.split('-').reverse().join('.') : t('lab.unknown') }), orderedLabel(t, order)].filter(Boolean).join(' · ')}</p>
+    </div></div>
+    <div aria-live="polite" className="banners">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>
     <form className="dr-card" onSubmit={save}>
-      <h3>{t('lab.results')}</h3>
-      {rows.map((r, i) => <fieldset key={i} className="dr-rx-line"><legend>{t('lab.row', { n: i + 1 })}</legend>
+      <h3 className="section-label">{t('lab.results')}</h3>
+      {rows.map((r, i) => <fieldset key={i} className="lab-row"><legend className="sr-only">{t('lab.row', { n: i + 1 })}</legend>
         {COLUMNS.map(k => <label key={k}>{t(COLUMN_KEY[k])}<input value={r[k]} required={k === 'name' || k === 'value'} disabled={busy}
           maxLength={k === 'value' ? 200 : k === 'name' || k === 'reference' ? 120 : 40} onChange={e => setCell(i, k, e.target.value)} /></label>)}
         {rows.length > 1 && <button type="button" className="quiet" disabled={busy} onClick={() => { setRows(old => old.filter((_, j) => j !== i)); markDirty(true); }}>{t('lab.removeRow')}</button>}
       </fieldset>)}
-      <button type="button" disabled={busy || rows.length >= 60} onClick={() => { setRows(old => [...old, blank()]); markDirty(true); }}>{t('lab.addRow')}</button>
+      <button type="button" className="lab-add" disabled={busy || rows.length >= 60} onClick={() => { setRows(old => [...old, blank()]); markDirty(true); }}><Icon name="plus" />{t('lab.addRow')}</button>
       <label>{t('lab.comment')}<textarea value={comment} rows={2} maxLength={2000} disabled={busy} onChange={e => { setComment(e.target.value); markDirty(true); }} /></label>
-      <div className="dr-actions">
+      <div className="dr-actions dr-save">
+        <button className={dirty || !order.resultVersion ? 'primary big' : 'big'} disabled={busy || !dirty}>{t('lab.save')}</button>
+        {order.status === 'ordered' && <button type="button" className={!dirty && order.resultVersion ? 'primary big' : 'big'} disabled={busy || dirty || !order.resultVersion || order.pending} onClick={confirmTest}>{t('lab.confirm')}</button>}
         <p role="status" className="fine">{busy ? t('lab.saving') : dirty ? t('lab.unsaved') : ''}</p>
-        <button className="primary" disabled={busy || !dirty}>{t('lab.save')}</button>
-        {order.status === 'ordered' && <button type="button" className="primary big" disabled={busy || dirty || !order.resultVersion || order.pending} onClick={confirmTest}>{t('lab.confirm')}</button>}
       </div>
       {order.status === 'ordered' && !order.resultVersion && <p className="fine">{t('lab.needResult')}</p>}
-      {order.status === 'ordered' && order.late && <p className="fine">{t('lab.late', { date: order.visitDate.split('-').reverse().join('.') })} · {t('lab.lateHint')}</p>}
-      {order.pending && <p className="fine">{t('lab.pending')}</p>}
+      {order.status === 'ordered' && order.late && <p className="fine attn">{t('lab.late', { date: order.visitDate.split('-').reverse().join('.') })} · {t('lab.lateHint')}</p>}
+      {order.pending && <p className="fine attn">{t('lab.pending')}</p>}
     </form>
-    <section className="dr-card">
-      <h3>{t('lab.history')}</h3>
+    <details className="dr-card lab-history"><summary>{t('lab.history')}{order.versions.length > 0 && ` · ${order.versions.length}`}</summary>
       {!order.versions.length ? <p className="fine">{t('lab.noHistory')}</p> : <ul className="dr-history">{order.versions.map(v => <li key={v.version}>
-        <span>{t('lab.version', { version: v.version, by: v.enteredBy, at: time(v.enteredAt) })}</span>
-        {v.afterConfirmation && <span className="tag">{t('lab.afterConfirmation')}</span>}
+        <span className="row-meta">{t('lab.version', { version: v.version, by: v.enteredBy, at: time(v.enteredAt) })}{v.afterConfirmation && <> · <span className="tag attn">{t('lab.afterConfirmation')}</span></>}</span>
         <span>{v.values.map(x => `${x.name}: ${x.value}${x.unit ? ' ' + x.unit : ''}`).join('; ')}</span>
       </li>)}</ul>}
-    </section>
+    </details>
   </div>;
 }
 

@@ -51,3 +51,16 @@ test('manifest names the app and its icons for installation', async () => {
   assert.deepEqual(manifest.icons.map((i: { sizes: string }) => i.sizes).sort(), ['192x192', '512x512', '512x512']);
   assert.ok(manifest.icons.some((i: { purpose?: string }) => i.purpose === 'maskable'));
 });
+
+test('task 026: the service worker precaches exactly the font files fonts.css serves', async () => {
+  const { puts } = await (async () => {
+    const w = await loadWorker();
+    await new Promise<void>(resolve => w.handlers.get('install')!({ waitUntil: (p: Promise<unknown>) => { void p.then(() => resolve()); } }));
+    return w;
+  })();
+  const css = await readFile('src/web/fonts.css', 'utf8');
+  const files = [...css.matchAll(/files\/((?:onest|source-serif-4)-[a-z-]+-\d+-normal\.woff2)/g)].map(m => '/assets/' + m[1]).sort();
+  assert.equal(files.length, 16);
+  assert.deepEqual(puts.filter(u => u.endsWith('.woff2')).sort(), files);
+  assert.doesNotMatch(css, /https?:\/\//, 'no font CDN');
+});

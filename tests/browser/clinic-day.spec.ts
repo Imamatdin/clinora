@@ -6,7 +6,7 @@ import { transaction } from '../../src/server/database.js';
 import { seedDemoStaff } from '../../src/server/demo-staff.js';
 import { seedDemoCatalog } from '../../src/server/demo-catalog.js';
 import { assistant } from '../../src/web/i18n/assistant.uz-Cyrl.js';
-import { expectHeaderButton, headerButton, tab } from './ui.js';
+import { expectHeaderButton, headerButton, openDaySheet, tab, visitPart } from './ui.js';
 
 /*
  * Task 017 acceptance: one synthetic clinic day, every role through the real browser and the compiled server.
@@ -56,7 +56,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
 
     // 1. Administrator opens the day.
     await signIn('day.admin');
-    await expect(page.getByRole('heading', { name: T('home.administrator.title'), level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('module.payments'), level: 1 })).toBeVisible();
     await page.getByRole('button', { name: T('day.openButton'), exact: true }).click();
     await expect(page.getByRole('banner').locator('[data-state="open"]')).toBeVisible();
     await noSideScroll(); await shot('01-admin-opens-day'); await helpShot('administrator');
@@ -97,10 +97,12 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     // 3. Doctor (therapist): call, write and approve a note with a prescription, order a lab test; assistant unavailable.
     await signIn('day.doctor');
     const dr = page.locator('section.dr');
-    await expect(dr.getByRole('heading', { name: T('doctor.title'), exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('module.myQueue'), exact: true })).toBeVisible();
     await dr.getByRole('button', { name: T('doctor.callNext'), exact: true }).click();
     await dr.getByRole('button', { name: T('doctor.start'), exact: true }).click();
+    await visitPart(page, 'assistant');
     await expect(page.locator('.assistant').getByText(assistant['assistant.unavailableBanner'])).toBeVisible();
+    await visitPart(page, 'note');
     await dr.getByLabel(T('doctor.field.reported'), { exact: true }).fill('Синтетик: 2 кундан бери бош оғриғи');
     await dr.getByLabel(T('doctor.field.assessment'), { exact: true }).fill('R51 Бош оғриғи (синтетик)');
     await dr.getByRole('button', { name: T('doctor.rx.add'), exact: true }).click();
@@ -113,6 +115,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await expect(dr.getByRole('status').filter({ hasText: T('doctor.saved', { revision: 1 }) }).first()).toBeVisible();
     await dr.getByRole('button', { name: T('doctor.approve'), exact: true }).click();
     await expect(dr.getByText(T('doctor.approvedTag', { revision: 2 }), { exact: true })).toBeVisible();
+    await visitPart(page, 'orders');
     await dr.getByLabel(T('doctor.service'), { exact: true }).selectOption({ value: await serviceId('L03') });
     await dr.getByRole('button', { name: T('doctor.order'), exact: true }).click();
     await expect(dr.getByRole('status').filter({ hasText: T('doctor.ordered') })).toBeVisible();
@@ -125,8 +128,8 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await signIn('day.lab');
     // Newest first: the doctor's glucose order, then the registrar's blood count.
     for (const [param, value, unit] of [['Глюкоза', '5.2', 'ммоль/л'], ['Гемоглобин', '131', 'г/л']]) {
-      await expect(dr.getByRole('heading', { name: T('lab.title'), exact: true })).toBeVisible();
-      await dr.getByRole('button', { name: T('lab.open'), exact: true }).first().click();
+      await expect(page.getByRole('heading', { name: T('module.labOrders'), exact: true })).toBeVisible();
+      await dr.locator('.dr-orders button').first().click();
       await dr.getByLabel(T('lab.param'), { exact: true }).fill(param!);
       await dr.getByLabel(T('lab.value'), { exact: true }).fill(value!);
       await dr.getByLabel(T('lab.unit'), { exact: true }).fill(unit!);
@@ -142,9 +145,9 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
 
     // 5. Pharmacy dispenses the prescribed medicine to the outpatient's visit.
     await signIn('day.pharmacy');
-    const ph = page.locator('section').filter({ has: page.getByRole('heading', { name: T('pharmacy.title'), exact: true }) }).last();
+    const ph = page.locator('section.pharmacy');
     await ph.getByLabel(T('pharmacy.item'), { exact: true }).selectOption({ value: await serviceId('M01') });
-    await ph.getByLabel(T('pharmacy.title'), { exact: true }).selectOption('dispense');
+    await ph.getByRole('group', { name: T('pharmacy.title'), exact: true }).getByRole('button', { name: T('pharmacy.mode.dispense'), exact: true }).click();
     await ph.getByLabel(T('pharmacy.visit'), { exact: true }).selectOption({ value: outpatient.id });
     await ph.locator('input[name="qty"]').fill('6');
     await ph.getByRole('button', { name: T('pharmacy.save'), exact: true }).click();
@@ -191,9 +194,9 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await noSideScroll(); await shot('07-surgery-recorded');
     // Ward round: the attending surgeon opens the admitted patient's note from the doctor home (no queue ticket).
     await tab(page, T('module.myQueue'));
-    await page.locator('.dr-list li', { hasText: 'Синтетик Стационар Бемор' }).getByRole('button', { name: T('doctor.openNote'), exact: true }).click();
-    await expect(page.locator('section.dr').getByRole('heading', { name: T('doctor.note'), exact: true })).toBeVisible();
-    await expect(page.locator('.dr-patient').getByText('Синтетик Стационар Бемор', { exact: true })).toBeVisible();
+    await page.locator('.dr-list li', { hasText: 'Синтетик Стационар Бемор' }).getByRole('button').click();
+    await expect(page.locator('section.dr').getByLabel(T('doctor.field.reported'), { exact: true })).toBeVisible();
+    await expect(page.locator('.dr-visit-hero').getByRole('heading', { name: 'Синтетик Стационар Бемор', exact: true })).toBeVisible();
     await signOut();
 
     // 8. Inpatient daily bed charges run through yesterday (two bed days).
@@ -215,20 +218,25 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     const cash = page.locator('section.cashier');
     await cash.getByLabel(T('cashier.opening'), { exact: true }).fill('50000');
     await cash.getByRole('button', { name: T('cashier.open'), exact: true }).click();
-    await expect(cash.getByLabel(T('cashier.shift'), { exact: true })).toBeVisible();
+    await expect(cash.getByLabel(T('cashier.search'), { exact: true })).toBeVisible();
     await helpShot('cashier');
     const due = async () => BigInt(digits(await cash.getByTestId('cashier-due').innerText()));
     const openPatient = async (no: number, name: string) => {
+      const back = cash.getByRole('button', { name: T('cashier.back'), exact: true });
+      if (await back.isVisible()) await back.click();
       await cash.getByLabel(T('cashier.search'), { exact: true }).fill(String(no));
       await cash.getByRole('button', { name: T('cashier.find'), exact: true }).click();
       await cash.getByRole('button', { name: new RegExp(name) }).click();
       await expect(cash.getByRole('heading', { name, exact: true })).toBeVisible();
     };
-    const amount = cash.getByLabel(T('cashier.amount'), { exact: true }).first();
+    const amount = cash.getByLabel(T('cashier.amount'), { exact: true });
+    // Task 028: discount and refund are forms in a sheet, each with its own amount, reason and approval.
+    const sheet = cash.getByRole('dialog'), form = sheet.locator('details[open]');
+    const openMore = async (section: 'cashier.discount' | 'cashier.refund') => { await cash.getByRole('button', { name: T('cashier.more'), exact: true }).click(); await sheet.locator('summary', { hasText: T(section) }).click(); };
     const pay = async (sum: bigint, method: 'cash' | 'card') => {
       const before = await due();
       await amount.fill(String(sum));
-      await cash.getByLabel(T('cashier.method'), { exact: true }).selectOption(method);
+      await cash.getByRole('group', { name: T('cashier.method'), exact: true }).getByRole('button', { name: T(`cashier.${method}`), exact: true }).click();
       await cash.getByRole('button', { name: T('cashier.take'), exact: true }).click();
       await expect(cash.getByRole('dialog')).toContainText(new RegExp(`${String(sum).replace(/\B(?=(\d{3})+(?!\d))/g, '.')} сўм`));
       await cash.getByRole('button', { name: T('cashier.yes'), exact: true }).click();
@@ -239,20 +247,22 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     const outpatientTotal = await due();
     expect(outpatientTotal).toBe(100000n + 45000n + 20000n + 6n * 3000n);
     await pay(100000n, 'cash');
-    await cash.getByText(T('cashier.more'), { exact: true }).click();
-    await cash.getByLabel(T('cashier.reason'), { exact: true }).fill('Синтетик: пенсионер чегирмаси');
-    await cash.getByLabel(T('cashier.approver'), { exact: true }).selectOption(staff.ids.administrator);
-    await cash.getByLabel(T('cashier.pin'), { exact: true }).fill(PIN);
-    await amount.fill('10000');
-    await cash.getByRole('button', { name: T('cashier.apply'), exact: true }).click();
+    await openMore('cashier.discount');
+    await form.getByLabel(T('cashier.discountAmount'), { exact: true }).fill('10000');
+    await form.getByLabel(T('cashier.reason'), { exact: true }).fill('Синтетик: пенсионер чегирмаси');
+    await form.getByLabel(T('cashier.approver'), { exact: true }).selectOption(staff.ids.administrator);
+    await form.getByLabel(T('cashier.pin'), { exact: true }).fill(PIN);
+    await form.getByRole('button', { name: T('cashier.apply'), exact: true }).click();
     await expect.poll(due).toBe(outpatientTotal - 100000n - 10000n);
     await pay(await due(), 'card');
     expect(await due()).toBe(0n);
     // Refund 5 000 of the cash payment, approved by the administrator's PIN.
-    await cash.getByLabel(T('cashier.payment'), { exact: true }).selectOption({ index: 1 });
-    await cash.getByLabel(T('cashier.pin'), { exact: true }).fill(PIN);
-    await amount.fill('5000');
-    await cash.getByRole('button', { name: T('cashier.refund'), exact: true }).click();
+    await openMore('cashier.refund');
+    await form.getByLabel(T('cashier.payment'), { exact: true }).selectOption({ index: 1 });
+    await form.getByLabel(T('cashier.refundAmount'), { exact: true }).fill('5000');
+    await form.getByLabel(T('cashier.refundReason'), { exact: true }).fill('Синтетик: ортиқча тўлов');
+    await form.getByLabel(T('cashier.pin'), { exact: true }).fill(PIN);
+    await form.getByRole('button', { name: T('cashier.refund'), exact: true }).click();
     await expect.poll(due).toBe(5000n);
     await noSideScroll(); await shot('09-cashier-outpatient');
     // The admitted patient leaves a cash deposit before discharge.
@@ -279,27 +289,31 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     await pay(inpatientDue, 'card');
     expect(await due()).toBe(0n);
     const expectedCash = 50000n + 100000n - 5000n + 1000000n;
-    await cash.getByLabel(T('cashier.counted'), { exact: true }).fill(String(expectedCash));
-    await cash.getByRole('button', { name: T('cashier.close'), exact: true }).click();
+    await cash.getByRole('button', { name: T('cashier.back'), exact: true }).click();
+    await cash.locator('.cashier-shift').click();
+    await sheet.getByLabel(T('cashier.counted'), { exact: true }).fill(String(expectedCash));
+    await sheet.getByRole('button', { name: T('cashier.close'), exact: true }).click();
     await expect(page.locator('.cashier-print')).toBeVisible();
     await noSideScroll(); await shot('11-cashier-closed');
     await signOut();
 
     // 12. Administrator closes the day.
     await signIn('day.admin');
+    await openDaySheet(page);
     await page.getByRole('button', { name: T('day.closeButton'), exact: true }).click();
     await expect(page.getByRole('banner').locator('[data-state="closed"]')).toBeVisible();
     await signOut();
 
     // 13. CEO: money received ("collected", gross), refunds and net match the payments ledger and the closed day's snapshot.
-    const group = (n: bigint) => new RegExp(`^${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '\\s')}$`);
+    const group = (n: bigint, unit = '') => new RegExp(`^${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '\\s')}${unit}$`);
     const gross = 100000n + (outpatientTotal - 110000n) + 1000000n + inpatientDue, refunds = 5000n, net = gross - refunds;
     const ledger = (await f.pool.query(`SELECT coalesce(sum(amount_uzs) FILTER (WHERE kind='payment'),0)::text gross, coalesce(sum(amount_uzs) FILTER (WHERE kind='refund'),0)::text refunds FROM payments WHERE clinic_id=$1`, [c])).rows[0];
     expect([BigInt(ledger.gross), BigInt(ledger.refunds)]).toEqual([gross, refunds]);
     const snapshot = (await f.pool.query("SELECT close_snapshot->'totals' t FROM business_days WHERE clinic_id=$1 AND status='closed'", [c])).rows[0].t;
     expect([BigInt(snapshot.collected), BigInt(snapshot.refunds), BigInt(snapshot.net)]).toEqual([gross, refunds, net]);
     await signIn('owner@example.test');
-    await expect(page.locator('.ceo-kpi-0 strong')).toHaveText(group(gross));
+    await expect(page.locator('.ceo-kpi-0 strong')).toHaveText(group(gross, T('ceo.uzs')));
+    await page.locator('.ceo-more-metrics > summary').click(); // the ten secondary figures sit one tap deeper
     await expect(page.locator('.ceo-secondary button').filter({ hasText: T('ceo.net') }).locator('b')).toHaveText(group(net));
     await expect(page.locator('.ceo-secondary button').filter({ hasText: T('ceo.refunds') }).locator('b')).toHaveText(group(refunds));
     await noSideScroll(); await shot('13-ceo-dashboard'); await helpShot('ceo');

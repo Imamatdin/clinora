@@ -4,6 +4,8 @@ import { errorText } from '../i18n/index.js';
 import { ApiFailure } from '../api.js';
 import { translator } from './i18n.js';
 import { useLocale } from '../i18n/locale.js';
+import { AbrField } from '../abr.js';
+import { Icon, Seg } from '../shell.js';
 type Item = { id:string; name:string; on_hand:string; threshold:number; unit:string };
 export type Choice = { id:string; name:string; admission_id?:string|null };
 type Movement = { id:string; qty:number; reason:'receipt'|'dispense'|'adjustment'|'return'; note:string|null; created_at:string };
@@ -28,23 +30,30 @@ export function Pharmacy({ clinic, request, setDirty }:ModuleProps) {
     catch(e) {setError(errorText(e instanceof ApiFailure ? e.code : 'SERVICE_UNAVAILABLE'));}finally{setBusy(false);}
   }
   const selected = items.find(i=>i.id===item);
-  return <section><h2>{t('pharmacy.title')}</h2>
-    {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}{busy&&<p role="status">{t('pharmacy.loading')}</p>}
-    <button style={{minHeight:48}} disabled={busy} onClick={()=>{setBusy(true);load().catch(()=>setError(errorText('SERVICE_UNAVAILABLE'))).finally(()=>setBusy(false));}}>{t('pharmacy.refresh')}</button>
-    {!busy&&!items.length&&<p>{t('pharmacy.empty')}</p>}
-    <h3>{t('pharmacy.low')}</h3><ul>{items.filter(i=>BigInt(i.on_hand)<=BigInt(i.threshold)).map(i=><li key={i.id}>{i.name}: {i.on_hand} {i.unit}</li>)}</ul>
-    <form onSubmit={submit} onChange={()=>{key.current=crypto.randomUUID();setDirty(true);}}><fieldset disabled={busy} style={{border:0,padding:0,margin:0,minWidth:0}}>
-      <label>{t('pharmacy.item')}<select style={{minHeight:48}} aria-label={t('pharmacy.item')} required value={item} onChange={e=>setItem(e.target.value)}>{items.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select></label>
-      {selected&&<p>{t('pharmacy.onHand')}: {selected.on_hand} {selected.unit}</p>}
-      <label>{t('pharmacy.title')}<select style={{minHeight:48}} aria-label={t('pharmacy.title')} value={mode} onChange={e=>setMode(e.target.value as typeof mode)}>{(['receipt','dispense','adjust','threshold'] as const).map(m=><option key={m} value={m}>{t(`pharmacy.${m}`)}</option>)}</select></label>
-      <label>{t(mode==='threshold'?'pharmacy.threshold':'pharmacy.qty')}<input style={{minHeight:48}} name="qty" type="number" step="1" min={mode==='adjust'?undefined:mode==='threshold'?0:1} required /></label>
-      {mode==='receipt'&&<><label>{t('pharmacy.cost')}<input style={{minHeight:48}} name="cost" inputMode="numeric" pattern="[0-9]+" required /></label><label>{t('pharmacy.supplier')}<input style={{minHeight:48}} name="supplier" required maxLength={1000}/></label></>}
-      {mode==='dispense'&&<label>{t('pharmacy.visit')}<select style={{minHeight:48}} aria-label={t('pharmacy.visit')} name="visit" required>{visits.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}</select></label>}
-      {['receipt','adjust'].includes(mode)&&<label>{t('pharmacy.note')}<input style={{minHeight:48}} name="note" required={mode==='adjust'} maxLength={1000}/></label>}
-      {['dispense','adjust'].includes(mode)&&clinic.roles.some(r=>['ceo','administrator'].includes(r))&&<label>{t('pharmacy.override')}<input style={{minHeight:48}} name="override" maxLength={1000}/></label>}
-      <button style={{minHeight:48}} disabled={busy||!item}>{t('pharmacy.save')}</button>
+  const low = items.filter(i=>BigInt(i.on_hand)<=BigInt(i.threshold));
+  return <section className="pharmacy screen">
+    <div className="banners" aria-live="polite">{error&&<p role="alert" className="error">{error}</p>}{notice&&<p role="status" className="notice">{notice}</p>}{busy&&<p role="status" className="sr-only">{t('pharmacy.loading')}</p>}</div>
+    <div className="hero"><AbrField /><div className="hero-in ward-hero">
+      <div><p className="hero-label">{t('pharmacy.low')}</p><p className={`hero-figure ${low.length?'attn':'okc'}`}>{low.length}</p></div>
+      <button className="quiet" disabled={busy} onClick={()=>{setBusy(true);load().catch(()=>setError(errorText('SERVICE_UNAVAILABLE'))).finally(()=>setBusy(false));}}><Icon name="refresh" />{t('pharmacy.refresh')}</button>
+    </div></div>
+    {!busy&&!items.length&&<p className="empty">{t('pharmacy.empty')}</p>}
+    {low.length>0&&<ul className="rows pharmacy-low">{low.map(i=><li key={i.id}><button type="button" className="row" aria-pressed={i.id===item} onClick={()=>setItem(i.id)}>
+      <span className="row-title row-body">{i.name}</span><span className="row-end attn num">{i.on_hand} {i.unit}</span></button></li>)}</ul>}
+    <form className="pharmacy-form" onSubmit={submit} onChange={()=>{key.current=crypto.randomUUID();setDirty(true);}}><fieldset disabled={busy}>
+      <Seg label={t('pharmacy.title')} value={mode} onChange={setMode} options={(['receipt','dispense','adjust','threshold'] as const).map(m=>[m,t(`pharmacy.mode.${m}`)] as const)} />
+      <label>{t('pharmacy.item')}<select aria-label={t('pharmacy.item')} required value={item} onChange={e=>setItem(e.target.value)}>{items.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select></label>
+      {selected&&<p className="pharmacy-onhand">{t('pharmacy.onHand')}: {selected.on_hand} {selected.unit}</p>}
+      <label>{t(mode==='threshold'?'pharmacy.threshold':'pharmacy.qty')}<input name="qty" type="number" step="1" min={mode==='adjust'?undefined:mode==='threshold'?0:1} required /></label>
+      {mode==='receipt'&&<><label>{t('pharmacy.cost')}<input name="cost" inputMode="numeric" pattern="[0-9]+" required /></label><label>{t('pharmacy.supplier')}<input name="supplier" required maxLength={1000}/></label></>}
+      {mode==='dispense'&&<label>{t('pharmacy.visit')}<select aria-label={t('pharmacy.visit')} name="visit" required>{visits.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}</select></label>}
+      {['receipt','adjust'].includes(mode)&&<label>{t('pharmacy.note')}<input name="note" required={mode==='adjust'} maxLength={1000}/></label>}
+      {['dispense','adjust'].includes(mode)&&clinic.roles.some(r=>['ceo','administrator'].includes(r))&&<label>{t('pharmacy.override')}<input name="override" maxLength={1000}/></label>}
+      <button className="primary big" disabled={busy||!item}>{t('pharmacy.save')}</button>
     </fieldset></form>
-    <h3>{t('pharmacy.history')}</h3><ul>{moves.map(m=><li key={m.id}>{new Date(m.created_at).toLocaleString(locale)} — {t(`pharmacy.${m.reason}Reason`)}: {m.qty}{m.note&&` — ${m.note}`}</li>)}</ul>
+    <details className="ward-form"><summary>{t('pharmacy.history')}{moves.length>0&&` · ${moves.length}`}</summary><ul className="rows">{moves.map(m=><li key={m.id}><div className="row">
+      <span className="row-body"><span className="row-title">{t(`pharmacy.${m.reason}Reason`)}</span><span className="row-meta">{new Date(m.created_at).toLocaleString(locale)}{m.note&&` · ${m.note}`}</span></span>
+      <span className="row-end num">{m.qty}</span></div></li>)}</ul></details>
   </section>;
 }
 export const pharmacyModule:WebModule={id:'pharmacy',roles:['ceo','administrator','pharmacy'],label:'pharmacy.title',Screen:Pharmacy};

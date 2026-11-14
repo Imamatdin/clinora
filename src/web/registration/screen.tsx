@@ -7,6 +7,8 @@ import { LocalTickets, OfflineStatus, useRegistrationOutbox } from './offline.js
 import { formatUzs, uzs } from '../../modules/billing/money.js';
 import { pickName, translator, type Names } from './i18n.js';
 import { useLocale } from '../i18n/locale.js';
+import { AbrField, Ticket as TicketToken } from '../abr.js';
+import { Icon } from '../shell.js';
 
 type Service = { id: string; kind: string; names: Names; priceUzs: string | null };
 type Point = { id: string; kind: 'doctor' | 'department' | 'service'; names: Names; waiting: number; services: Service[] };
@@ -21,6 +23,8 @@ type Step = 'find' | 'form' | 'route' | 'done';
 
 const emptyDraft: Draft = { fullName: '', birthDate: '', gender: '', phone: '', districtId: '', mahallaId: '', address: '', source: '' };
 const formatDate = (iso: string) => iso.split('-').reverse().join('.');
+/** +998901234567 → +998 90 123 45 67, so the registrar can read it back to the patient. Other shapes stay as stored. */
+const formatPhone = (p: string) => /^\+998\d{9}$/.test(p) ? p.replace(/^(\+998)(\d{2})(\d{3})(\d{2})(\d{2})$/, '$1 $2 $3 $4 $5') : p;
 function age(birthDate: string | null): number | null {
   if (!birthDate) return null;
   const [y, m, d] = birthDate.split('-').map(Number), now = new Date();
@@ -80,6 +84,13 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
     if (!query.trim()) return;
     await run(async () => setResults(await request<Patient[]>(`${base}/search`, { query: query.trim() })));
   }
+  // Results appear as the registrar types (three characters or more); Enter or the button searches at once.
+  useEffect(() => {
+    const q = query.trim();
+    if (step !== 'find' || q.length < 3 || outbox.offline) return;
+    const timer = setTimeout(() => { request<Patient[]>(`${base}/search`, { query: q }).then(found => setResults(found)).catch(() => {}); }, 300);
+    return () => clearTimeout(timer);
+  }, [query, step, outbox.offline]);
   function payload() {
     return { fullName: draft.fullName.trim(), birthDate: draft.birthDate, gender: draft.gender, phone: draft.phone ? draft.phone : null,
       districtId: draft.districtId || null, mahallaId: draft.mahallaId || null, address: draft.address.trim() || null, source: draft.source || null };
@@ -184,21 +195,16 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
     });
   }
 
-  const card = (p: Patient) => <span className="registration-card-body">
-    <strong>{p.fullName}</strong>
-    <span>{p.patientNo ? t('registration.patientNo', { no: p.patientNo }) : local?.code}{p.birthDate && ` · ${formatDate(p.birthDate)} · ${t('registration.age', { age: age(p.birthDate) ?? '' })}`}</span>
-    {p.phone && <span>{p.phone}</span>}
-    {p.lastVisit && <span className="muted">{t('registration.lastVisit', { date: formatDate(p.lastVisit) })}</span>}
-  </span>;
+  const meta = (p: Patient) => [p.patientNo ? t('registration.patientNo', { no: p.patientNo }) : local?.code, p.birthDate && t('registration.age', { age: age(p.birthDate) ?? '' }), p.phone && formatPhone(p.phone),
+    p.lastVisit && t('registration.lastVisit', { date: formatDate(p.lastVisit) })].filter(Boolean).join(' · ');
+  const card = (p: Patient) => <span className="registration-card-body row-body"><strong className="row-title">{p.fullName}</strong><span className="row-meta">{meta(p)}</span></span>;
   const district = options?.districts.find(d => d.id === draft.districtId);
   const select = (label: Parameters<typeof t>[0], value: string, onChange: (v: string) => void, items: { id: string; label: string }[], name: string) =>
     <label>{t(label)}<select name={name} aria-label={t(label)} value={value} onChange={e => onChange(e.target.value)}>
       <option value="">{t('registration.none')}</option>{items.map(i => <option key={i.id} value={i.id}>{i.label}</option>)}</select></label>;
+  const back = (onClick: () => void) => <button type="button" className="quiet back" onClick={onClick}><Icon name="back" />{t('registration.back')}</button>;
 
-  return <section className="registration" aria-busy={busy}>
-    <div className="registration-head">
-      <h2>{t('registration.title')}</h2>
-    </div>
+  return <section className="registration screen" aria-busy={busy}>
     {outbox.offline && <p className="registration-banner" role="status">{t(owner ? 'registration.offline.banner' : 'registration.offline.enroll')}</p>}
     {owner && <OfflineStatus {...outbox} owner={owner} base={base} request={request} locale={locale} t={t} onRoute={async row => {
       await loadOptions(); setLocal(row);
@@ -206,32 +212,38 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
     }} onResume={row => {
       setLocal(row); choosePatient({ id: row.id, patientNo: 0, fullName: row.patient!.fullName, birthDate: row.patient!.birthDate, gender: null, phone: row.patient!.phone });
     }} />}
-    <div aria-live="polite">
+    <div aria-live="polite" className="banners">
       {error && <p role="alert" className="error">{error}</p>}
       {notice && <p role="status" className="notice">{notice}</p>}
-      {busy && <p role="status">{t('registration.loading')}</p>}
+      {busy && <p role="status" className="sr-only">{t('registration.loading')}</p>}
     </div>
     {options && !options.day && <p className="registration-banner" role="note">{t('registration.noDay')}</p>}
 
     {step === 'find' && <>
-      <form className="registration-search" onSubmit={find} role="search">
-        <label>{t('registration.search')}<input type="search" value={query} autoFocus maxLength={100} onChange={e => setQuery(e.target.value)} /></label>
-        <button type="submit" disabled={busy || outbox.offline || !query.trim()}>{t('registration.find')}</button>
-      </form>
+      <div className="hero"><AbrField />
+        <form className="registration-search hero-in" onSubmit={find} role="search">
+          <div className="search-field"><Icon name="search" />
+            <input type="search" aria-label={t('registration.search')} placeholder={t('registration.searchHint')} value={query} autoFocus maxLength={100} enterKeyHint="search" onChange={e => { setQuery(e.target.value); if (!e.target.value.trim()) setResults(null); }} />
+            <button type="submit" className="primary" disabled={busy || outbox.offline || !query.trim()}>{t('registration.find')}</button></div>
+        </form>
+      </div>
       {results && !results.length && <p className="empty">{t('registration.notFound')}</p>}
-      {results && results.length > 0 && <ul className="registration-results">{results.map(p =>
-        <li key={p.id}><button type="button" className="registration-card" onClick={() => choosePatient(p)}>{card(p)}</button></li>)}</ul>}
-      <button type="button" className="primary" onClick={() => { setDraft(emptyDraft); setEditing(null); setStep('form'); }}>{t('registration.new')}</button>
+      {results && results.length > 0 && <ul className="registration-results rows">{results.map(p =>
+        <li key={p.id}><button type="button" className="registration-card row" onClick={() => choosePatient(p)}>{card(p)}<span className="chev" aria-hidden="true" /></button></li>)}</ul>}
+      <button type="button" className={`registration-new ${results && !results.length ? 'primary big' : 'big'}`} onClick={() => { setDraft(emptyDraft); setEditing(null); setStep('form'); }}><Icon name="plus" />{t('registration.new')}</button>
     </>}
 
     {step === 'form' && <form className="registration-form" onSubmit={e => save(e)}>
-      <fieldset disabled={busy}>
-        <label>{t('registration.fullName')}<input name="fullName" required maxLength={200} autoComplete="off" value={draft.fullName} onChange={e => edit({ fullName: e.target.value })} /></label>
+      <div className="registration-head">{back(() => { setDirty(false); setMatches([]); if (editing && patient) { setEditing(null); setStep('route'); } else setStep('find'); })}</div>
+      <h2 className="hero-name">{editing ? editing.fullName : t('registration.new')}</h2>
+      <fieldset disabled={busy} className="registration-fields">
+        <label className="wide">{t('registration.fullName')}<input name="fullName" required maxLength={200} autoComplete="off" autoFocus={!editing} value={draft.fullName} onChange={e => edit({ fullName: e.target.value })} /></label>
         <label>{t('registration.birthDate')}<input name="birthDate" type="date" required min="1900-01-01" max={new Date().toISOString().slice(0, 10)} value={draft.birthDate} onChange={e => edit({ birthDate: e.target.value })} /></label>
-        <fieldset className="registration-gender"><legend>{t('registration.gender')}</legend>
-          {(['male', 'female'] as const).map(g => <label key={g} className="choice"><input type="radio" name="gender" required value={g} checked={draft.gender === g} onChange={() => edit({ gender: g })} />{t(`registration.${g}`)}</label>)}
+        <fieldset className="registration-gender"><legend>{t('registration.gender')}</legend><div className="seg">
+          {(['male', 'female'] as const).map(g => <label key={g} className="seg-choice"><input type="radio" name="gender" required value={g} checked={draft.gender === g} onChange={() => edit({ gender: g })} /><span>{t(`registration.${g}`)}</span></label>)}</div>
         </fieldset>
-        <label>{t('registration.phone')}<input name="phone" type="tel" inputMode="tel" autoComplete="off" value={draft.phone} onChange={e => edit({ phone: phoneDigits(e.target.value) })} /></label>
+        <label>{t('registration.phone')}<input name="phone" type="tel" inputMode="tel" autoComplete="off" placeholder="90 123 45 67" value={draft.phone} onChange={e => edit({ phone: phoneDigits(e.target.value) })} /></label>
+        {/* PRODUCT.md rule 3: a large number pad, for touch PCs at the counter. Phones bring their own; a keyboard needs none. */}
         <div className="registration-keypad" role="group" aria-label={t('registration.keypad')}>
           {['1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '0'].map(d => <button key={d} type="button" onClick={() => edit({ phone: phoneDigits(draft.phone + d) })}>{d}</button>)}
           <button type="button" aria-label={t('registration.backspace')} onClick={() => edit({ phone: draft.phone.slice(0, -1) })}>⌫</button>
@@ -245,48 +257,44 @@ export function Registration({ clinic, request, setDirty, myId, offlineDeviceId 
       {matches.length > 0 && <div className="registration-duplicates" role="alertdialog" aria-labelledby="registration-duplicate-title">
         <h3 id="registration-duplicate-title">{t('registration.duplicateTitle')}</h3>
         <p>{t('registration.duplicateLead')}</p>
-        <ul className="registration-results">{matches.map(p => <li key={p.id}>
-          <div className="registration-card">{card(p)}</div>
-          <button type="button" onClick={() => { setDirty(false); choosePatient(p); }}>{t('registration.useExisting')}</button></li>)}</ul>
+        <ul className="registration-results rows">{matches.map(p => <li key={p.id}>
+          <div className="registration-card row">{card(p)}
+          <button type="button" onClick={() => { setDirty(false); choosePatient(p); }}>{t('registration.useExisting')}</button></div></li>)}</ul>
         <label>{t('registration.duplicateReason')}<input value={reason} maxLength={500} onChange={e => setReason(e.target.value)} /></label>
         <button type="button" disabled={busy || !reason.trim()} onClick={e => save(e, true)}>{t('registration.registerAnyway')}</button>
       </div>}
-      {!matches.length && <button type="submit" className="primary" disabled={busy}>{t('registration.save')}</button>}
-      <button type="button" onClick={() => { setDirty(false); setMatches([]); if (editing && patient) { setEditing(null); setStep('route'); } else setStep('find'); }}>{t('registration.back')}</button>
+      {!matches.length && <button type="submit" className="primary big" disabled={busy}>{t('registration.save')}</button>}
     </form>}
 
     {step === 'route' && patient && options && <div className="registration-route">
-      <div className="registration-card selected">{card(patient)}</div>
-      <details className="registration-more"><summary>{t('registration.more')}</summary>
-        <button type="button" onClick={startEdit} disabled={busy || outbox.offline || !!local}>{t('registration.edit')}</button>
-        <button type="button" onClick={reset}>{t('registration.back')}</button>
-      </details>
-      <h3>{t('registration.whoSees')}</h3>
-      <ul className="registration-points">{options.points.map(point => {
+      <div className="registration-head">{back(reset)}
+        <button type="button" className="quiet" onClick={startEdit} disabled={busy || outbox.offline || !!local}>{t('registration.edit')}</button></div>
+      <div className="registration-card selected"><h2 className="hero-name">{patient.fullName}</h2><p className="muted">{meta(patient)}</p></div>
+      <h3 className="section-label">{t('registration.whoSees')}</h3>
+      <ul className="registration-points rows">{options.points.map(point => {
         const on = !!chosen[point.id];
         return <li key={point.id} className={on ? 'on' : ''}>
-          <label className="registration-point"><input type="checkbox" checked={on} onChange={() => togglePoint(point)} />
-            <span><strong>{pickName(point.names, locale)}</strong><span className="muted">{t('registration.waiting', { count: point.waiting })}</span></span></label>
+          <label className="registration-point row"><input type="checkbox" checked={on} onChange={() => togglePoint(point)} />
+            <strong className="row-title row-body">{pickName(point.names, locale)}</strong><span className="row-end">{t('registration.waiting', { count: point.waiting })}</span></label>
           {on && (point.services.length ? <ul className="registration-services">{point.services.map(s => <li key={s.id}>
             <label className="choice"><input type="checkbox" disabled={s.priceUzs === null} checked={chosen[point.id]!.includes(s.id)} onChange={() => toggleService(point.id, s.id)} />
-              <span>{pickName(s.names, locale)}</span><span className="price">{s.priceUzs === null ? t('registration.noPrice') : formatUzs(uzs(s.priceUzs))}</span></label></li>)}</ul>
+              <span>{pickName(s.names, locale)}</span><span className="price num">{s.priceUzs === null ? t('registration.noPrice') : formatUzs(uzs(s.priceUzs))}</span></label></li>)}</ul>
             : <p className="muted">{t('registration.noServices')}</p>)}
         </li>;
       })}</ul>
-      {!outbox.offline && <label className="registration-admit"><input type="checkbox" checked={admit} onChange={e => { setAdmit(e.target.checked); setDirty(true); }} />{t('registration.admit')}</label>}
-      <p className="registration-total">{t('registration.total', { amount: formatUzs(uzs(total)) })}</p>
-      <button type="button" className="primary" disabled={busy || !options.day || !Object.keys(chosen).length} onClick={printTickets}>{t('registration.print')}</button>
+      {!outbox.offline && <label className="registration-admit check"><input type="checkbox" checked={admit} onChange={e => { setAdmit(e.target.checked); setDirty(true); }} />{t('registration.admit')}</label>}
+      <div className="registration-foot"><p className="registration-total">{t('registration.total', { amount: formatUzs(uzs(total)) })}</p>
+        <button type="button" className="primary big" disabled={busy || !options.day || !Object.keys(chosen).length} onClick={printTickets}><Icon name="print" />{t('registration.print')}</button></div>
     </div>}
 
-    {step === 'done' && printed && <div className="registration-done"><h3>{t('registration.offline.saved')}</h3><p>{printed.code}</p><p>{t('registration.offline.provisional')}</p>
-      <LocalTickets entry={printed} locale={locale} clinicName={clinic.name} t={t} /><button onClick={() => window.print()}>{t('registration.print')}</button>
-      <button className="primary" onClick={reset}>{t('registration.nextPatient')}</button></div>}
+    {step === 'done' && printed && <div className="registration-done"><h2 className="hero-name">{t('registration.offline.saved')}</h2><p>{printed.code}</p><p className="muted">{t('registration.offline.provisional')}</p>
+      <LocalTickets entry={printed} locale={locale} clinicName={clinic.name} t={t} /><div className="actions"><button className="primary big" onClick={reset}>{t('registration.nextPatient')}</button><button className="big" onClick={() => window.print()}><Icon name="print" />{t('registration.print')}</button></div></div>}
     {step === 'done' && visit && <div className="registration-done">
-      <h3>{t('registration.done')}</h3>
-      <ul className="registration-tickets">{visit.tickets.map(ticket => <li key={ticket.id}>
-        {t('registration.ticket', { point: pickName(ticket.names, locale), number: ticket.number })}</li>)}</ul>
-      <a className="button" href={ticketUrl(visit.visitId)} target="_blank" rel="noopener">{t('registration.printAgain')}</a>
-      <button type="button" className="primary" onClick={reset}>{t('registration.nextPatient')}</button>
+      <h2 className="hero-name">{t('registration.done')}</h2>
+      <ul className="registration-tickets rows">{visit.tickets.map(ticket => <li key={ticket.id}><div className="row" aria-label={t('registration.ticket', { point: pickName(ticket.names, locale), number: ticket.number })}>
+        <TicketToken kind="big">{ticket.number}</TicketToken><span className="row-title row-body">{pickName(ticket.names, locale)}</span></div></li>)}</ul>
+      <div className="actions"><button type="button" className="primary big" onClick={reset}>{t('registration.nextPatient')}</button>
+      <a className="button secondary" href={ticketUrl(visit.visitId)} target="_blank" rel="noopener">{t('registration.printAgain')}</a></div>
     </div>}
   </section>;
 }

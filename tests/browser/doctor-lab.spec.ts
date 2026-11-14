@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { processFixture, T } from './process-fixture.js';
 import { passwordHash } from '../../src/server/security.js';
-import { headerButton } from './ui.js';
+import { headerButton, visitPart } from './ui.js';
 
 /*
  * Task 010 acceptance: at phone width the doctor calls the next patient, writes and approves a note with a
@@ -46,9 +46,10 @@ for (const width of [360, 1280]) test(`doctor and lab complete one visit at ${wi
 
     // Doctor: call next, start, write the note with one prescription line, save, approve, order a lab test.
     await signIn('doctor.e2e@example.test');
-    await expect(dr.getByRole('heading', { name: T('doctor.title'), exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('module.myQueue'), exact: true })).toBeVisible();
     await dr.getByRole('button', { name: T('doctor.callNext'), exact: true }).click();
-    await expect(dr.getByText(`${T('doctor.ticketNo', { number: 7 })} · Синтетик Бемор`)).toBeVisible();
+    await expect(dr.locator('.dr-current .ticket')).toHaveText('7');
+    await expect(dr.locator('.dr-current').getByRole('heading', { name: 'Синтетик Бемор' })).toBeVisible();
     await dr.getByRole('button', { name: T('doctor.start'), exact: true }).click();
     await dr.getByLabel(T('doctor.field.reported'), { exact: true }).fill('Синтетик: 3 кундан бери иситма ва йўтал');
     await dr.getByLabel(T('doctor.field.assessment'), { exact: true }).fill('J06.9 Юқори нафас йўллари инфекцияси (синтетик)');
@@ -86,6 +87,7 @@ for (const width of [360, 1280]) test(`doctor and lab complete one visit at ${wi
     const pdfHref = await dr.getByRole('link', { name: T('doctor.pdf'), exact: true }).getAttribute('href');
     const pdf = await page.evaluate(async href => { const r = await fetch(href!); return { status: r.status, type: r.headers.get('content-type') }; }, pdfHref);
     expect(pdf).toEqual({ status: 200, type: 'application/pdf' });
+    await visitPart(page, 'orders');
     await dr.getByLabel(T('doctor.service'), { exact: true }).selectOption({ value: cbc });
     await dr.getByRole('button', { name: T('doctor.order'), exact: true }).click();
     await expect(dr.getByRole('status').filter({ hasText: T('doctor.ordered') })).toBeVisible();
@@ -96,8 +98,8 @@ for (const width of [360, 1280]) test(`doctor and lab complete one visit at ${wi
 
     // Lab: open the order, enter a result, save, confirm.
     await signIn('lab.e2e@example.test');
-    await expect(dr.getByRole('heading', { name: T('lab.title'), exact: true })).toBeVisible();
-    await dr.getByRole('button', { name: T('lab.open'), exact: true }).click();
+    await expect(page.getByRole('heading', { name: T('module.labOrders'), exact: true })).toBeVisible();
+    await dr.locator('.dr-orders button').first().click();
     await dr.getByLabel(T('lab.param'), { exact: true }).fill('Гемоглобин');
     await dr.getByLabel(T('lab.value'), { exact: true }).fill('128');
     await dr.getByLabel(T('lab.unit'), { exact: true }).fill('г/л');
@@ -113,6 +115,7 @@ for (const width of [360, 1280]) test(`doctor and lab complete one visit at ${wi
     // Doctor: reopen the visit, sees the result on the patient card, completes the consultation.
     await signIn('doctor.e2e@example.test');
     await dr.getByRole('button', { name: T('doctor.open'), exact: true }).click();
+    await visitPart(page, 'history');
     await expect(dr.locator('.dr-patient').getByText('128', { exact: true })).toBeVisible();
     await dr.getByRole('button', { name: T('doctor.complete'), exact: true }).click();
     await expect(dr.getByRole('status').filter({ hasText: T('doctor.completed') })).toBeVisible();

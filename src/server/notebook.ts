@@ -8,7 +8,7 @@ import { DomainError, requireClinicalAccess } from '../modules/identity/access.j
 import { transaction, type Tx } from './database.js';
 import { digest, dummyHash, passwordHash, passwordMatches, same, token } from './security.js';
 import { sortVisits } from '../contracts/timeline.js';
-import { PasswordChangeInput } from '../contracts/clinic.js';
+import { LocaleInput, PasswordChangeInput } from '../contracts/clinic.js';
 import { identifierKind } from '../modules/identity/roles.js';
 import { clinicRoute } from './clinic-routes.js';
 import type { TelegramConfig } from '../modules/telegram/api.js';
@@ -181,13 +181,16 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
     if (path === '/api/auth/me' && method === 'GET') {
       // Roles are display hints for navigation only; every route rechecks them in the database.
       const memberships = (await tx.query(`SELECT m.clinic_id id,c.name,m.is_owner "isOwner",m.clinical_access "clinicalAccess",m.patient_scope "patientScope",
-          coalesce((SELECT array_agg(r.role ORDER BY r.role) FROM membership_roles r WHERE r.clinic_id=m.clinic_id AND r.user_id=m.user_id),'{}') roles
+          coalesce((SELECT array_agg(r.role ORDER BY r.role) FROM membership_roles r WHERE r.clinic_id=m.clinic_id AND r.user_id=m.user_id),'{}') roles,
+          coalesce((SELECT s.default_locale FROM clinic_settings s WHERE s.clinic_id=m.clinic_id),'uz-Cyrl') "defaultLocale"
         FROM memberships m JOIN clinics c ON c.id=m.clinic_id WHERE m.user_id=$1 AND m.status='active' AND ($2::uuid IS NULL OR m.clinic_id=$2) ORDER BY c.name`,
         [actor.userId, actor.deviceClinicId])).rows;
       // Task 022: notices about the person's own account (who reset the password, issued an invite, PIN lock) until dismissed.
       const notices = (await tx.query(`SELECT id, kind, actor_name "actorName", created_at "at" FROM account_notices WHERE account_id=$1 AND seen_at IS NULL
         AND ($2::uuid IS NULL OR clinic_id=$2) ORDER BY created_at DESC LIMIT 20`, [actor.userId, actor.deviceClinicId])).rows;
-      return { body: { id: actor.userId, name: actor.name, email: actor.email, login: actor.login, phone: actor.phone, csrf: actor.csrf,
+      // Task 028: the interface language follows the person (accounts.locale), else the clinic's default.
+      const locale = (await tx.query('SELECT locale FROM accounts WHERE id=$1', [actor.userId])).rows[0]?.locale ?? null;
+      return { body: { locale, id: actor.userId, name: actor.name, email: actor.email, login: actor.login, phone: actor.phone, csrf: actor.csrf,
         mustChangePassword: actor.mustChangePassword, pinChangeRequired: await approverPinChangeRequired(tx, actor.userId), notices,
         professionalVerification: actor.verification, clinics: memberships,
         session: { via: actor.via, deviceId: actor.deviceId, deviceLabel: actor.deviceLabel, idleMinutes: actor.via === 'device' ? DEVICE_IDLE_MINUTES : null } } };
@@ -195,6 +198,12 @@ export async function api(req: IncomingMessage, config: ApiConfig): Promise<ApiR
     if (path === '/api/auth/logout' && method === 'POST') {
       await tx.query('DELETE FROM sessions WHERE id=$1', [actor.sessionId]);
       return { body: { ok: true }, cookie: `clinora_session=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0${config.secureCookies ? '; Secure' : ''}` };
+    }
+    if (path === '/api/auth/locale' && method === 'POST') {
+      // Task 028: a person's own interface language, stored on their account so it follows them to every device.
+      const input = parse(LocaleInput, await jsonBody(req));
+      await tx.query('UPDATE accounts SET locale=$2 WHERE id=$1', [actor.userId, input.locale]);
+      return { body: { locale: input.locale } };
     }
     if (path === '/api/auth/password' && method === 'POST') {
       await throttle(config.pool, `password:${actor.userId}`, clientIp(req, config.trustProxyHops));

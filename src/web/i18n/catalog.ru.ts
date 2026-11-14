@@ -133,7 +133,7 @@ export const catalogRu: Record<keyof typeof catalogUzCyrl, string> = {
   'catalog.import.outcome.unchanged': 'без изменений',
   'catalog.import.tooMany': 'В файле {count} записей: за одну загрузку не более 50 000.',
   'catalog.import.noRows': 'В файле нет записей для загрузки.',
-  'catalog.err.NOT_A_DT': 'Это не файл .dt 1С. Выберите файл, выгруженный через Конфигуратор → Администрирование → Выгрузить информационную базу.',
+  'catalog.err.NOT_A_DT': 'Это не файл .dt 1С. Выберите файл, выгруженный через Конфигуратор › Администрирование › Выгрузить информационную базу.',
   'catalog.err.CORRUPT': 'Файл повреждён и не открывается. Выгрузите его из 1С заново.',
   'catalog.err.TRUNCATED': 'Файл обрезан. Выгрузите его из 1С заново.',
   'catalog.err.UNRECOGNIZED_LAYOUT': 'Конфигурация 1С не распознана. Загрузите каталог как список Excel или CSV.',

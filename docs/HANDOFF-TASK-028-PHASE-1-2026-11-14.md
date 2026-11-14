@@ -19,8 +19,7 @@ Source commit or archive hashes: based on `main` 9cbbbec; font setup and two che
 - Server: `/api/auth/me` returns `locale`; memberships return `defaultLocale`; the dashboard response carries a
   read-only `trend`; queue tickets carry `createdAt`. No permission check changed. No migration.
 - Overrides of the brief, agreed in chat: no cream paper, no monospace, eye icon for show-password, Settings instead
-  of an account menu, ikat pattern (the brief banned decoration). Source Serif 4 replaces Literata (no Ҳ glyph).
-- Touch targets stay at 48 px (PRODUCT.md), above the brief's 44.
+  of an account menu, ikat pattern, Source Serif 4 for names (Literata has no Ҳ). Touch targets stay at 48 px.
 ## Verification evidence
 | Exact command or manual scenario | Result | What the result establishes and does not establish |
 | --- | --- | --- |
@@ -29,12 +28,10 @@ Source commit or archive hashes: based on `main` 9cbbbec; font setup and two che
 | `npm run test:integration` (PostgreSQL 16 local; CI uses 17.9) | 153 pass, 0 fail | Server behaviour unchanged; no new test covers `/api/auth/locale` at this level |
 | `npm run build && npm run test:built` | pass | Build and smoke, not a deployment |
 | `npx playwright test` | 33 pass, 0 fail | Every role flow on the new shell at phone and desktop widths, incl. the full clinic day; `reports.spec` checks the language is stored on the account |
-| CI on GitHub | not yet run at the time of writing | See the PR checks |
 ## Remaining issues
 - Phase 2 screens keep their old structure (see DESIGN.md). Merging now would deploy a half-redesigned app to the demo.
-- `/help` cheat-sheet pictures and steps describe the old interface.
-- Uzbek and Russian wording is mine and unchecked by a native speaker; the pattern is unchecked by anyone who knows adras.
-- `load` test (`npm run test:load`) and Lighthouse were not run locally. No dark mode outside Telegram.
+- `/help` cheat-sheet pictures and steps describe the old interface. CI had not run when this was written.
+- Uzbek and Russian wording is mine and unchecked by a native speaker; the pattern is unchecked by anyone who knows adras. `npm run test:load` not run locally.
 ## Delivery state
 - Implemented locally: yes. Tested: as above. Committed and pushed: branch above. Deployed: no.
 - Production data or external systems affected: none.

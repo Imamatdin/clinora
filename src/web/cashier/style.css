@@ -34,3 +34,12 @@
   .cashier-print { position: absolute; inset: 0; width: 100%; max-width: 76mm; }
   button { display: none !important; }
 }
+
+/* Pharmacy and surgery: one short form; the stock that is running low above it. Cash report: pick the day, then print. */
+.pharmacy-form, .pharmacy-form fieldset { display: grid; gap: 14px; max-width: 520px; }
+.pharmacy-form .seg { justify-self: start; }
+.pharmacy-form button.primary { justify-self: start; }
+.pharmacy-onhand { font-weight: 600; }
+.pharmacy-low button[aria-pressed=true] .row-title { color: var(--indigo); }
+.report-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; }
+.report-head label { flex: 1 1 240px; max-width: 360px; }

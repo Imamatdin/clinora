@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { passwordHash } from '../../src/server/security.js';
 import { processFixture, T } from './process-fixture.js';
-import { headerButton, openHeaderMenu, tab } from './ui.js';
+import { headerButton, openDaySheet, tab } from './ui.js';
 
 async function signIn(page: Page, identifier: string, password: string) {
   await page.getByLabel(T('auth.identifier'), { exact: true }).fill(identifier);
@@ -24,15 +24,17 @@ for (const width of [1280, 360]) test(`administrator opens the day and creates a
     await page.setViewportSize({ width, height: 900 });
     await page.goto(f.origin);
     await signIn(page, 'admin.browser', adminPassword);
-    await expect(page.getByRole('heading', { name: T('home.administrator.title'), level: 1 })).toBeVisible();
-    await openHeaderMenu(page); await expect(page.getByText('Synthetic North Clinic', { exact: true })).toBeVisible(); await page.keyboard.press('Escape');
+    await expect(page.getByRole('heading', { name: T('module.payments'), level: 1 })).toBeVisible();
+    // The clinic name is in the header from 900 px; phones keep the header to the brand and the day.
+    if (width >= 900) await expect(page.getByRole('banner').getByText('Synthetic North Clinic', { exact: true })).toBeVisible();
     const header = page.getByRole('banner');
     await expect(header.getByText(T('day.none'), { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: T('day.openButton'), exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: T('day.openedNotice') })).toBeVisible();
     await expect(header.locator('[data-state="open"]')).toBeVisible();
-    await expect(page.getByRole('button', { name: T('day.closeButton'), exact: true })).toBeVisible();
+    // Closing the day sits behind the day status in the header.
+    await openDaySheet(page); await expect(page.getByRole('button', { name: T('day.closeButton'), exact: true })).toBeVisible(); await page.keyboard.press('Escape');
     const dayText = await header.locator('[data-state="open"]').innerText();
 
     await tab(page, T('nav.staff'));
@@ -63,10 +65,10 @@ for (const width of [1280, 360]) test(`administrator opens the day and creates a
     await page.getByLabel(T('password.repeat'), { exact: true }).fill(next);
     await page.getByRole('button', { name: T('password.submit'), exact: true }).click();
 
-    await expect(page.getByRole('heading', { name: T('home.cashier.title'), level: 1 })).toBeVisible();
-    await expect(page.getByRole('heading', { name: T('cashier.title'), exact: true, level: 2 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('module.payments'), level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('cashier.shiftClosed'), exact: true, level: 2 })).toBeVisible();
     await expect(header.locator('[data-state="open"]')).toHaveText(dayText);
-    await openHeaderMenu(page); await expect(header.getByText('Синтетик Кассир', { exact: true })).toBeVisible(); await page.keyboard.press('Escape');
+    await expect(page.locator('.greeting')).toContainText('Синтетик Кассир');
     // Module tabs can grow independently; a cashier still has no staff or day controls.
     await expect(page.getByRole('button', { name: T('nav.staff'), exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: T('day.closeButton') })).toHaveCount(0);

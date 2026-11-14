@@ -137,7 +137,7 @@ export function Cashier({ clinic, request }: ModuleProps) {
                 {field("cashier.amount", amount, setAmount, true)}
                 {method === "cash" && field("cashier.given", given, setGiven, true)}
                 {change !== null && <p className="cashier-change">{t("cashier.change")} <b className="num">{money(change.toString())}</b></p>}
-                <div className="keypad" role="group" aria-label={t("cashier.amount")}>
+                <div className="keypad">
                   {"1234567890".split("").map((n) => <button key={n} onClick={() => setAmount((v) => digits(v + n))}>{n}</button>)}
                   <button aria-label={t("cashier.backspace")} onClick={() => setAmount((v) => v.slice(0, -1))}>⌫</button>
                 </div>
@@ -206,9 +206,9 @@ export function Cashier({ clinic, request }: ModuleProps) {
             {select("cashier.target", lineId, setLineId, bill.lines, (r) => r.name)}
             {field("cashier.reason", reason, setReason)}
             {approval(pin, setPin)}
-            <button className="primary" disabled={busy} onClick={() => void run(async () => { await sensitive("discount", { kind, amount: discountAmount, reason, ...(lineId ? { lineId } : {}) }); setDiscountAmount(""); setReason(""); })}>{t("cashier.apply")}</button>
+            <button className="primary" disabled={busy} onClick={() => void run(async () => { await sensitive("discount", { kind, amount: discountAmount, reason, ...(lineId ? { lineId } : {}) }); setDiscountAmount(""); setReason(""); setSheet(""); })}>{t("cashier.apply")}</button>
             {bill.discounts.map((d: Row) => (
-              <button key={d.id} disabled={busy} onClick={() => void run(() => sensitive("void", { discountId: d.id, reason }))}>{t("cashier.void")} · {d.reason}</button>
+              <button key={d.id} disabled={busy} onClick={() => void run(async () => { await sensitive("void", { discountId: d.id, reason }); setSheet(""); })}>{t("cashier.void")} · {d.reason}</button>
             ))}
           </details>
           <details className="cashier-form"><summary>{t("cashier.refund")}</summary>
@@ -218,7 +218,7 @@ export function Cashier({ clinic, request }: ModuleProps) {
             {approval(pin, setPin)}
             <button className="danger" disabled={busy} onClick={() => {
               if (window.confirm(t("cashier.refundConfirm", { amount: money(refundAmount || "0") })))
-                void run(async () => { const p = { shiftId: shift, paymentId: payment, amount: refundAmount, reason: refundReason }; await sensitive("refund", { ...p, key: keyFor(p) }); paymentKey.current = null; setRefundAmount(""); setRefundReason(""); });
+                void run(async () => { const p = { shiftId: shift, paymentId: payment, amount: refundAmount, reason: refundReason }; await sensitive("refund", { ...p, key: keyFor(p) }); paymentKey.current = null; setRefundAmount(""); setRefundReason(""); setSheet(""); });
             }}>{t("cashier.refund")}</button>
           </details>
         </Sheet>

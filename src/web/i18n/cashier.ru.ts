@@ -44,7 +44,7 @@ export const cashierRu: Record<keyof typeof cashier, string> = {
   "cashier.close": "Закрыть смену",
   'cashier.empty': 'Не найдено.',
   "cashier.loading": "Загрузка…",
-  'cashier.more': 'Ещё',
+  'cashier.more': 'Скидка, возврат',
   "cashier.report": "Отчёт смены",
   "cashier.expected": "Ожидаемые наличные",
   "cashier.difference": "Разница",

@@ -5,6 +5,7 @@ import { passwordHash } from '../../src/server/security.js';
 import { signInitData } from '../../src/modules/telegram/init-data.js';
 import { TEST_BOT } from '../integration/fixture.js';
 import { processFixture, T } from './process-fixture.js';
+import { go, openDaySheet } from './ui.js';
 
 type F = Awaited<ReturnType<typeof processFixture>>;
 async function member(f: F, login: string, name: string, roles: string[], pin?: string) {
@@ -34,7 +35,7 @@ test('enrolled clinic PC: two people switch by PIN and each action is attributed
     await page.getByLabel(T('auth.identifier'), { exact: true }).fill('owner@example.test');
     await page.getByLabel(T('auth.password'), { exact: true }).fill(f.password);
     await page.getByRole('button', { name: T('auth.signIn'), exact: true }).click();
-    await page.getByRole('navigation', { name: T('app.navigation') }).getByRole('button', { name: T('nav.staff'), exact: true }).click();
+    await go(page, 'staff');
     await page.getByLabel(T('access.devices.label'), { exact: true }).fill('Регистратура 1');
     await page.getByRole('button', { name: T('access.devices.enroll'), exact: true }).click();
 
@@ -48,9 +49,9 @@ test('enrolled clinic PC: two people switch by PIN and each action is attributed
     await expect(page.getByRole('alert').filter({ hasText: T('access.device.wrongPin') })).toBeVisible();
     for (const digit of '2580') await page.getByRole('button', { name: T('access.device.digit', { digit }), exact: true }).click();
     await page.getByRole('button', { name: T('access.device.unlock'), exact: true }).click();
-    await expect(page.getByRole('heading', { name: T('home.administrator.title'), level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('module.payments'), level: 1 })).toBeVisible();
     const header = page.getByRole('banner');
-    await expect(header.getByText('Анна Администратор', { exact: true })).toBeVisible();
+    await expect(page.locator('.greeting')).toContainText('Анна Администратор');
     await expect(header.getByRole('button', { name: T('app.signOut') })).toHaveCount(0);
     await page.getByRole('button', { name: T('day.openButton'), exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: T('day.openedNotice') })).toBeVisible();
@@ -58,7 +59,8 @@ test('enrolled clinic PC: two people switch by PIN and each action is attributed
     await header.getByRole('button', { name: T('access.device.switchUser'), exact: true }).click();
     await expect(page.getByRole('heading', { name: T('access.device.title'), level: 1 })).toBeVisible();
     await pin(page, 'Бек Администратор', '1397');
-    await expect(header.getByText('Бек Администратор', { exact: true })).toBeVisible();
+    await expect(page.locator('.greeting')).toContainText('Бек Администратор');
+    await openDaySheet(page);
     await page.getByRole('button', { name: T('day.closeButton'), exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: T('day.closedNotice') })).toBeVisible();
     await page.screenshot({ path: 'work/browser-evidence/device-second-user.png', fullPage: true });
@@ -71,7 +73,7 @@ test('enrolled clinic PC: two people switch by PIN and each action is attributed
     // Installed-app cache: after a reload under service-worker control and more API traffic, only the shell is cached.
     await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
     await page.reload();
-    await expect(page.getByRole('heading', { name: T('home.administrator.title'), level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('module.payments'), level: 1 })).toBeVisible();
     expect(await page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
     await page.evaluate(() => fetch('/api/auth/me').then(r => r.status));
     const cached = await page.evaluate(async () => {
@@ -104,15 +106,15 @@ test('Mini App: linked staff sign in with Telegram theme and back button; unlink
     await page.addInitScript(() => { const w = window as unknown as { events: unknown[]; TelegramWebviewProxy: unknown };
       w.events = []; w.TelegramWebviewProxy = { postEvent: (type: string, data: string) => w.events.push([type, JSON.parse(data)]) }; });
     await page.goto(f.origin + launch(424242));
-    await expect(page.getByRole('heading', { name: T('home.administrator.title'), level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('module.payments'), level: 1 })).toBeVisible();
     expect(await page.evaluate(() => location.hash)).toBe('');
     expect(await page.evaluate(() => document.documentElement.classList.contains('tg'))).toBe(true);
-    expect(await page.evaluate(() => getComputedStyle(document.querySelector('.topbar')!).backgroundColor)).toBe('rgb(23, 33, 43)');
+    expect(await page.evaluate(() => getComputedStyle(document.querySelector('.app')!).backgroundColor)).toBe('rgb(23, 33, 43)');
     await expect(page.getByRole('button', { name: T('app.signOut') })).toHaveCount(0);
     const events = async () => page.evaluate(() => (window as unknown as { events: [string, Record<string, unknown>][] }).events);
     expect((await events()).map(e => e[0])).toEqual(expect.arrayContaining(['web_app_ready', 'web_app_expand']));
     // Back button: shown on a secondary screen, and pressing it returns to the main screen.
-    await page.getByRole('navigation', { name: T('app.navigation') }).getByRole('button', { name: T('nav.staff'), exact: true }).click();
+    await go(page, 'staff');
     await expect(page.getByRole('heading', { name: T('staff.title'), level: 1 })).toBeVisible();
     // Task 022: an administrator's Telegram invite for a doctor first goes to the CEO for confirmation.
     const doctorRow = page.getByRole('listitem').filter({ hasText: 'Янги Шифокор' });
@@ -132,14 +134,14 @@ test('Mini App: linked staff sign in with Telegram theme and back button; unlink
     await expect(row.getByText(T('access.pending'), { exact: true })).toBeVisible();
     expect((await events()).filter(e => e[0] === 'web_app_setup_back_button').at(-1)?.[1]).toEqual({ is_visible: true });
     await page.evaluate(() => (window as unknown as { Telegram: { WebView: { receiveEvent(t: string, d: unknown): void } } }).Telegram.WebView.receiveEvent('back_button_pressed', null));
-    await expect(page.getByRole('heading', { name: T('home.administrator.title'), level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('module.payments'), level: 1 })).toBeVisible();
     expect((await events()).filter(e => e[0] === 'web_app_setup_back_button').at(-1)?.[1]).toEqual({ is_visible: false });
     await mkdir('work/browser-evidence', { recursive: true });
     await page.screenshot({ path: 'work/browser-evidence/mini-app-home-390.png', fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
     // A reload keeps the server session (cookie), without reusing the single-use launch data.
     await page.reload();
-    await expect(page.getByRole('heading', { name: T('home.administrator.title'), level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('module.payments'), level: 1 })).toBeVisible();
 
     const stranger = await context.browser()!.newContext({ viewport: { width: 390, height: 844 } });
     const strangerPage = await stranger.newPage();
@@ -168,7 +170,7 @@ test('password lock shows unlock time and the staff manager can unlock it', asyn
     await page.getByLabel(T('auth.identifier'), { exact: true }).fill('owner@example.test');
     await page.getByLabel(T('auth.password'), { exact: true }).fill(f.password);
     await page.getByRole('button', { name: T('auth.signIn'), exact: true }).click();
-    await page.getByRole('navigation', { name: T('app.navigation') }).getByRole('button', { name: T('nav.staff'), exact: true }).click();
+    await go(page, 'staff');
     const row = page.locator('.staff-list > li').filter({ hasText: 'Синтетик Қулф' });
     await row.getByRole('button', { name: T('staff.manage'), exact: true }).click();
     await row.getByRole('button', { name: T('access.unlockLogin'), exact: true }).click();

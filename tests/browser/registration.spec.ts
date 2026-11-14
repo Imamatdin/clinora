@@ -16,7 +16,7 @@ test('registrar registers a new patient, routes to two doctors and lab, prints t
     await page.getByLabel(T('auth.identifier'), { exact: true }).fill(g.email('registrar'));
     await page.getByLabel(T('auth.password'), { exact: true }).fill(f.password);
     await page.getByRole('button', { name: T('auth.signIn'), exact: true }).click();
-    await expect(page.getByRole('heading', { name: T('registration.title'), exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('module.registration'), exact: true })).toBeVisible();
     const started = Date.now();
 
     // New patient: typed name, picked date, gender, phone from the on-screen number pad, district and source from lists.

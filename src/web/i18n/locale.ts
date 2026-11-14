@@ -8,8 +8,8 @@ import { useSyncExternalStore } from 'react';
  */
 export type Locale = 'uz-Cyrl' | 'uz-Latn' | 'ru';
 export const LOCALES: readonly Locale[] = ['uz-Cyrl', 'uz-Latn', 'ru'];
-/** Each language's own short name, shown on the switch buttons (never translated). */
-export const LOCALE_LABELS: Record<Locale, string> = { 'uz-Cyrl': 'Ўзб', 'uz-Latn': 'Oʻzb', ru: 'Рус' };
+/** Each language's own name, shown on the language choice (never translated). */
+export const LOCALE_LABELS: Record<Locale, string> = { 'uz-Cyrl': 'Ўзбекча', 'uz-Latn': 'Oʻzbekcha', ru: 'Русский' };
 const STORAGE_KEY = 'clinora.locale';
 
 function saved(): Locale {

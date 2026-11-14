@@ -44,7 +44,7 @@ export const cashierUzLatn: Record<keyof typeof cashier, string> = {
   "cashier.close": "Smenani yopish",
   'cashier.empty': 'Topilmadi.',
   "cashier.loading": "Yuklanmoqda…",
-  'cashier.more': 'Yana',
+  'cashier.more': 'Chegirma, qaytarish',
   "cashier.report": "Smena hisoboti",
   "cashier.expected": "Kutilayotgan naqd pul",
   "cashier.difference": "Farq",

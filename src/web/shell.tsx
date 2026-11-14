@@ -51,7 +51,7 @@ export type Destination = { id: string; label: string; icon: IconName; group: nu
 
 /** Desktop: the slim left rail. Destinations in groups, settings at the bottom. */
 export function Rail({ items, current, onSelect, disabled, end }: { items: Destination[]; current: string; onSelect: (id: string) => void; disabled: boolean; end: Destination[] }) {
-  const button = (x: Destination) => <button key={x.id} type="button" className="nav-item" aria-current={x.id === current ? 'page' : undefined} disabled={disabled} onClick={() => onSelect(x.id)}><Icon name={x.icon} />{x.label}</button>;
+  const button = (x: Destination) => <button key={x.id} type="button" className="nav-item" data-nav={x.id} aria-current={x.id === current ? 'page' : undefined} disabled={disabled} onClick={() => onSelect(x.id)}><Icon name={x.icon} />{x.label}</button>;
   return <nav className="rail" aria-label={t('app.navigation')}>
     <div className="brand">{t('app.brand')}</div>
     {items.map((x, i) => [i > 0 && items[i - 1]!.group !== x.group && <div key={`gap-${x.id}`} className="nav-gap" />, button(x)])}
@@ -63,7 +63,7 @@ export function Rail({ items, current, onSelect, disabled, end }: { items: Desti
 export function BottomBar({ items, current, onSelect, disabled, more, onMore }: { items: Destination[]; current: string; onSelect: (id: string) => void; disabled: boolean; more: boolean; onMore: () => void }) {
   const fits = items.length <= 5, shown = fits ? items : items.slice(0, 4), inMore = !fits && !shown.some(x => x.id === current);
   return <nav className="bottombar" aria-label={t('app.navigation')}>
-    {shown.map(x => <button key={x.id} type="button" className="bar-item" aria-current={x.id === current ? 'page' : undefined} disabled={disabled} onClick={() => onSelect(x.id)}><Icon name={x.icon} /><span>{x.label}</span></button>)}
+    {shown.map(x => <button key={x.id} type="button" className="bar-item" data-nav={x.id} aria-current={x.id === current ? 'page' : undefined} disabled={disabled} onClick={() => onSelect(x.id)}><Icon name={x.icon} /><span>{x.label}</span></button>)}
     {!fits && <button type="button" className="bar-item more-toggle" aria-expanded={more} aria-haspopup="dialog" aria-current={inMore && !more ? 'true' : undefined} disabled={disabled} onClick={onMore}><Icon name="more" /><span>{t('app.more')}</span></button>}
   </nav>;
 }
@@ -74,11 +74,13 @@ export function Sheet({ title, onClose, children, className = '' }: { title: str
   useEffect(() => {
     opener.current = document.activeElement;
     root.current?.querySelector<HTMLElement>('[autofocus], button, input, select, textarea')?.focus();
-    return () => { (opener.current as HTMLElement | null)?.focus?.(); };
+    // Escape closes the sheet wherever focus is (a button that was just disabled drops focus to the page).
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('keydown', onKey); (opener.current as HTMLElement | null)?.focus?.(); };
   }, []);
   return <div className="sheet-backdrop" onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
     <section ref={root} className={`sheet ${className}`} role="dialog" aria-modal="true" aria-label={title} onKeyDown={e => {
-      if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
       if (e.key !== 'Tab') return;
       const focusable = [...e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary')].filter(el => el.offsetParent !== null);
       const first = focusable[0], last = focusable[focusable.length - 1];

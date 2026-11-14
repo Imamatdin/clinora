@@ -231,7 +231,7 @@ function App() {
     </div>
     <BottomBar items={[...places, settingsPlace]} current={active} disabled={busy} more={more} onSelect={go} onMore={() => setMore(true)} />
     {more && <Sheet title={t('app.more')} onClose={() => setMore(false)}>
-      <nav aria-label={t('app.more')}>{[...places, settingsPlace].slice(4).map(x => <button key={x.id} type="button" className="nav-item" aria-current={x.id === active ? 'page' : undefined} onClick={() => go(x.id)}><Icon name={x.icon} />{x.label}</button>)}</nav>
+      <nav aria-label={t('app.more')}>{[...places, settingsPlace].slice(4).map(x => <button key={x.id} type="button" className="nav-item" data-nav={x.id} aria-current={x.id === active ? 'page' : undefined} onClick={() => go(x.id)}><Icon name={x.icon} />{x.label}</button>)}</nav>
     </Sheet>}
     {daySheet && dayActions && <Sheet title={t('day.label')} onClose={() => setDaySheet(false)}><DayPanel day={day} busy={busy} {...dayActions} /></Sheet>}
     {pending && <div className="modal-backdrop"><section role="alertdialog" aria-modal="true" aria-labelledby="dirty-title" className="modal" onKeyDown={e => {

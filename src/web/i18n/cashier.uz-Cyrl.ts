@@ -42,7 +42,7 @@ export const cashier = {
   "cashier.close": "Сменани ёпиш",
   'cashier.empty': 'Топилмади.',
   "cashier.loading": "Юкланмоқда…",
-  'cashier.more': 'Яна',
+  'cashier.more': 'Чегирма, қайтариш',
   "cashier.report": "Смена ҳисоботи",
   "cashier.expected": "Кутилаётган нақд пул",
   "cashier.difference": "Фарқ",

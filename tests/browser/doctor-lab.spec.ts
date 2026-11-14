@@ -46,9 +46,10 @@ for (const width of [360, 1280]) test(`doctor and lab complete one visit at ${wi
 
     // Doctor: call next, start, write the note with one prescription line, save, approve, order a lab test.
     await signIn('doctor.e2e@example.test');
-    await expect(dr.getByRole('heading', { name: T('doctor.title'), exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('module.myQueue'), exact: true })).toBeVisible();
     await dr.getByRole('button', { name: T('doctor.callNext'), exact: true }).click();
-    await expect(dr.getByText(`${T('doctor.ticketNo', { number: 7 })} · Синтетик Бемор`)).toBeVisible();
+    await expect(dr.locator('.dr-current .ticket')).toHaveText('7');
+    await expect(dr.locator('.dr-current').getByRole('heading', { name: 'Синтетик Бемор' })).toBeVisible();
     await dr.getByRole('button', { name: T('doctor.start'), exact: true }).click();
     await dr.getByLabel(T('doctor.field.reported'), { exact: true }).fill('Синтетик: 3 кундан бери иситма ва йўтал');
     await dr.getByLabel(T('doctor.field.assessment'), { exact: true }).fill('J06.9 Юқори нафас йўллари инфекцияси (синтетик)');

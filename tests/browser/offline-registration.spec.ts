@@ -19,7 +19,7 @@ async function enrolled(page: Page, f: F, userId: string) {
   const loaded = page.waitForResponse(r => r.url().endsWith('/registration/options') && r.status() === 200);
   await page.goto(f.origin);
   await loaded;
-  await expect(page.getByRole('heading', { name: T('registration.title'), exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: T('module.registration'), exact: true })).toBeVisible();
   await expect(page.locator('.registration-banner')).toHaveCount(0);
   return id;
 }

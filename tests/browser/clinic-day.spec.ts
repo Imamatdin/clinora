@@ -56,7 +56,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
 
     // 1. Administrator opens the day.
     await signIn('day.admin');
-    await expect(page.getByRole('heading', { name: T('home.administrator.title'), level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('module.payments'), level: 1 })).toBeVisible();
     await page.getByRole('button', { name: T('day.openButton'), exact: true }).click();
     await expect(page.getByRole('banner').locator('[data-state="open"]')).toBeVisible();
     await noSideScroll(); await shot('01-admin-opens-day'); await helpShot('administrator');
@@ -97,7 +97,7 @@ for (const width of [1280, 360]) test(`one synthetic clinic day end to end at ${
     // 3. Doctor (therapist): call, write and approve a note with a prescription, order a lab test; assistant unavailable.
     await signIn('day.doctor');
     const dr = page.locator('section.dr');
-    await expect(dr.getByRole('heading', { name: T('doctor.title'), exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: T('module.myQueue'), exact: true })).toBeVisible();
     await dr.getByRole('button', { name: T('doctor.callNext'), exact: true }).click();
     await dr.getByRole('button', { name: T('doctor.start'), exact: true }).click();
     await expect(page.locator('.assistant').getByText(assistant['assistant.unavailableBanner'])).toBeVisible();

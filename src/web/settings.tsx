@@ -2,12 +2,10 @@
 import { useState } from 'react';
 import type { Role } from '../modules/identity/roles.js';
 import type { Request } from './api.js';
-import { LOCALES, setLocale, t, useLocale, type Locale, type UiKey } from './i18n/index.js';
+import { LOCALE_LABELS, LOCALES, setLocale, t, useLocale, type Locale, type UiKey } from './i18n/index.js';
 import { InstallHint } from './access/install.js';
 import { MyAccess } from './access/staff-access.js';
 
-/** Each language's own name, never translated. */
-const LANGUAGE: Record<Locale, string> = { 'uz-Cyrl': 'Ўзбекча', 'uz-Latn': 'Oʻzbekcha', ru: 'Русский' };
 
 /** Language choice. Signed in, the choice is saved to the account so it follows the person to every device. */
 export function LanguageChoice({ request }: { request?: Request }) {
@@ -17,7 +15,7 @@ export function LanguageChoice({ request }: { request?: Request }) {
     if (request) request('/api/auth/locale', { locale: next }).catch(() => setFailed(true));
   };
   return <><div className="seg lang-switch" role="group" aria-label={t('app.language')}>{LOCALES.map(l =>
-    <button key={l} type="button" lang={l} aria-pressed={l === locale} onClick={() => choose(l)}>{LANGUAGE[l]}</button>)}</div>
+    <button key={l} type="button" lang={l} aria-pressed={l === locale} onClick={() => choose(l)}>{LOCALE_LABELS[l]}</button>)}</div>
     {failed && <p role="alert" className="error">{t('settings.languageNotSaved')}</p>}</>;
 }
 

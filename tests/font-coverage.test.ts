@@ -52,9 +52,10 @@ export function woff2Codepoints(file: Buffer): Set<number> {
 }
 
 type Face = { weight: number; file: string; ranges: [number, number][] };
-async function faces(): Promise<Face[]> {
+async function faces(family = 'Onest'): Promise<Face[]> {
   const css = await readFile('src/web/fonts.css', 'utf8'), out: Face[] = [];
   for (const block of css.match(/@font-face\{[^}]+\}/g) ?? []) {
+    if (!block.includes(`font-family:"${family}"`)) continue;
     const weight = Number(/font-weight:(\d+)/.exec(block)![1]), file = /url\("([^"]+)"\)/.exec(block)![1]!;
     const ranges = /unicode-range:([^;}]+)/.exec(block)![1]!.split(',').map(r => {
       const [a, b] = r.trim().replace(/^U\+/, '').split('-');
@@ -102,4 +103,19 @@ test('the parser reads real cmaps: Latin has A, Cyrillic has Ж, neither has a m
   const cyr = woff2Codepoints(await readFile(`${dir}/onest-cyrillic-400-normal.woff2`));
   assert.ok(latin.has(0x41) && !latin.has(0x416));
   assert.ok(cyr.has(0x416) && !cyr.has(0x10ffff));
+});
+
+test('bundled Source Serif 4 draws every letter a name or the greeting can contain (task 028: people are set in serif)', async () => {
+  const all = await faces('Source Serif 4'), chars = await dictionaryText();
+  assert.deepEqual([...new Set(all.map(f => f.weight))], [600]);
+  // Names are data, so check every letter the three dictionaries use, the Uzbek capitals, and the apostrophes and hyphen of names.
+  const wanted = new Set([...chars.keys()].filter(c => /\p{L}/u.test(String.fromCodePoint(c))));
+  for (const ch of 'ЎҚҒҲЁўқғҳʻʼ’- ') wanted.add(ch.codePointAt(0)!);
+  const mapped = new Map<string, Set<number>>(), missing: string[] = [];
+  for (const f of all) mapped.set(f.file, woff2Codepoints(await readFile(f.file)));
+  for (const c of wanted) {
+    const face = all.find(f => f.ranges.some(([a, b]) => c >= a && c <= b));
+    if (!face || !mapped.get(face.file)!.has(c)) missing.push(`U+${c.toString(16).toUpperCase().padStart(4, '0')} ${String.fromCodePoint(c)}`);
+  }
+  assert.deepEqual(missing, []);
 });

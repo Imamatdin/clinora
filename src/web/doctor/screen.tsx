@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type MutableRefObject } from 'react';
+import { flushSync } from 'react-dom';
+import { AbrField, Ticket as TicketToken } from '../abr.js';
+import { Icon } from '../shell.js';
 import { ApiFailure, type Request } from '../api.js';
 import { errorText, useLocale } from '../i18n/index.js';
 import type { ModuleProps, WebModule } from '../modules.js';
@@ -6,7 +9,7 @@ import { money, translator, type DoctorKey } from './i18n.js';
 import { VISIT_PANELS } from './panels.js';
 
 /** Task 007's queue API ticket (src/modules/registration: queue/mine, queue/call-next, queue/tickets/:id/status). */
-type Ticket = { id: string; number: number; status: string; queuePointId: string; visitId: string; patient: { id: string; patientNo: number | null; fullName: string } };
+type Ticket = { id: string; number: number; status: string; queuePointId: string; visitId: string; createdAt?: string; patient: { id: string; patientNo: number | null; fullName: string; birthDate?: string | null } };
 type Rx = { medicine: string; dose: string; frequency: string; duration: string; notes: string };
 type Note = { reported: string; observed: string; assessment: string; plan: string };
 type Approval = { id: string; versionId: string; revision: number; approvedAt: string; current: boolean };
@@ -28,6 +31,18 @@ const NOTE_KEYS = ['reported', 'observed', 'assessment', 'plan'] as const;
 const RX_KEYS = ['medicine', 'dose', 'frequency', 'duration', 'notes'] as const;
 const emptyRx = (): Rx => ({ medicine: '', dose: '', frequency: '', duration: '', notes: '' });
 const day = (iso: string) => iso.slice(0, 10).split('-').reverse().join('.');
+function age(birthDate: string | null | undefined): number | null {
+  if (!birthDate) return null;
+  const [y, m, d] = birthDate.slice(0, 10).split('-').map(Number), now = new Date();
+  return now.getFullYear() - y! - (now.getMonth() + 1 < m! || (now.getMonth() + 1 === m && now.getDate() < d!) ? 1 : 0);
+}
+const minutesSince = (iso: string | undefined) => iso ? Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000)) : null;
+const bedOnly = (bed: string | null) => bed?.split(' · ').pop() ?? '—';
+/** The one signature motion (docs/DESIGN.md): when the person at the head of the queue changes, their row moves into the hero. */
+function withMotion(change: () => void) {
+  const start = (document as Document & { startViewTransition?: (fn: () => void) => unknown }).startViewTransition;
+  if (start && !matchMedia('(prefers-reduced-motion: reduce)').matches) start.call(document, () => flushSync(change)); else change();
+}
 
 /** Idempotency keys stay the same while one action with the same payload is retried, and change after it succeeds. */
 function useKeys() {
@@ -51,7 +66,9 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
   };
   const [ward, setWard] = useState<{ admissionId: string; name: string; patientNo: number | null; bed: string | null }[]>([]);
   // Task 017: admitted patients of this doctor (ward rounds) open the same visit screen, without a queue ticket.
-  const load = () => Promise.all([request<Ticket[]>(`${queueBase}/mine`).then(setQueue), request<typeof ward>(`${base}/inpatients`).then(setWard).catch(() => setWard([]))]).then(() => undefined);
+  const head = (list: Ticket[] | null) => (list ?? []).find(x => x.status === 'called' || x.status === 'in_progress')?.id ?? (list ?? []).find(x => x.status === 'waiting')?.id ?? '';
+  const showQueue = (next: Ticket[]) => { if (queue && head(queue) !== head(next)) withMotion(() => setQueue(next)); else setQueue(next); };
+  const load = () => Promise.all([request<Ticket[]>(`${queueBase}/mine`).then(showQueue), request<typeof ward>(`${base}/inpatients`).then(setWard).catch(() => setWard([]))]).then(() => undefined);
   useEffect(() => { load().catch(() => setError(errorText('SERVICE_UNAVAILABLE'))); }, [clinic.id]);
   useEffect(() => {
     if (open) return;
@@ -80,44 +97,45 @@ function DoctorHome({ clinic, request, day: businessDay, setDirty }: ModuleProps
 
   const banners = <div aria-live="polite">{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="notice">{notice}</p>}</div>;
 
-  if (open) return <section className="dr">
-    <div className="dr-head"><button className="quiet" disabled={busy} onClick={() => {
+  if (open) return <section className="dr screen">
+    <div className="dr-head"><button className="quiet back" disabled={busy} onClick={() => {
       const leave = () => { setDirty(false); setOpen(null); void load(); };
       if (leaveRef.current) leaveRef.current(leave); else leave();
-    }}>{t('doctor.back')}</button></div>
+    }}><Icon name="back" />{t('doctor.back')}</button></div>
     {banners}
     <VisitScreen key={open.encounterId} t={t} clinicId={clinic.id} base={base} request={request} encounterId={open.encounterId} patientId={open.patientId} setDirty={setDirty} leaveRef={leaveRef} />
   </section>;
 
   const tickets = queue ?? [], active = tickets.find(x => x.status === 'called' || x.status === 'in_progress');
   const waiting = tickets.filter(x => x.status === 'waiting'), done = tickets.filter(x => x.status === 'completed');
-  return <section className="dr">
-    <div className="dr-head"><h2>{t('doctor.title')}</h2></div>
+  const focus = active ?? waiting[0], rest = active ? waiting : waiting.slice(1);
+  const meta = (x: Ticket, long = false) => { const a = age(x.patient.birthDate), m = x.status === 'waiting' ? minutesSince(x.createdAt) : null;
+    const wait = m === null ? '' : m >= 60 ? t('doctor.hours', { h: Math.floor(m / 60), min: m % 60 }) : t('doctor.min', { min: m });
+    return [a !== null ? t('doctor.age', { age: a }) : '', wait && (long ? t('doctor.waitingFor', { wait }) : wait)].filter(Boolean); };
+  return <section className="dr screen">
     {banners}
-    {!queue ? <p>{t('doctor.loading')}</p> : !businessDay?.openDay && !tickets.length && !ward.length ? <p className="empty">{t('doctor.noDay')}</p> : <>
-      <div className="dr-actions">
-        <button className="primary big" disabled={busy || (!waiting.length && !active)} onClick={() => void callNext()}>{t('doctor.callNext')}</button>
-        <span className="fine">{t('doctor.waitingCount', { count: waiting.length })}</span>
-        <button className="quiet" disabled={busy} onClick={() => void run(load)}>{t('doctor.refresh')}</button>
+    {!queue ? <p role="status">{t('doctor.loading')}</p> : !businessDay?.openDay && !tickets.length && !ward.length ? <p className="empty">{t('doctor.noDay')}</p> : <>
+      <div className="hero dr-current" role="group" aria-label={t(active ? 'doctor.current' : 'doctor.next')}>
+        <AbrField />
+        {focus ? <div className="hero-in" style={{ viewTransitionName: `q-${focus.id}` }}>
+          <p className="hero-label dr-lab"><TicketToken kind="big">{focus.number}</TicketToken><span>{active ? t(`doctor.status.${active.status}` as DoctorKey) : t('doctor.next')}</span></p>
+          <h2 className="hero-name">{focus.patient.fullName}</h2>
+          {meta(focus, true).length > 0 && <p className="muted">{meta(focus, true).join(' · ')}</p>}
+          {active ? <div className="dr-actions">
+            <button className="primary big" disabled={busy} onClick={() => void start(active)}>{active.status === 'in_progress' ? t('doctor.open') : t('doctor.start')}<Icon name="arrow" /></button>
+            {active.status === 'called' && <button className="quiet" disabled={busy} onClick={() => void requeue(active)}>{t('doctor.requeue')}</button>}
+          </div> : <button className="primary big" disabled={busy} onClick={() => void callNext()}>{t('doctor.callNext')}<Icon name="arrow" /></button>}
+        </div> : <div className="hero-in"><h2 className="hero-name">{t(done.length ? 'doctor.wellDone' : 'doctor.queueEmpty')}</h2>
+          {done.length > 0 && <p className="muted">{t('doctor.queueEmpty')}</p>}</div>}
       </div>
-      {active && <article className="dr-card dr-current" aria-label={t('doctor.current')}>
-        <p className="eyebrow">{t('doctor.current')}</p>
-        <h3>{t('doctor.ticketNo', { number: active.number })} · {active.patient.fullName}</h3>
-        <p className="fine">{active.patient.patientNo ? t('doctor.patientNo', { number: active.patient.patientNo }) + ' · ' : ''}{t(`doctor.status.${active.status}` as DoctorKey)}</p>
-        <div className="dr-actions">
-          <button className="primary big" disabled={busy} onClick={() => void start(active)}>{active.status === 'in_progress' ? t('doctor.open') : t('doctor.start')}</button>
-          {active.status === 'called' && <button disabled={busy} onClick={() => void requeue(active)}>{t('doctor.requeue')}</button>}
-        </div>
-      </article>}
-      {!tickets.length && <p className="empty">{t('doctor.empty')}</p>}
-      {waiting.length > 0 && <><h3>{t('doctor.waitingList')}</h3><ul className="dr-list">{waiting.map(x =>
-        <li key={x.id}><strong>{t('doctor.ticketNo', { number: x.number })}</strong><span>{x.patient.fullName}</span></li>)}</ul></>}
-      {ward.length > 0 && <><h3>{t('doctor.inpatients')}</h3><ul className="dr-list">{ward.map(a =>
-        <li key={a.admissionId}><strong>{a.bed ?? ''}</strong><span>{a.name}</span>
-          <button className="small" disabled={busy} onClick={() => void openStay(a.admissionId)}>{t('doctor.openNote')}</button></li>)}</ul></>}
-      {done.length > 0 && <><h3>{t('doctor.doneList')}</h3><ul className="dr-list">{done.map(x =>
-        <li key={x.id}><strong>{t('doctor.ticketNo', { number: x.number })}</strong><span>{x.patient.fullName}</span>
-          <button className="small" disabled={busy} onClick={() => void start(x)}>{t('doctor.open')}</button></li>)}</ul></>}
+      {rest.length > 0 && <><h3 className="section-label">{t('doctor.waitingList')} · <b>{rest.length}</b></h3><ul className="rows dr-list">{rest.map(x =>
+        <li key={x.id} style={{ viewTransitionName: `q-${x.id}` }}><div className="row"><TicketToken>{x.number}</TicketToken><span className="row-title row-body">{x.patient.fullName}</span><span className="row-end">{meta(x).join(' · ')}</span></div></li>)}</ul></>}
+      {ward.length > 0 && <><h3 className="section-label">{t('doctor.inpatients')} · <b>{ward.length}</b></h3><ul className="rows dr-list">{ward.map(a =>
+        <li key={a.admissionId}><button className="row" disabled={busy} aria-label={`${t('doctor.openNote')}: ${a.name}`} onClick={() => void openStay(a.admissionId)}>
+          <TicketToken kind="wide">{bedOnly(a.bed)}</TicketToken><span className="row-title row-body">{a.name}</span><span className="chev" aria-hidden="true" /></button></li>)}</ul></>}
+      {done.length > 0 && <><h3 className="section-label">{t('doctor.doneList')} · <b>{done.length}</b></h3><ul className="rows dr-list">{done.map(x =>
+        <li key={x.id}><button className="row" disabled={busy} aria-label={`${t('doctor.open')}: ${x.patient.fullName}`} onClick={() => void start(x)}>
+          <TicketToken kind="done">{x.number}</TicketToken><span className="row-title row-body">{x.patient.fullName}</span><span className="chev" aria-hidden="true" /></button></li>)}</ul></>}
     </>}
   </section>;
 }

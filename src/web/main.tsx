@@ -20,6 +20,7 @@ import { HelpPage, helpRole } from './help/page.js';
 import { BottomBar, Icon, Rail, Sheet, type Destination } from './shell.js';
 import { LanguageChoice, Settings } from './settings.js';
 import { PasswordField } from './password.js';
+import { AbrBand } from './abr.js';
 import './style.css';
 
 // Task 003C assistant inside the task 010 visit screen (one line per visit panel).
@@ -27,6 +28,9 @@ registerVisitPanel({ id: 'assistant', Panel: ({ onChanged, ...p }) => <Assistant
 
 type Me = { id: string; name: string; csrf: string; locale?: 'uz-Cyrl' | 'uz-Latn' | 'ru' | null; mustChangePassword: boolean; pinChangeRequired?: boolean; notices?: AccountNotice[]; clinics: ClinicMembershipView[]; professionalVerification: { status: string };
   session: { via: 'password' | 'telegram' | 'device'; deviceId: string | null; deviceLabel: string | null; idleMinutes: number | null } };
+
+/** How a colleague is addressed: name and patronymic. "Каримов Азиз Рустамович" → "Азиз Рустамович"; other shapes stay whole. */
+const courtesyName = (name: string) => { const parts = name.trim().split(/\s+/); return parts.length === 3 ? `${parts[1]} ${parts[2]}` : name; };
 
 function App() {
   useLocale(); // re-render every screen when the interface language changes
@@ -160,13 +164,14 @@ function App() {
 
   if (loading) return <main className="auth"><p role="status">{t('app.loading')}</p></main>;
   if (!me || me.mustChangePassword) return <div className="app bare">
-    {!me && telegramActive ? <main className="auth tg-gate"><div className="brand">{t('app.brand')}</div>
+    <div className="auth-top"><AbrBand /><div className="brand">{t('app.brand')}</div></div>
+    {!me && telegramActive ? <main className="auth tg-gate">
       {tgState === 'signing' || tgState === '' ? <p role="status">{t('access.tg.signingIn')}</p> : tgState === 'blocked' ? <><h1>{t('access.tg.blockedTitle')}</h1><p>{t('access.tg.blockedLead')}</p></>
         : tgState === 'unavailable' ? <><h1>{t('access.tg.blockedTitle')}</h1><p>{t('access.tg.telegramUnavailable')}</p></> : <><h1>{t('access.tg.reopenTitle')}</h1><p>{t('access.tg.reopenLead')}</p></>}
     </main> :
     !me && device?.enrolled && !passwordOnDevice ? <><OfflineWaiting me={null} /><LockScreen device={device} request={request} notice={notice} onPassword={() => { setPasswordOnDevice(true); setNotice(''); }}
       onUnlocked={async () => { setNotice(''); await refreshMe(); }} /></> :
-    !me ? <main className="auth"><div className="brand">{t('app.brand')}</div><h1>{t('auth.welcome')}</h1>
+    !me ? <main className="auth"><h1>{t('auth.welcome')}</h1>
       <form onSubmit={signIn}>
         <label>{t('auth.identifier')}<input name="identifier" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} /></label>
         <PasswordField label={t('auth.password')} name="password" required minLength={1} maxLength={128} autoComplete="current-password" />
@@ -176,7 +181,7 @@ function App() {
       {device?.enrolled && <button className="link" onClick={() => { setPasswordOnDevice(false); setError(''); }}>{t('access.device.backToList')}</button>}
       <div className="auth-foot"><LanguageChoice /></div>
       <p className="fine">{t('auth.staffNote')}</p><p className="fine">{t('app.footer')}</p></main> :
-    <main className="auth"><div className="brand">{t('app.brand')}</div><h1>{t('password.title')}</h1><p className="muted">{t('password.lead')}</p>
+    <main className="auth"><h1>{t('password.title')}</h1><p className="muted">{t('password.lead')}</p>
       <form onSubmit={changePassword}>
         <PasswordField label={t('password.current')} name="currentPassword" required maxLength={128} autoComplete="current-password" />
         <PasswordField label={t('password.new')} name="newPassword" required minLength={12} maxLength={128} autoComplete="new-password" />
@@ -186,7 +191,7 @@ function App() {
       {!inTelegram && <button className="link" disabled={busy} onClick={signOut}>{t('app.signOut')}</button>}</main>}
   </div>;
 
-  return <div className="app">
+  return <div className="app" data-home={active === places[0]?.id}>
     <Rail items={places} end={[settingsPlace]} current={active} disabled={busy} onSelect={go} />
     <div className="main-col">
       <header className="topbar">
@@ -216,6 +221,7 @@ function App() {
         {!onDevice && !inTelegram && <Devices clinicId={clinic.id} request={request} onEnrolled={() => { setMe(null); csrf.current = ''; setSection(''); setDay(null); setNotice(t('access.devices.enrolled')); void refreshDevice(); }} />}</main>}
       {clinic && screen && <main className="page home" data-screen={screen.id}>
         <h1 className="sr-only">{t(screen.label)}</h1>
+        {screen.id === places[0]?.id && <p className="greeting">{t('app.greeting')} <b>{courtesyName(me.name)}</b></p>}
         {/* The one thing a manager must do before anyone can work: open the day. Closing lives behind the day status in the header. */}
         {manager && day && !day.openDay && day.day?.status !== 'closed' && <div className="day-bar"><p>{t('day.none')}</p><button className="primary big" disabled={busy} onClick={dayActions!.onOpen}>{t('day.openButton')}</button></div>}
         <screen.Screen key={`${clinic.id}:${screen.id}`} clinic={clinic} request={request} day={day} myId={me.id} offlineDeviceId={onDevice ? me.session.deviceId : null} setDirty={setDirty} reportDayId={reportDayId} />

@@ -43,7 +43,7 @@ export const core = {
   'error.INTEGRATION_UNAVAILABLE': 'Ташқи хизмат мавжуд эмас.',
 
   'auth.eyebrow': 'КЛИНИКА ИШ ЖОЙИ',
-  'auth.welcome': 'Хуш келибсиз',
+  'auth.welcome': 'Ассалому алайкум',
   'auth.lead': 'Логин ёки телефон рақамингиз ва паролингиз билан киринг.',
   'auth.identifier': 'Логин ёки телефон',
   'auth.email': 'Email',
@@ -177,4 +177,5 @@ export const core = {
   'nav.settings': 'Созламалар',
   'app.demoMark': 'Синов версияси · фақат сохта беморлар',
   'settings.languageNotSaved': 'Тил бу қурилмада ўзгарди, лекин ҳисобингизга сақланмади. Қайта уриниб кўринг.',
+  'app.greeting': 'Ассалому алайкум,',
 } as const;

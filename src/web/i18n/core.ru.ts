@@ -42,7 +42,7 @@ export const coreRu: Record<keyof typeof core, string> = {
   'error.INTEGRATION_UNAVAILABLE': 'Внешний сервис недоступен.',
 
   'auth.eyebrow': 'РАБОЧЕЕ МЕСТО КЛИНИКИ',
-  'auth.welcome': 'Добро пожаловать',
+  'auth.welcome': 'Здравствуйте',
   'auth.lead': 'Войдите с логином или номером телефона и паролем.',
   'auth.identifier': 'Логин или телефон',
   'auth.email': 'Email',
@@ -176,4 +176,5 @@ export const coreRu: Record<keyof typeof core, string> = {
   'nav.settings': 'Настройки',
   'app.demoMark': 'Тестовая версия · только вымышленные пациенты',
   'settings.languageNotSaved': 'Язык изменён на этом устройстве, но не сохранён в учётной записи. Попробуйте ещё раз.',
+  'app.greeting': 'Здравствуйте,',
 };

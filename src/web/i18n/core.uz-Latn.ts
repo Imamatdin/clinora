@@ -39,7 +39,7 @@ export const coreUzLatn: Record<keyof typeof core, string> = {
   "error.NOT_IMPLEMENTED": "Bu imkoniyat hali qoʻshilmagan.",
   "error.INTEGRATION_UNAVAILABLE": "Tashqi xizmat mavjud emas.",
   "auth.eyebrow": "KLINIKA ISH JOYI",
-  'auth.welcome': 'Xush kelibsiz',
+  'auth.welcome': 'Assalomu alaykum',
   "auth.lead": "Login yoki telefon raqamingiz va parolingiz bilan kiring.",
   'auth.identifier': 'Login yoki telefon',
   "auth.email": "Email",
@@ -166,4 +166,5 @@ export const coreUzLatn: Record<keyof typeof core, string> = {
   'nav.settings': 'Sozlamalar',
   'app.demoMark': 'Sinov versiyasi · faqat soxta bemorlar',
   'settings.languageNotSaved': 'Til bu qurilmada oʻzgardi, lekin hisobingizga saqlanmadi. Qayta urinib koʻring.',
+  'app.greeting': 'Assalomu alaykum,',
 };

@@ -1,73 +1,36 @@
-.cashier fieldset {
-  border: 0;
-  padding: 0;
-}
-.cashier label {
-  font-size: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  margin: 0.7rem 0;
-}
-.cashier input,
-.cashier select,
-.cashier button {
-  min-height: 48px;
-  font-size: 1rem;
-  max-width: 100%;
-}
-.cashier button {
-  margin: 0.3rem;
-}
-.cashier .primary {
-  display: block;
-  width: 100%;
-  font-size: 1.25rem;
-}
-.cashier .keypad {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  max-width: 320px;
-}
-.cashier dl > div {
-  display: flex;
-  justify-content: space-between;
-}
-.cashier details {
-  margin: 1rem 0;
-}
-.cashier summary {
-  min-height: 48px;
-  cursor: pointer;
-}
-.cashier [role="dialog"] {
-  padding: 1rem;
-  border: 3px solid #204b5c;
-}
-.cashier-print {
-  max-width: 76mm;
-  font-size: 16px;
-  overflow-wrap: anywhere;
-}
+/* Cashier: find the patient, one large figure for what is owed, take the payment (docs/DESIGN.md). */
+.cashier-body { display: grid; gap: 16px; align-content: start; max-width: none !important; }
+.cashier-open { max-width: 420px; gap: 16px; }
+.cashier-head { display: flex; justify-content: space-between; align-items: center; }
+.cashier .back { margin-left: -10px; color: var(--ink); }
+.cashier-pay { display: grid; gap: 24px 48px; }
+.cashier-owed { display: grid; gap: 8px; align-content: start; }
+.cashier-owed .hero-name { font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2rem); margin-bottom: 10px; }
+.cashier-take { display: grid; gap: 14px; align-content: start; max-width: 420px; }
+.cashier-take input:not([type=checkbox]):not([type=radio]) { background: #fff; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.cashier-take .seg { display: flex; background: var(--tint-2); } .cashier-take .seg button { flex: 1; }
+.cashier-change { font-size: var(--t-head); } .cashier-change b { color: var(--ok); }
+.cashier .keypad { display: none; }
+@media (pointer: coarse) and (min-width: 700px) { .cashier .keypad { display: grid; } }
+.cashier .row.cancelled .row-title, .cashier .row.cancelled .row-end { text-decoration: line-through; color: var(--ink-2); }
+.cashier .row-end { color: var(--ink); }
+.cashier-body > :not(.hero) { max-width: var(--col); }
+.cashier-totals { display: grid; gap: 6px; padding-top: 16px; border-top: 1px solid var(--line); width: 100%; }
+.cashier-settled { display: flex; align-items: center; gap: 10px; font-size: 1.75rem; font-weight: 600; } .cashier-settled svg { width: 32px; height: 32px; stroke-width: 2; }
+.cashier-totals > div { display: flex; justify-content: space-between; gap: 16px; }
+.cashier-totals dt { font-size: var(--t-body); }
+.cashier-totals .total { font-weight: 700; font-size: var(--t-head); padding-top: 6px; } .cashier-totals .total dt { color: var(--ink); font-size: inherit; }
+.cashier-shift { justify-self: start; gap: 14px; margin-left: -8px; color: var(--ink); }
+.cashier-reports { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.cashier-form { border-top: 1px solid var(--line); } .cashier-form[open] { display: grid; gap: 14px; padding-bottom: 16px; }
+.cashier-confirm { font-size: var(--t-head); font-weight: 600; line-height: 1.3; }
+.cashier-printable { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--line); }
+.cashier-print { max-width: 76mm; font-size: 16px; overflow-wrap: anywhere; }
+@media (min-width: 900px) { .cashier-pay { grid-template-columns: minmax(0, 1.1fr) minmax(300px, 420px); align-items: start; max-width: none; } }
 @media print {
-  @page {
-    size: 80mm auto;
-    margin: 2mm;
-  }
-  body * {
-    visibility: hidden;
-  }
-  .cashier-print,
-  .cashier-print * {
-    visibility: visible;
-  }
-  .cashier-print {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    max-width: 76mm;
-  }
-  button {
-    display: none !important;
-  }
+  @page { size: 80mm auto; margin: 2mm; }
+  body * { visibility: hidden; }
+  .cashier-print, .cashier-print * { visibility: visible; }
+  .cashier-print { position: absolute; inset: 0; width: 100%; max-width: 76mm; }
+  button { display: none !important; }
 }

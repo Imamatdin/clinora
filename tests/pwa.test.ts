@@ -59,8 +59,8 @@ test('task 026: the service worker precaches exactly the font files fonts.css se
     return w;
   })();
   const css = await readFile('src/web/fonts.css', 'utf8');
-  const files = [...css.matchAll(/files\/(onest-[a-z-]+-\d+-normal\.woff2)/g)].map(m => '/assets/' + m[1]).sort();
-  assert.equal(files.length, 12);
+  const files = [...css.matchAll(/files\/((?:onest|source-serif-4)-[a-z-]+-\d+-normal\.woff2)/g)].map(m => '/assets/' + m[1]).sort();
+  assert.equal(files.length, 16);
   assert.deepEqual(puts.filter(u => u.endsWith('.woff2')).sort(), files);
   assert.doesNotMatch(css, /https?:\/\//, 'no font CDN');
 });

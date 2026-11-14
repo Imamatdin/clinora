@@ -4,11 +4,11 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 /*
- * Task 026 design rules that a stylesheet can break silently. Raised surfaces (box-shadow) are allowed only on
- * modals and the two popup menus (phone header menu, "More" tabs menu); everything else gets its structure from
- * type, spacing and hairline rules. Purple and gradients are not in the palette.
+ * Design rules (docs/DESIGN.md) that a stylesheet can break silently. Raised surfaces (box-shadow) are allowed only
+ * on dialogs and sheets; everything else gets its structure from type, spacing and hairlines. Gradients are not in
+ * the palette (a gradient used as a mask, which only cuts the ticket's notches, paints nothing and is allowed), nor is purple.
  */
-const RAISED = /\.(modal|header-menu-panel|tabs-menu)\b/;
+const RAISED = /\.(modal|sheet)\b/;
 
 async function files(dir: string, ext: RegExp): Promise<string[]> {
   const out: string[] = [];
@@ -32,7 +32,7 @@ export function rules(css: string): [string, string][] {
   return out;
 }
 
-test('box-shadow only on modals and the popup menus', async () => {
+test('box-shadow only on dialogs and sheets', async () => {
   const offenders: string[] = [];
   for (const file of await files('src/web', /\.css$/)) {
     for (const [selector, body] of rules(await readFile(file, 'utf8'))) {
@@ -48,7 +48,7 @@ test('box-shadow only on modals and the popup menus', async () => {
 test('no gradients and no purple in the stylesheets', async () => {
   const offenders: string[] = [];
   for (const file of await files('src/web', /\.css$/)) {
-    const css = (await readFile(file, 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '');
+    const css = (await readFile(file, 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '').replace(/(-webkit-)?mask\s*:[^;}]+/g, '');
     if (/gradient\s*\(/.test(css)) offenders.push(`${file}: gradient`);
     for (const [hex] of css.matchAll(/#[0-9a-fA-F]{6}\b/g)) {
       const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];

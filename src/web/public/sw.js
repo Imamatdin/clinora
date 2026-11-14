@@ -2,9 +2,10 @@
  * Clinora service worker: caches the app shell only (the page, built JS/CSS, manifest, icons).
  * API responses are never intercepted or stored, so no patient data lands in a browser cache.
  */
-const CACHE = 'clinora-shell-v2';
+const CACHE = 'clinora-shell-v3';
 /** Task 026: the bundled Onest font (src/web/fonts.css), precached so the installed app keeps its type offline. */
-const FONTS = ['cyrillic', 'cyrillic-ext', 'latin', 'latin-ext'].flatMap(subset => [400, 500, 700].map(weight => `/assets/onest-${subset}-${weight}-normal.woff2`));
+const SUBSETS = ['cyrillic', 'cyrillic-ext', 'latin', 'latin-ext'];
+const FONTS = [...SUBSETS.flatMap(subset => [400, 500, 700].map(weight => `/assets/onest-${subset}-${weight}-normal.woff2`)), ...SUBSETS.map(subset => `/assets/source-serif-4-${subset}-600-normal.woff2`)];
 const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', ...FONTS];
 
 self.addEventListener('install', event => {

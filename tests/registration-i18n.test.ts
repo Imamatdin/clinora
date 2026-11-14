@@ -23,7 +23,7 @@ test('task 007 registration strings exist in all three languages with the same k
 });
 
 test('translator fills placeholders and catalog names fall back to Uzbek Cyrillic', () => {
-  assert.equal(translator('ru')('registration.waiting', { count: 3 }), 'В очереди: 3');
+  assert.equal(translator('ru')('registration.waiting', { count: 3 }), 'ждут: 3');
   assert.equal(pickName({ uzCyrl: 'Терапевт', uzLatn: null, ru: null }, 'uz-Latn'), 'Терапевт');
   assert.equal(pickName({ uzCyrl: 'Терапевт', uzLatn: 'Terapevt', ru: 'Терапевт' }, 'uz-Latn'), 'Terapevt');
 });

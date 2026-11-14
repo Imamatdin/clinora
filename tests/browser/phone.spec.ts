@@ -137,6 +137,7 @@ test('phone layout: one-row header and no sideways scroll for every role; CEO da
           await expect(page.locator('.ceo-ledger h2')).toBeFocused();
           await page.getByRole('button', { name: CEO['ceo.back'], exact: true }).click();
           // Patient sources are translated; raw codes never show.
+          await page.locator('.ceo-more-metrics > summary').click(); // patient sources sit with the secondary figures
           const sources = page.locator('.ceo-breakdown').filter({ has: page.getByRole('heading', { name: CEO['ceo.sources'], exact: true }) });
           await sources.locator('.ceo-all').click().catch(() => undefined);
           await expect(sources).not.toContainText(/walk_in|referral|advertisement|social|returning/);

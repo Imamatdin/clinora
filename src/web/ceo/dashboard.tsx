@@ -91,8 +91,9 @@ export function ReportView({report}:{report:Report}) {
       <div className="ceo-mix" aria-hidden="true">{methods.map(m=><i key={m.k} className={`mix-${m.k}`} style={{flexGrow:collected>0n?Number(m.amount*1000n/collected):0}}/>)}</div>
       <div className="ceo-mix-legend">{methods.map(m=><button key={m.k} className={`mix-${m.k}`} onClick={()=>open(metric(m.k),report.details[m.k]!)}><span>{metric(m.k)}</span><b className="num">{money(report.totals[m.k]!)}</b></button>)}</div>
     </section>
-    <div className="ceo-groups"><Breakdown kind="doctors" title={t('ceo.doctors')} rows={report.doctors} onSelect={open}/><Breakdown kind="departments" title={t('ceo.departments')} rows={report.departments} onSelect={open}/><Breakdown kind="sources" title={t('ceo.sources')} rows={report.sources} onSelect={open}/></div>
+    <div className="ceo-groups"><Breakdown kind="doctors" title={t('ceo.doctors')} rows={report.doctors} onSelect={open}/><Breakdown kind="departments" title={t('ceo.departments')} rows={report.departments} onSelect={open}/></div>
     <details className="ceo-more-metrics"><summary>{t('ceo.more')}</summary>
+      <Breakdown kind="sources" title={t('ceo.sources')} rows={report.sources} onSelect={open}/>
       <div className="ceo-secondary">{['net','value','refunds','cashOuts','new','returning','outpatient','inpatient','lab','ward'].map(k=><button key={k} onClick={()=>open(metric(k),report.details[k]!)}><span>{metric(k)}</span><b className="num">{money(report.totals[k]!)}</b></button>)}</div>
       <p className="ceo-footnote fine">{t('ceo.scope')}</p><p className="ceo-footnote fine">{t('ceo.updated')} · {new Date(report.generatedAt).toLocaleString('ru-RU',{timeZone:'Asia/Tashkent'})}</p>
     </details>

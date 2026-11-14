@@ -53,6 +53,7 @@
 .ceo-secondary button:hover:not(:disabled) { background: none; color: var(--indigo); }
 .ceo-secondary b { font-weight: 600; }
 .ceo-footnote { margin-top: 12px; max-width: 70ch; }
+.ceo-more-metrics[open] { display: grid; gap: 12px; }
 .ceo-more { border-top: 1px solid var(--line); padding-top: 8px; }
 .ceo-ledger { display: grid; gap: 10px; align-content: start; } .ceo-ledger .back { justify-self: start; margin-left: -10px; color: var(--ink); } .ceo-ledger h2:focus { outline: 0; }
 .ceo-report { display: grid; gap: 16px; align-content: start; max-width: none !important; min-width: 0; } .ceo-report:focus { outline: 0; }
@@ -60,7 +61,7 @@
 .section-label.attn { color: var(--attn); font-weight: 600; }
 @media (min-width: 900px) {
   .ceo-hero { grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); align-items: end; max-width: var(--col); }
-  .ceo-groups { grid-template-columns: 1.3fr 1fr; } .ceo-groups > :first-child { grid-row: span 2; }
+  .ceo-groups { grid-template-columns: 1.3fr 1fr; }
 }
 @media (max-width: 640px) { .ceo-secondary { grid-template-columns: 1fr; } .ceo-kpi-row { gap: 12px 28px; } .ceo-trend-bars { height: 72px; } }
 
